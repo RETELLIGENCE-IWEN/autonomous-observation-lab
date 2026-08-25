@@ -92,3 +92,24 @@ def test_target_is_hidden_during_occlusion_interval():
     handles = {d.handle for d in result.observation.detections}
     assert env.target_id in handles
 
+
+def test_handle_corruption_is_seeded_and_can_create_collisions():
+    config = BenchmarkConfig(
+        target_present_probability=1.0,
+        miss_probability=0.0,
+        handle_corruption_probability=1.0,
+    )
+    traces = []
+    collision_seen = False
+    for _ in range(2):
+        env = StagedEvidenceEnv(config)
+        observation, _ = env.reset(seed=991)
+        trace = []
+        for _step in range(6):
+            handles = [d.handle for d in observation.detections]
+            collision_seen = collision_seen or len(handles) != len(set(handles))
+            trace.append(tuple(handles))
+            observation = env.step(Action(ActionKind.WIDE_SCAN)).observation
+        traces.append(trace)
+    assert traces[0] == traces[1]
+    assert collision_seen
