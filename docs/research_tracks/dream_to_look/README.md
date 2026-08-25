@@ -18,6 +18,9 @@ The first study uses object-feature observations and a staged scenario combining
 - [Benchmark Specification: Staged Evidence Acquisition](benchmark_specification.md)
 - [Gate 1 Quickstart](gate1_quickstart.md)
 - [Gate 1 Validation Results](gate1_validation_results.md)
+- [Gate 2 Protocol](gate2_protocol.md)
+- [Gate 2 Quickstart](gate2_quickstart.md)
+- [Gate 2 Reference Results](gate2_reference_results.md)
 
 ## Current foundations
 
@@ -32,4 +35,4 @@ The first study uses object-feature observations and a staged scenario combining
 
 ## Status
 
-Gate 1 complete: deterministic benchmark, leakage probe, association-corruption stress axis, decision-aware oracle separation, and delayed-evidence planning case validated. Next milestone: learned representation and world-model validity, beginning with a deterministic recurrent baseline and monolithic RSSM before object-centric factorization.
+Gate 1 complete. Gate 2 evidence-belief milestone passes: object-centric RSSM shows a stable matched-capacity advantage in filtering, occlusion, open-loop identity prediction, and handle-corruption stress. Kinematic prediction remains near a trivial baseline and must be corrected before latent-imagination policy training.
