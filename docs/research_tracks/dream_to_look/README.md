@@ -16,6 +16,8 @@ The first study uses object-feature observations and a staged scenario combining
 
 - [Research Brief: Decision-Aware Dream-to-Look](research_brief.md)
 - [Benchmark Specification: Staged Evidence Acquisition](benchmark_specification.md)
+- [Gate 1 Quickstart](gate1_quickstart.md)
+- [Gate 1 Validation Results](gate1_validation_results.md)
 
 ## Current foundations
 
@@ -30,4 +32,4 @@ The first study uses object-feature observations and a staged scenario combining
 
 ## Status
 
-Research framing and benchmark specification complete. Next milestone: implement and validate the seeded benchmark with scripted and oracle policies before training the learned world model.
+Gate 1 benchmark and reference policies implemented. Initial deterministic and oracle validation passes provisionally. Before world-model training, complete statistical leakage probes, association-corruption tests, and a multi-step oracle separation case.
