@@ -10,6 +10,6 @@ Initial research directions include:
 
 This repository will host research notes, simulation environments, baselines, experiments, and demonstrations toward mission-aware and self-directed sensing.
 
-See the [research notes](docs/autonomous_observation_agent/README.md) for the current vision, problem formulation, and candidate studies.
+See the [research documentation](docs/README.md) for the current vision, foundations, research tracks, ideas, and prior work.
 
 > Early-stage research repository. Ideas and interfaces may evolve substantially.
