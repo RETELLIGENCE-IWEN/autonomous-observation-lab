@@ -23,7 +23,7 @@ python -m autonomous_observation_lab.benchmark.evaluate \
   --episodes 500 --seed-start 10000 --json
 ~~~
 
-The output contains the exact configuration, a constructed divergence case, and aggregate results for random, fixed-scan, entropy-greedy, and decision-aware VoI policies.
+The output contains the exact configuration, entropy/VoI divergence, one-step/two-step planning separation, a nuisance-feature leakage probe, and aggregate reference-policy results.
 
 For the constructed case, the required result is:
 
