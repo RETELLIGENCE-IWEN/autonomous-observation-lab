@@ -7,6 +7,8 @@ import numpy as np
 from .belief import FactorizedBelief
 from .config import BenchmarkConfig
 from .env import StagedEvidenceEnv
+from .leakage import run_leakage_probe
+from .planning_cases import constructed_multistep_case
 from .policies import make_policy
 
 
@@ -109,6 +111,7 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=500)
     parser.add_argument("--seed-start", type=int, default=10_000)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--skip-leakage-probe", action="store_true")
     args = parser.parse_args()
 
     config = BenchmarkConfig()
@@ -117,8 +120,11 @@ def main() -> None:
     output = {
         "config": asdict(config),
         "constructed_divergence_case": constructed_divergence_case(config),
+        "constructed_multistep_case": asdict(constructed_multistep_case()),
         "summaries": summaries,
     }
+    if not args.skip_leakage_probe:
+        output["leakage_probe"] = asdict(run_leakage_probe(config))
     if args.json:
         print(json.dumps(output, indent=2))
     else:
@@ -127,4 +133,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
