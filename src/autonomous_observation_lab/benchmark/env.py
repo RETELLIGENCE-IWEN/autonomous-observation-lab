@@ -35,6 +35,7 @@ class StagedEvidenceEnv:
         self._step = 0
         self._done = False
         self._last_action: Action | None = None
+        self._handle_to_object: dict[int, int] = {}
 
     @property
     def target_id(self) -> int | None:
@@ -51,6 +52,7 @@ class StagedEvidenceEnv:
         self._step = 0
         self._done = False
         self._last_action = None
+        self._handle_to_object = {}
         self._objects, self._target_id = self._generate_scenario()
         obs = self._observe(Action(ActionKind.WIDE_SCAN), charge_step=False)
         return obs, {"seed": seed}
@@ -65,8 +67,9 @@ class StagedEvidenceEnv:
         truncated = False
         outcome = None
 
+        resolved_object = self._resolve_handle(action.object_id)
         if action.kind is ActionKind.COMMIT:
-            correct = action.object_id == self._target_id
+            correct = resolved_object == self._target_id
             reward += (
                 self.config.correct_decision_utility
                 if correct
@@ -144,10 +147,15 @@ class StagedEvidenceEnv:
     def _observe(self, action: Action, charge_step: bool = True) -> Observation:
         del charge_step
         detections: list[Detection] = []
+        # Preserve last-known associations so a policy can revisit an object
+        # that is no longer in the current detection set. New observations
+        # overwrite the mapping, including deliberate corruption/collisions.
+        next_handle_to_object: dict[int, int] = dict(self._handle_to_object)
+        focused_object = self._resolve_handle(action.object_id)
         for obj in self._objects:
             if self._is_occluded(obj.object_id):
                 continue
-            focused = action.object_id == obj.object_id
+            focused = focused_object == obj.object_id
             included = action.kind is ActionKind.WIDE_SCAN or focused
             if action.kind is ActionKind.HOLD:
                 included = False
@@ -175,9 +183,11 @@ class StagedEvidenceEnv:
                 [position[0], position[1], 0.08 + 0.02 * quality, 0.06 + 0.02 * quality],
                 dtype=np.float32,
             )
+            observed_handle = self._observed_handle(obj.object_id)
+            next_handle_to_object[observed_handle] = obj.object_id
             detections.append(
                 Detection(
-                    handle=obj.object_id,
+                    handle=observed_handle,
                     bbox=bbox,
                     confidence=float(0.55 + 0.4 * quality),
                     appearance=appearance,
@@ -188,6 +198,7 @@ class StagedEvidenceEnv:
                 )
             )
 
+        self._handle_to_object = next_handle_to_object
         return Observation(
             step=self._step,
             detections=tuple(detections),
@@ -204,6 +215,23 @@ class StagedEvidenceEnv:
     def _noisy_bits(self, truth: np.ndarray, accuracy: float) -> np.ndarray:
         keep = self._rng.random(size=truth.shape) < accuracy
         return np.where(keep, truth, 1 - truth).astype(np.int8)
+
+    def _observed_handle(self, object_id: int) -> int:
+        probability = self.config.handle_corruption_probability
+        if probability <= 0.0:
+            # Disabled features must not consume RNG state; this preserves
+            # seeded trajectories across compatible benchmark revisions.
+            return object_id
+        if self._rng.random() < probability:
+            # Independent reassignment naturally creates resets, switches, and
+            # collisions. It is an observed association hint, not identity.
+            return int(self._rng.integers(self.config.num_objects))
+        return object_id
+
+    def _resolve_handle(self, handle: int | None) -> int | None:
+        if handle is None:
+            return None
+        return self._handle_to_object.get(handle)
 
     def _action_cost(self, action: Action) -> float:
         return {
@@ -228,4 +256,3 @@ class StagedEvidenceEnv:
         if self._step < self.config.occlusion_end:
             return "interruption"
         return "reacquisition"
-
