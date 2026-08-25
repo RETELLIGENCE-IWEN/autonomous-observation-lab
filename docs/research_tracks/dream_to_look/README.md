@@ -32,4 +32,4 @@ The first study uses object-feature observations and a staged scenario combining
 
 ## Status
 
-Gate 1 benchmark and reference policies implemented. Initial deterministic and oracle validation passes provisionally. Before world-model training, complete statistical leakage probes, association-corruption tests, and a multi-step oracle separation case.
+Gate 1 complete: deterministic benchmark, leakage probe, association-corruption stress axis, decision-aware oracle separation, and delayed-evidence planning case validated. Next milestone: learned representation and world-model validity, beginning with a deterministic recurrent baseline and monolithic RSSM before object-centric factorization.
