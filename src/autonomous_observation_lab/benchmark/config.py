@@ -19,6 +19,7 @@ class BenchmarkConfig:
     dwell_bit_accuracy: float = 0.95
     motion_accuracy: float = 0.90
     miss_probability: float = 0.05
+    handle_corruption_probability: float = 0.0
 
     wide_cost: float = 0.010
     focus_cost: float = 0.020
@@ -43,8 +44,8 @@ class BenchmarkConfig:
             "dwell_bit_accuracy",
             "motion_accuracy",
             "miss_probability",
+            "handle_corruption_probability",
         ):
             value = getattr(self, name)
             if not 0.0 <= value <= 1.0:
                 raise ValueError(f"{name} must be in [0, 1]")
-
