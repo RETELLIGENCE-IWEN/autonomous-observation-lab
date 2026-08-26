@@ -8,4 +8,8 @@ Research tracks turn the broader vision into falsifiable questions, explicit hyp
 - [Hypothesis-Driven Active Observation](hypothesis_driven_observation/README.md)
 - [Epistemic Distillation](epistemic_distillation/README.md)
 
+## Mini-projects
+
+- [Predictive 1D Gimbal Servoing](predictive_gimbal_servoing/README.md)
+
 The original comparative deep dive is retained in [Initial Research Candidates](initial_research_candidates.md).
