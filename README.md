@@ -13,3 +13,26 @@ This repository will host research notes, simulation environments, baselines, ex
 See the [research documentation](docs/README.md) for the current vision, foundations, research tracks, ideas, and prior work.
 
 > Early-stage research repository. Ideas and interfaces may evolve substantially.
+
+## Gimbal causality demo
+
+The predictive-gimbal track includes a deterministic comparison in which the
+same image-plane bounding-box motion is produced by two different causes:
+
+1. a stationary target and a moving position-controlled gimbal; and
+2. a stationary body-forward gimbal and a moving target.
+
+The Rerun view synchronizes a 3D world view, normalized 2D image frame, and
+position/rate/bbox traces. Install and launch it with:
+
+```bash
+python3 -m pip install -e '.[visualization]'
+aol-visualize-gimbal
+```
+
+For a portable recording instead of a live window:
+
+```bash
+aol-visualize-gimbal --output artifacts/gimbal_cause_demo.rrd
+rerun artifacts/gimbal_cause_demo.rrd
+```

@@ -12,14 +12,17 @@ dependencies = ["numpy>=1.24"]
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 learning = ["torch>=2.4"]
-all = ["pytest>=8", "torch>=2.4"]
+visualization = ["rerun-sdk>=0.36,<0.37"]
+all = ["pytest>=8", "rerun-sdk>=0.36,<0.37", "torch>=2.4"]
 
 [project.scripts]
 aol-evaluate = "autonomous_observation_lab.benchmark.evaluate:main"
 aol-train-world-model = "autonomous_observation_lab.world_models.train:main"
+aol-visualize-gimbal = "autonomous_observation_lab.gimbal_servoing.visualization:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
