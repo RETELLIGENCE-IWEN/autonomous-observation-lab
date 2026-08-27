@@ -37,12 +37,38 @@ from .disturbances import (
     StaticAngularMotion,
     SumAngularMotion,
 )
+from .dataset import (
+    ACTION_NAMES,
+    BEHAVIOR_NAMES,
+    FEATURE_NAMES,
+    ORACLE_ACTION_NAMES,
+    TARGET_NAMES,
+    GimbalDatasetGenerationConfig,
+    GimbalDatasetManifest,
+    GimbalTargetStateDataset,
+    OracleCeilingRecord,
+    encode_action,
+    encode_deployable_observation,
+    evaluate_privileged_oracle_ceilings,
+    generate_gimbal_dataset,
+    load_gimbal_dataset,
+    save_gimbal_dataset,
+    validate_disjoint_seed_blocks,
+)
 from .env import GimbalServoEnv, wrap_angle_rad
 from .estimators import (
     ConstantVelocityEstimatorConfig,
     ConstantVelocityTargetEstimator,
     TargetStateEstimate,
     TargetStateEstimator,
+)
+from .oracles import (
+    OracleActionTargets,
+    OracleControlConfig,
+    PrivilegedOracleController,
+    PrivilegedTargetState,
+    PrivilegedTargetStateOracle,
+    rollout_privileged_oracle,
 )
 from .types import (
     GimbalAction,
@@ -53,6 +79,8 @@ from .types import (
 )
 
 __all__ = [
+    "ACTION_NAMES",
+    "BEHAVIOR_NAMES",
     "CameraConfig",
     "BodyRateFeedforwardController",
     "ClosedLoopBenchmarkSuite",
@@ -63,6 +91,7 @@ __all__ = [
     "ConstantRateAngularMotion",
     "ControllerRun",
     "EstimatorMetrics",
+    "FEATURE_NAMES",
     "GimbalAction",
     "GimbalCommandMode",
     "GimbalDiagnostics",
@@ -70,10 +99,20 @@ __all__ = [
     "GimbalServoEnv",
     "GimbalServoingConfig",
     "GimbalStepResult",
+    "GimbalDatasetGenerationConfig",
+    "GimbalDatasetManifest",
+    "GimbalTargetStateDataset",
     "MaskedScalar",
     "ObjectiveConfig",
     "ObservationProfile",
+    "ORACLE_ACTION_NAMES",
+    "OracleActionTargets",
+    "OracleCeilingRecord",
+    "OracleControlConfig",
     "PredictiveRateController",
+    "PrivilegedOracleController",
+    "PrivilegedTargetState",
+    "PrivilegedTargetStateOracle",
     "ProportionalController",
     "ProportionalPositionController",
     "RatePulseAngularMotion",
@@ -87,6 +126,7 @@ __all__ = [
     "TargetStateEstimator",
     "TargetStatePositionController",
     "TargetStateRateController",
+    "TARGET_NAMES",
     "TimingConfig",
     "TrackingMetrics",
     "WrongSignController",
@@ -94,5 +134,13 @@ __all__ = [
     "closed_loop_benchmark_suite",
     "closed_loop_comparison",
     "closed_loop_scenarios",
+    "encode_action",
+    "encode_deployable_observation",
+    "evaluate_privileged_oracle_ceilings",
+    "generate_gimbal_dataset",
+    "load_gimbal_dataset",
+    "rollout_privileged_oracle",
+    "save_gimbal_dataset",
+    "validate_disjoint_seed_blocks",
     "wrap_angle_rad",
 ]

@@ -354,6 +354,8 @@ def _tracking_lag_s(episode: DemoEpisode, max_lag_s: float = 0.50) -> float:
     frames = episode.frames
     times = np.array([frame.diagnostics.time_s for frame in frames])
     start = int(np.searchsorted(times, 1.0))
+    if len(frames) - start < 3:
+        start = 0
     desired = np.unwrap(
         np.array(
             [
@@ -366,6 +368,8 @@ def _tracking_lag_s(episode: DemoEpisode, max_lag_s: float = 0.50) -> float:
     actual = np.unwrap(
         np.array([frame.diagnostics.gimbal_angle_rad for frame in frames])
     )[start:]
+    if len(desired) < 2:
+        return 0.0
     period_s = episode.config.timing.control_period_s
     max_lag_steps = min(int(round(max_lag_s / period_s)), len(desired) // 4)
     best_lag = 0

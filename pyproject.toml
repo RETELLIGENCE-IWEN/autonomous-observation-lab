@@ -19,6 +19,7 @@ all = ["pytest>=8", "rerun-sdk>=0.36,<0.37", "torch>=2.4"]
 aol-evaluate = "autonomous_observation_lab.benchmark.evaluate:main"
 aol-train-world-model = "autonomous_observation_lab.world_models.train:main"
 aol-visualize-gimbal = "autonomous_observation_lab.gimbal_servoing.visualization:main"
+aol-generate-gimbal-dataset = "autonomous_observation_lab.gimbal_servoing.dataset:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

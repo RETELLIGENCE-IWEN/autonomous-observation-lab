@@ -59,3 +59,21 @@ The full configurable stress matrix is available with:
 ```bash
 aol-visualize-gimbal --demo benchmark-suite
 ```
+
+## Privileged gimbal dataset
+
+Generate deterministic causal features and simulator-truth target-state labels
+for the next learning stage with:
+
+```bash
+aol-generate-gimbal-dataset \
+  --output artifacts/gimbal_target_state_train.npz \
+  --split train \
+  --seed-start 1000 \
+  --episodes 8
+```
+
+The paired JSON manifest records the schema, exact configurable scenario and
+hardware values, split seeds, array shapes/dtypes, configuration hash, and optional
+privileged rate/position ceiling results. See the
+[dataset specification](docs/research_tracks/predictive_gimbal_servoing/privileged_dataset.md).

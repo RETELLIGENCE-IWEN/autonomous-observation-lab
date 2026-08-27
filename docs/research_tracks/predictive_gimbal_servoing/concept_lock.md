@@ -21,7 +21,7 @@ bbox/center-size + timestamps + deployment telemetry
         compact recurrent predictive policy
               20–60 Hz visual outer loop
                          |
-             desired angular-rate command
+       desired rate or absolute position command
                          |
                          v
           constraint projection and watchdog
@@ -49,7 +49,7 @@ The learned policy owns the visual continuous-control decision. The conventional
 | Bbox-only condition | Required ablation, or primary condition only when imposed by the real interface |
 | Learned state | Small recurrent state conditioned on current observation and previous action |
 | Predictive supervision | Short-horizon future image error, scale, visibility/FOV-exit risk, and actuator response |
-| Action | Continuous desired angular rate, normalized and bounded |
+| Action | Configured continuous desired-rate or absolute-position adapter, normalized and bounded; zero position is body-forward |
 | Training stage 1 | Imitation warm-start from a competent PID/MPC teacher |
 | Training stage 2 | Privileged distillation from true LOS, body motion, actuator state, and delay state |
 | Training stage 3 | Continuous-control RL fine-tuning, initially SAC |

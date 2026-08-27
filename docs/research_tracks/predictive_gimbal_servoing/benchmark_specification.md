@@ -117,6 +117,11 @@ The actor must not receive:
 
 Use statistical probes to test whether nuisance fields predict hidden disturbance family, held-out split, or future maneuver onset beyond legitimate history.
 
+The implemented dataset boundary keeps deployable features, behavior actions,
+and privileged labels in separate arrays. All O0/O1/O2 views are encoded from
+one rollout, while bearing/rate labels have no observation-profile dimension.
+Absolute simulator time remains alignment metadata rather than a model input.
+
 ---
 
 ## 6. Evaluation blocks
@@ -141,6 +146,14 @@ Required shift blocks:
 The current deterministic development suite provides named nominal-combined, high-latency, dropout/noise, slow-servo, aggressive-motion, and travel-limit/recovery cases. These are development probes, not substitutes for the untouched randomized seed blocks required for final claims.
 
 Use identical trajectories and initial states across controllers. Store generator version, configuration hash, controller observation profile, and model checkpoint hash with every result.
+
+The current dataset manifest records schema version, full scenario and hardware
+configuration, seed block, profiles, behaviors, horizons, array shapes, and a
+SHA-256 configuration hash. A validation helper rejects overlapping seed blocks.
+Final learning experiments must additionally instantiate the independently
+randomized target/body motion families above; replaying the fixed six-case
+development suite under different detector seeds is not a valid train/test
+separation.
 
 ---
 

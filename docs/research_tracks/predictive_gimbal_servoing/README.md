@@ -23,6 +23,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Locked Concept](concept_lock.md)
 - [Research Brief](research_brief.md)
 - [Benchmark Specification](benchmark_specification.md)
+- [Privileged Target-State Dataset](privileged_dataset.md)
 - [Prior Work and Novelty Boundary](prior_work_and_novelty.md)
 
 ## Foundation reading path
@@ -36,4 +37,4 @@ The project-specific reading path is maintained in the [Foundation Notes index](
 
 ## Status
 
-Concept locked on 2026-08-26. A configurable deterministic one-axis environment, analytical target-state estimator, rate/position adapters, Rerun diagnostics, and six-case stress matrix are implemented. Hardware parameters and the final deployment telemetry contract remain open. No learned-policy or empirical research claim yet.
+Concept locked on 2026-08-26. A configurable deterministic one-axis environment, analytical target-state estimator, rate/position adapters, Rerun diagnostics, six-case stress matrix, privileged target-state oracle, and deterministic dataset format are implemented. Hardware parameters and the final deployment telemetry contract remain open. No learned-policy or empirical research claim yet.
