@@ -10,10 +10,24 @@ from .config import (
 )
 from .controllers import (
     BodyRateFeedforwardController,
+    PredictiveRateController,
     ProportionalController,
     ProportionalPositionController,
+    TargetStatePositionController,
+    TargetStateRateController,
     WrongSignController,
     ZeroController,
+)
+from .closed_loop import (
+    ClosedLoopBenchmarkSuite,
+    ClosedLoopComparison,
+    ClosedLoopScenario,
+    ControllerRun,
+    EstimatorMetrics,
+    TrackingMetrics,
+    closed_loop_benchmark_suite,
+    closed_loop_comparison,
+    closed_loop_scenarios,
 )
 from .disturbances import (
     ConstantRateAngularMotion,
@@ -24,6 +38,12 @@ from .disturbances import (
     SumAngularMotion,
 )
 from .env import GimbalServoEnv, wrap_angle_rad
+from .estimators import (
+    ConstantVelocityEstimatorConfig,
+    ConstantVelocityTargetEstimator,
+    TargetStateEstimate,
+    TargetStateEstimator,
+)
 from .types import (
     GimbalAction,
     GimbalDiagnostics,
@@ -35,7 +55,14 @@ from .types import (
 __all__ = [
     "CameraConfig",
     "BodyRateFeedforwardController",
+    "ClosedLoopBenchmarkSuite",
+    "ClosedLoopComparison",
+    "ClosedLoopScenario",
+    "ConstantVelocityEstimatorConfig",
+    "ConstantVelocityTargetEstimator",
     "ConstantRateAngularMotion",
+    "ControllerRun",
+    "EstimatorMetrics",
     "GimbalAction",
     "GimbalCommandMode",
     "GimbalDiagnostics",
@@ -46,6 +73,7 @@ __all__ = [
     "MaskedScalar",
     "ObjectiveConfig",
     "ObservationProfile",
+    "PredictiveRateController",
     "ProportionalController",
     "ProportionalPositionController",
     "RatePulseAngularMotion",
@@ -55,8 +83,16 @@ __all__ = [
     "SinusoidalAngularMotion",
     "StaticAngularMotion",
     "SumAngularMotion",
+    "TargetStateEstimate",
+    "TargetStateEstimator",
+    "TargetStatePositionController",
+    "TargetStateRateController",
     "TimingConfig",
+    "TrackingMetrics",
     "WrongSignController",
     "ZeroController",
+    "closed_loop_benchmark_suite",
+    "closed_loop_comparison",
+    "closed_loop_scenarios",
     "wrap_angle_rad",
 ]

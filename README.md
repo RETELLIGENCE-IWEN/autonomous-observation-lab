@@ -36,3 +36,26 @@ For a portable recording instead of a live window:
 aol-visualize-gimbal --output artifacts/gimbal_cause_demo.rrd
 rerun artifacts/gimbal_cause_demo.rrd
 ```
+
+The closed-loop benchmark compares proportional rate, proportional position,
+and causal predictive-rate control while both the target and vehicle body move:
+
+```bash
+aol-visualize-gimbal --demo closed-loop
+```
+
+Save and share the synchronized benchmark with:
+
+```bash
+aol-visualize-gimbal --demo closed-loop --output artifacts/gimbal_closed_loop.rrd
+```
+
+On a Linux desktop, `scripts/open_gimbal_dashboard.sh closed-loop` launches the
+viewer without a terminal. A desktop shortcut can point to this script for
+mouse-only access.
+
+The full configurable stress matrix is available with:
+
+```bash
+aol-visualize-gimbal --demo benchmark-suite
+```

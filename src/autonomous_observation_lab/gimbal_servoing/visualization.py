@@ -7,7 +7,16 @@ import math
 from pathlib import Path
 from typing import Any, Sequence
 
+from .closed_loop import (
+    ClosedLoopBenchmarkSuite,
+    ClosedLoopComparison,
+    ControllerRun,
+    closed_loop_benchmark_suite,
+    closed_loop_comparison,
+)
+from .config import GimbalCommandMode
 from .demos import DemoEpisode, DemoFrame, paired_cause_demo
+from .estimators import TargetStateEstimate
 
 
 _APP_ID = "autonomous_observation_lab_gimbal_demo"
@@ -62,6 +71,69 @@ def _blueprint(rrb: Any, episodes: Sequence[DemoEpisode]) -> Any:
         )
     return rrb.Blueprint(
         rrb.Vertical(*rows, row_shares=[1.0] * len(rows)),
+        collapse_panels=True,
+    )
+
+
+def _closed_loop_blueprint(
+    rrb: Any, comparison: ClosedLoopComparison
+) -> Any:
+    rows = []
+    for run in comparison.runs:
+        episode = run.episode
+        root = f"/{episode.name}"
+        mode_unit = (
+            "deg/s"
+            if episode.config.command_mode is GimbalCommandMode.RATE
+            else "deg"
+        )
+        signal_views = rrb.Vertical(
+            rrb.TimeSeriesView(
+                origin=f"{root}/comparison/tracking_deg",
+                name="True / estimated bearing / gimbal (deg)",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/comparison/target_rate_deg_s",
+                name="True vs estimated target rate (deg/s)",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/signals/bbox_error",
+                name="BBox center error",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/comparison/actuator",
+                name=f"Requested / applied / actual ({mode_unit})",
+            ),
+            row_shares=[1, 1, 1, 1],
+        )
+        rows.append(
+            rrb.Horizontal(
+                rrb.Spatial3DView(
+                    origin=f"{root}/world",
+                    name=f"{episode.name}: world",
+                ),
+                rrb.Spatial2DView(
+                    origin=f"{root}/image",
+                    name="Normalized image frame",
+                    visual_bounds=rrb.VisualBounds2D(
+                        x_range=[-1.15, 1.15],
+                        y_range=[-1.15, 1.15],
+                    ),
+                ),
+                signal_views,
+                column_shares=[1.25, 0.90, 1.85],
+                name=episode.description,
+            )
+        )
+    return rrb.Blueprint(
+        rrb.Vertical(
+            rrb.TextDocumentView(
+                origin="/comparison/summary",
+                name="Closed-loop benchmark summary",
+            ),
+            *rows,
+            row_shares=[0.75] + [1.0] * len(rows),
+        ),
         collapse_panels=True,
     )
 
@@ -232,6 +304,253 @@ def _log_frame(rr: Any, episode: DemoEpisode, frame: DemoFrame) -> None:
         )
 
 
+def _metrics_markdown(comparison: ClosedLoopComparison) -> str:
+    lines = [
+        f"# Closed-loop gimbal benchmark: {comparison.scenario_name}",
+        "",
+        comparison.description,
+        "",
+        "| Controller | RMS error | Mean error | P95 error | Lag | Lost view | Rate saturation | Rate effort | Accel effort |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for run in comparison.runs:
+        metrics = run.metrics
+        lines.append(
+            "| "
+            f"{run.episode.name} | "
+            f"{metrics.rms_error_normalized:.3f} | "
+            f"{metrics.mean_absolute_error_deg:.2f}° | "
+            f"{metrics.p95_absolute_error_deg:.2f}° | "
+            f"{1000.0 * metrics.tracking_lag_s:.0f} ms | "
+            f"{100.0 * metrics.loss_of_view_fraction:.1f}% "
+            f"({metrics.loss_of_view_events}) | "
+            f"{100.0 * metrics.rate_saturation_fraction:.1f}% | "
+            f"{metrics.actuator_rate_rms_normalized:.3f} | "
+            f"{metrics.actuator_acceleration_rms_normalized:.3f} |"
+        )
+    lines.extend(
+        (
+            "",
+            "All runs use identical target motion, body rotation, detector "
+            "randomness, and configured hardware model.",
+            "",
+            "## Estimator quality",
+            "",
+            "| Controller | Valid | Bearing RMSE | Rate RMSE | 2σ bearing coverage |",
+            "|---|---:|---:|---:|---:|",
+        )
+    )
+    for run in comparison.runs:
+        metrics = run.estimator_metrics
+        if metrics is None:
+            continue
+        lines.append(
+            f"| {run.episode.name} | {100.0 * metrics.valid_fraction:.1f}% | "
+            f"{metrics.bearing_rmse_deg:.2f}° | "
+            f"{metrics.rate_rmse_deg_s:.2f}°/s | "
+            f"{100.0 * metrics.two_sigma_bearing_coverage:.1f}% |"
+        )
+    return "\n".join(lines)
+
+
+def _suite_metric_table(
+    suite: ClosedLoopBenchmarkSuite,
+    *,
+    title: str,
+    value_at: Any,
+) -> list[str]:
+    controller_names = tuple(
+        run.episode.name for run in suite.comparisons[0].runs
+    )
+    lines = [
+        f"## {title}",
+        "",
+        "| Scenario | " + " | ".join(controller_names) + " |",
+        "|---|" + "---:|" * len(controller_names),
+    ]
+    for comparison in suite.comparisons:
+        values = [value_at(run) for run in comparison.runs]
+        lines.append(
+            f"| {comparison.scenario_name} | " + " | ".join(values) + " |"
+        )
+    lines.append("")
+    return lines
+
+
+def _suite_markdown(suite: ClosedLoopBenchmarkSuite) -> str:
+    lines = [
+        "# Predictive gimbal stress-suite",
+        "",
+        suite.description,
+        "",
+        "Each row uses identical exogenous motion and detector randomness across "
+        "controllers. Lower is better unless noted.",
+        "",
+    ]
+    lines.extend(
+        _suite_metric_table(
+            suite,
+            title="Normalized RMS tracking error",
+            value_at=lambda run: f"{run.metrics.rms_error_normalized:.3f}",
+        )
+    )
+    lines.extend(
+        _suite_metric_table(
+            suite,
+            title="Estimated tracking lag",
+            value_at=lambda run: f"{1000.0 * run.metrics.tracking_lag_s:.0f} ms",
+        )
+    )
+    lines.extend(
+        _suite_metric_table(
+            suite,
+            title="Loss of view (fraction and events)",
+            value_at=lambda run: (
+                f"{100.0 * run.metrics.loss_of_view_fraction:.1f}% "
+                f"({run.metrics.loss_of_view_events})"
+            ),
+        )
+    )
+    lines.extend(
+        _suite_metric_table(
+            suite,
+            title="Rate saturation fraction",
+            value_at=lambda run: (
+                f"{100.0 * run.metrics.rate_saturation_fraction:.1f}%"
+            ),
+        )
+    )
+    lines.extend(
+        (
+            "## Explicit scenario configuration",
+            "",
+            "| Scenario | Detector latency | Misses | Servo max rate | "
+            "Servo max acceleration |",
+            "|---|---:|---:|---:|---:|",
+        )
+    )
+    for comparison in suite.comparisons:
+        config = comparison.runs[0].episode.config
+        lines.append(
+            f"| {comparison.scenario_name} | "
+            f"{1000.0 * config.camera.detection_latency_s:.0f} ms | "
+            f"{100.0 * config.camera.miss_probability:.1f}% | "
+            f"{math.degrees(config.servo.max_rate_rad_s):.0f}°/s | "
+            f"{math.degrees(config.servo.max_acceleration_rad_s2):.0f}°/s² |"
+        )
+    return "\n".join(lines)
+
+
+def _log_closed_loop_static(rr: Any, run: ControllerRun) -> None:
+    episode = run.episode
+    root = episode.name
+    _log_static(rr, episode)
+    styles = (
+        ("tracking_deg/desired", [255, 210, 30], "target bearing in body frame"),
+        ("tracking_deg/estimated", [210, 90, 255], "estimated target bearing"),
+        ("tracking_deg/lower", [110, 80, 130], "estimate - 2 sigma"),
+        ("tracking_deg/upper", [110, 80, 130], "estimate + 2 sigma"),
+        ("tracking_deg/actual", [40, 190, 255], "actual gimbal angle"),
+        ("target_rate_deg_s/true", [255, 210, 30], "true target rate"),
+        ("target_rate_deg_s/estimated", [210, 90, 255], "estimated target rate"),
+        ("actuator/requested", [255, 170, 40], "requested"),
+        ("actuator/applied", [190, 100, 255], "latency-delayed"),
+        ("actuator/actual", [40, 190, 255], "actual"),
+    )
+    for suffix, color, label in styles:
+        rr.log(
+            f"{root}/comparison/{suffix}",
+            rr.SeriesLines(colors=color, names=label),
+            static=True,
+        )
+
+
+def _log_closed_loop_frame(
+    rr: Any,
+    run: ControllerRun,
+    frame: DemoFrame,
+    estimate: TargetStateEstimate | None,
+) -> None:
+    episode = run.episode
+    diagnostics = frame.diagnostics
+    root = episode.name
+    _log_frame(rr, episode, frame)
+    rr.set_time(_TIMELINE, duration=diagnostics.time_s)
+
+    body_forward = _point_at(diagnostics.body_bearing_rad, 1.0)
+    rr.log(
+        f"{root}/world/body_forward",
+        rr.Arrows3D(
+            origins=[[0.0, 0.0, 0.10]],
+            vectors=[[body_forward[0], body_forward[1], 0.0]],
+            colors=[[150, 150, 160]],
+            labels=["0 deg / rotating body forward"],
+        ),
+    )
+
+    radians_to_degrees = 180.0 / math.pi
+    desired_body_relative_angle = math.atan2(
+        math.sin(diagnostics.target_bearing_rad - diagnostics.body_bearing_rad),
+        math.cos(diagnostics.target_bearing_rad - diagnostics.body_bearing_rad),
+    )
+    rr.log(
+        f"{root}/comparison/tracking_deg/desired",
+        rr.Scalars(desired_body_relative_angle * radians_to_degrees),
+    )
+    rr.log(
+        f"{root}/comparison/tracking_deg/actual",
+        rr.Scalars(diagnostics.gimbal_angle_rad * radians_to_degrees),
+    )
+    true_target_rate = diagnostics.target_rate_rad_s - diagnostics.body_rate_rad_s
+    rr.log(
+        f"{root}/comparison/target_rate_deg_s/true",
+        rr.Scalars(true_target_rate * radians_to_degrees),
+    )
+    if estimate is not None and estimate.valid:
+        estimated_bearing = estimate.body_relative_bearing_rad.value
+        bearing_interval = 2.0 * estimate.bearing_std_rad.value
+        rr.log(
+            f"{root}/comparison/tracking_deg/estimated",
+            rr.Scalars(estimated_bearing * radians_to_degrees),
+        )
+        rr.log(
+            f"{root}/comparison/tracking_deg/lower",
+            rr.Scalars(
+                (estimated_bearing - bearing_interval) * radians_to_degrees
+            ),
+        )
+        rr.log(
+            f"{root}/comparison/tracking_deg/upper",
+            rr.Scalars(
+                (estimated_bearing + bearing_interval) * radians_to_degrees
+            ),
+        )
+        rr.log(
+            f"{root}/comparison/target_rate_deg_s/estimated",
+            rr.Scalars(
+                estimate.body_relative_rate_rad_s.value * radians_to_degrees
+            ),
+        )
+
+    if episode.config.command_mode is GimbalCommandMode.RATE:
+        requested = diagnostics.requested_rate_rad_s or 0.0
+        applied = diagnostics.applied_rate_command_rad_s or 0.0
+        actual = diagnostics.gimbal_rate_rad_s
+    else:
+        requested = diagnostics.requested_position_rad or 0.0
+        applied = diagnostics.applied_position_command_rad or 0.0
+        actual = diagnostics.gimbal_angle_rad
+    for suffix, value in (
+        ("requested", requested),
+        ("applied", applied),
+        ("actual", actual),
+    ):
+        rr.log(
+            f"{root}/comparison/actuator/{suffix}",
+            rr.Scalars(value * radians_to_degrees),
+        )
+
+
 def write_rerun_demo(
     episodes: Sequence[DemoEpisode],
     *,
@@ -270,9 +589,99 @@ def write_rerun_demo(
             _log_frame(rr, episode, frame)
 
 
+def write_closed_loop_comparison(
+    comparison: ClosedLoopComparison,
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or interactively show the synchronized controller benchmark."""
+    if not comparison.runs:
+        raise ValueError("at least one controller run is required")
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _closed_loop_blueprint(rrb, comparison)
+    rr.init(f"{_APP_ID}_closed_loop_estimator_v2")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+
+    rr.set_time(_TIMELINE, duration=0.0)
+    rr.log(
+        "comparison/summary",
+        rr.TextDocument(
+            _metrics_markdown(comparison),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+    )
+    for run in comparison.runs:
+        _log_closed_loop_static(rr, run)
+    frame_sequences = tuple(run.episode.frames for run in comparison.runs)
+    for frame_index, frames in enumerate(zip(*frame_sequences, strict=True)):
+        for run, frame in zip(comparison.runs, frames, strict=True):
+            estimate = (
+                run.estimates[frame_index]
+                if frame_index < len(run.estimates)
+                else None
+            )
+            _log_closed_loop_frame(rr, run, frame, estimate)
+
+
+def write_benchmark_suite(
+    suite: ClosedLoopBenchmarkSuite,
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show the complete stress-suite metric matrix."""
+    if not suite.comparisons:
+        raise ValueError("at least one scenario comparison is required")
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = rrb.Blueprint(
+        rrb.TextDocumentView(
+            origin="/benchmark_suite/summary",
+            name="Predictive gimbal stress-suite",
+        ),
+        collapse_panels=True,
+    )
+    rr.init(f"{_APP_ID}_benchmark_suite")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "benchmark_suite/summary",
+        rr.TextDocument(
+            _suite_markdown(suite),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Compare identical bbox motion caused by gimbal vs target motion."
+        description="Visualize gimbal causality and closed-loop control experiments."
     )
     destination = parser.add_mutually_exclusive_group()
     destination.add_argument(
@@ -285,18 +694,47 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="open the interactive Rerun viewer (the default)",
     )
-    parser.add_argument("--seed", type=int, default=21)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="deterministic replay seed (defaults depend on the selected demo)",
+    )
+    parser.add_argument(
+        "--demo",
+        choices=("causality", "closed-loop", "benchmark-suite"),
+        default="causality",
+        help="select a causality, controller, or stress-suite dashboard",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
-    episodes = paired_cause_demo(seed=args.seed)
-    write_rerun_demo(
-        episodes,
-        output=args.output,
-        spawn=args.spawn or args.output is None,
-    )
+    spawn = args.spawn or args.output is None
+    if args.demo == "benchmark-suite":
+        seed = 41 if args.seed is None else args.seed
+        suite = closed_loop_benchmark_suite(seed=seed)
+        write_benchmark_suite(
+            suite,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "closed-loop":
+        seed = 31 if args.seed is None else args.seed
+        comparison = closed_loop_comparison(seed=seed)
+        write_closed_loop_comparison(
+            comparison,
+            output=args.output,
+            spawn=spawn,
+        )
+    else:
+        seed = 21 if args.seed is None else args.seed
+        episodes = paired_cause_demo(seed=seed)
+        write_rerun_demo(
+            episodes,
+            output=args.output,
+            spawn=spawn,
+        )
 
 
 if __name__ == "__main__":

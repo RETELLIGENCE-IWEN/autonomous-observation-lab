@@ -89,7 +89,19 @@ o_t=(e_t,w_t,h_t,c_t,m_t,\Delta t_t,q_t,\dot q_t,
 
 with validity masks for every optional field. O0, O1, and O2 profiles select fields through capability masks; unavailable values are never encoded as apparently valid zeros. The primary profile contains every signal available through the real deployment interface. Artificial sensor deprivation is evaluated only as an ablation.
 
-The action is a normalized desired rate \(u_t\in[-1,1]\). The environment applies command delay, physical limits, and the selected actuator model.
+The predictive interface emits a timestamped body-relative target state
+
+\[
+\hat s_t=(\hat q_t^{target/body},\hat{\dot q}_t^{target/body},
+\sigma_{q,t},\sigma_{\dot q,t},m_t),
+\]
+
+including explicit validity, source-measurement time, and prediction horizon. A configured adapter converts this state into exactly one normalized logical command:
+
+- desired rate \(u_t^{rate}\in[-1,1]\), using target-rate feed-forward plus bearing-error feedback; or
+- absolute body-relative position \(u_t^{position}\in[-1,1]\), preserving zero as body-forward even with asymmetric travel.
+
+The environment applies command delay, physical limits, and the selected actuator model. Every result must identify its adapter; rate and position commands are never silently mixed.
 
 ---
 
@@ -125,6 +137,8 @@ Required shift blocks:
 - FOV or pixel resolution;
 - noise and dropout;
 - combined moderate shifts.
+
+The current deterministic development suite provides named nominal-combined, high-latency, dropout/noise, slow-servo, aggressive-motion, and travel-limit/recovery cases. These are development probes, not substitutes for the untouched randomized seed blocks required for final claims.
 
 Use identical trajectories and initial states across controllers. Store generator version, configuration hash, controller observation profile, and model checkpoint hash with every result.
 

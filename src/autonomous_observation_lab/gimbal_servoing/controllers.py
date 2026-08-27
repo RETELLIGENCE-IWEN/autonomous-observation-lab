@@ -1,8 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
 from .config import ServoConfig
+from .estimators import (
+    ConstantVelocityEstimatorConfig,
+    ConstantVelocityTargetEstimator,
+    TargetStateEstimate,
+    TargetStateEstimator,
+    angle_delta_rad,
+    wrap_angle_rad,
+)
 from .types import GimbalAction, GimbalObservation
 
 
@@ -107,3 +115,127 @@ class ProportionalPositionController:
             desired_angle
         )
         return GimbalAction.position(self._last_command_normalized)
+
+
+@dataclass
+class TargetStateRateController:
+    """Adapt a body-relative target-state estimate to desired gimbal rate."""
+
+    estimator: TargetStateEstimator
+    max_rate_rad_s: float
+    proportional_gain_s_inv: float = 4.0
+    name: str = "target_state_rate"
+    last_estimate: TargetStateEstimate = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.max_rate_rad_s <= 0.0:
+            raise ValueError("max_rate_rad_s must be positive")
+        if self.proportional_gain_s_inv < 0.0:
+            raise ValueError("proportional gain must be non-negative")
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+
+    def reset(self) -> None:
+        self.estimator.reset()
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        self.last_estimate = self.estimator.update(observation)
+        gimbal_angle = observation.gimbal_angle_rad
+        if not gimbal_angle.valid or not self.last_estimate.valid:
+            return GimbalAction.rate(0.0)
+        predicted_error = angle_delta_rad(
+            self.last_estimate.body_relative_bearing_rad.value,
+            gimbal_angle.value,
+        )
+        desired_rate = (
+            self.last_estimate.body_relative_rate_rad_s.value
+            + self.proportional_gain_s_inv * predicted_error
+        )
+        return GimbalAction.rate(
+            float(np.clip(desired_rate / self.max_rate_rad_s, -1.0, 1.0))
+        )
+
+
+@dataclass
+class TargetStatePositionController:
+    """Adapt a target-state estimate to an absolute body-relative setpoint."""
+
+    estimator: TargetStateEstimator
+    servo: ServoConfig
+    command_preview_s: float = 0.0
+    name: str = "target_state_position"
+    last_estimate: TargetStateEstimate = field(init=False, repr=False)
+    _last_command_normalized: float = field(init=False, default=0.0, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.command_preview_s < 0.0:
+            raise ValueError("command preview must be non-negative")
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+
+    def reset(self) -> None:
+        self.estimator.reset()
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+        self._last_command_normalized = 0.0
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        self.last_estimate = self.estimator.update(observation)
+        if not self.last_estimate.valid:
+            return GimbalAction.position(self._last_command_normalized)
+        desired_angle = wrap_angle_rad(
+            self.last_estimate.body_relative_bearing_rad.value
+            + self.command_preview_s
+            * self.last_estimate.body_relative_rate_rad_s.value
+        )
+        desired_angle = float(
+            np.clip(
+                desired_angle,
+                self.servo.min_angle_rad,
+                self.servo.max_angle_rad,
+            )
+        )
+        self._last_command_normalized = self.servo.normalized_from_position(
+            desired_angle
+        )
+        return GimbalAction.position(self._last_command_normalized)
+
+
+@dataclass
+class PredictiveRateController:
+    """Compatibility facade for the analytical estimator plus rate adapter."""
+
+    max_rate_rad_s: float
+    selected_axis_fov_rad: float
+    proportional_gain_s_inv: float = 4.0
+    velocity_filter_coefficient: float = 0.45
+    max_prediction_horizon_s: float = 0.30
+    history_horizon_s: float = 1.0
+    center_noise_std_normalized: float = 0.0
+    name: str = "predictive_rate"
+    _delegate: TargetStateRateController = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        estimator = ConstantVelocityTargetEstimator(
+            ConstantVelocityEstimatorConfig(
+                selected_axis_fov_rad=self.selected_axis_fov_rad,
+                center_noise_std_normalized=self.center_noise_std_normalized,
+                velocity_filter_coefficient=self.velocity_filter_coefficient,
+                max_prediction_horizon_s=self.max_prediction_horizon_s,
+                history_horizon_s=self.history_horizon_s,
+            )
+        )
+        self._delegate = TargetStateRateController(
+            estimator=estimator,
+            max_rate_rad_s=self.max_rate_rad_s,
+            proportional_gain_s_inv=self.proportional_gain_s_inv,
+            name=self.name,
+        )
+
+    @property
+    def last_estimate(self) -> TargetStateEstimate:
+        return self._delegate.last_estimate
+
+    def reset(self) -> None:
+        self._delegate.reset()
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        return self._delegate.act(observation)
