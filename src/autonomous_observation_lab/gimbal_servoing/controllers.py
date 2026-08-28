@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .config import ServoConfig
+from .config import GimbalCommandMode, ServoConfig
 from .estimators import (
     ConstantVelocityEstimatorConfig,
     ConstantVelocityTargetEstimator,
@@ -197,6 +197,83 @@ class TargetStatePositionController:
             desired_angle
         )
         return GimbalAction.position(self._last_command_normalized)
+
+
+@dataclass
+class SearchFallbackController:
+    """Sweep the configured travel envelope while an estimate is unavailable."""
+
+    delegate: TargetStateRateController | TargetStatePositionController
+    servo: ServoConfig
+    command_mode: GimbalCommandMode
+    search_rate_normalized: float = 0.25
+    search_position_fraction: float = 0.90
+    reversal_margin_rad: float = 0.0
+    name: str = "target_state_search_fallback"
+    _direction: float = field(init=False, default=1.0, repr=False)
+
+    def __post_init__(self) -> None:
+        for name in ("search_rate_normalized", "search_position_fraction"):
+            value = getattr(self, name)
+            if not 0.0 < value <= 1.0:
+                raise ValueError(f"{name} must be in (0, 1]")
+        if self.reversal_margin_rad < 0.0:
+            raise ValueError("reversal margin must be non-negative")
+        available_margin = min(
+            -self.servo.min_angle_rad,
+            self.servo.max_angle_rad,
+        )
+        if self.reversal_margin_rad >= available_margin:
+            raise ValueError("reversal margin must fit inside servo travel")
+
+    @property
+    def last_estimate(self) -> TargetStateEstimate:
+        return self.delegate.last_estimate
+
+    def reset(self) -> None:
+        self.delegate.reset()
+        self._direction = 1.0
+
+    def _remember_target_direction(
+        self, observation: GimbalObservation
+    ) -> None:
+        if not observation.gimbal_angle_rad.valid:
+            return
+        error = angle_delta_rad(
+            self.last_estimate.body_relative_bearing_rad.value,
+            observation.gimbal_angle_rad.value,
+        )
+        if abs(error) > 1e-6:
+            self._direction = 1.0 if error > 0.0 else -1.0
+            return
+        rate = self.last_estimate.body_relative_rate_rad_s.value
+        if abs(rate) > 1e-6:
+            self._direction = 1.0 if rate > 0.0 else -1.0
+
+    def _reverse_at_travel_limit(
+        self, observation: GimbalObservation
+    ) -> None:
+        angle = observation.gimbal_angle_rad
+        if not angle.valid:
+            return
+        if angle.value >= self.servo.max_angle_rad - self.reversal_margin_rad:
+            self._direction = -1.0
+        elif angle.value <= self.servo.min_angle_rad + self.reversal_margin_rad:
+            self._direction = 1.0
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        nominal_action = self.delegate.act(observation)
+        if self.last_estimate.valid:
+            self._remember_target_direction(observation)
+            return nominal_action
+        self._reverse_at_travel_limit(observation)
+        if self.command_mode is GimbalCommandMode.RATE:
+            return GimbalAction.rate(
+                self._direction * self.search_rate_normalized
+            )
+        return GimbalAction.position(
+            self._direction * self.search_position_fraction
+        )
 
 
 @dataclass

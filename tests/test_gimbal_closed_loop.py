@@ -1,9 +1,21 @@
+from dataclasses import replace
+
 import pytest
 
-from autonomous_observation_lab.gimbal_servoing import GimbalCommandMode
+from autonomous_observation_lab.gimbal_servoing import (
+    GimbalAction,
+    GimbalCommandMode,
+    GimbalServoEnv,
+    SearchFallbackController,
+    TargetStateEstimate,
+)
+from autonomous_observation_lab.gimbal_servoing.controllers import (
+    TargetStateRateController,
+)
 from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     closed_loop_benchmark_suite,
     closed_loop_comparison,
+    nominal_scenario,
 )
 
 
@@ -164,3 +176,50 @@ def test_stress_suite_spans_configured_failure_modes() -> None:
         for name in ("proportional_position", "predictive_position")
     }
     assert position_rms["predictive_position"] < position_rms["proportional_position"]
+
+    for comparison in suite.comparisons:
+        for run in comparison.runs:
+            assert run.metrics.mean_recovery_time_s >= 0.0
+            assert run.metrics.max_recovery_time_s >= 0.0
+            assert (
+                run.metrics.unrecovered_loss_events
+                <= run.metrics.loss_of_view_events
+            )
+
+
+def test_search_fallback_reverses_at_configured_travel_limits() -> None:
+    config = nominal_scenario().config
+
+    class MissingEstimator:
+        name = "missing"
+
+        def __init__(self):
+            self.last_estimate = TargetStateEstimate.missing(0.0)
+
+        def reset(self):
+            self.last_estimate = TargetStateEstimate.missing(0.0)
+
+        def update(self, observation):
+            self.last_estimate = TargetStateEstimate.missing(observation.time_s)
+            return self.last_estimate
+
+    delegate = TargetStateRateController(
+        estimator=MissingEstimator(),
+        max_rate_rad_s=config.servo.max_rate_rad_s,
+    )
+    controller = SearchFallbackController(
+        delegate=delegate,
+        servo=config.servo,
+        command_mode=GimbalCommandMode.RATE,
+        search_rate_normalized=0.2,
+    )
+    observation, _ = GimbalServoEnv(config).reset(seed=4)
+    assert controller.act(observation) == GimbalAction.rate(0.2)
+    at_upper_limit = replace(
+        observation,
+        gimbal_angle_rad=replace(
+            observation.gimbal_angle_rad,
+            value=config.servo.max_angle_rad,
+        ),
+    )
+    assert controller.act(at_upper_limit) == GimbalAction.rate(-0.2)

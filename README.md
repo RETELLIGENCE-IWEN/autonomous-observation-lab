@@ -115,3 +115,20 @@ aol-compare-gimbal-gru-profiles \
 
 See the [randomized O0/O1/O2 experiment](docs/research_tracks/predictive_gimbal_servoing/observation_profile_experiment.md)
 for the matched analytical comparison and current loss-of-view limitation.
+
+Evaluate trained O1/O2 checkpoints as actual rate and position controllers with
+validation-selected horizons and paired randomized test scenarios:
+
+```bash
+aol-evaluate-gimbal-gru-control \
+  --train-data artifacts/gimbal_mixed_train.npz \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --o1-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o1.pt \
+  --o2-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --output artifacts/gimbal_mixed_gru_closed_loop_comparison.json
+```
+
+The [closed-loop experiment](docs/research_tracks/predictive_gimbal_servoing/gru_closed_loop_experiment.md)
+reports tracking error, loss of view, recovery, saturation, command effort, and
+the negative result from a naive search fallback.

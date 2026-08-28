@@ -9,6 +9,7 @@ from autonomous_observation_lab.gimbal_servoing import (
     ObservationProfile,
     generate_gimbal_dataset,
     randomize_closed_loop_scenario,
+    closed_loop_scenario_from_dict,
 )
 from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     nominal_scenario,
@@ -79,6 +80,11 @@ def test_randomized_dataset_pairs_behaviors_and_profiles_on_one_world():
     variants = first.manifest.generation["scenario_variants"]
     assert len(variants) == 2
     assert {variant["seed"] for variant in variants} == {301, 302}
+    reconstructed = closed_loop_scenario_from_dict(variants[0]["scenario"])
+    expected = randomize_closed_loop_scenario(
+        scenario, seed=301, config=request.domain_randomization
+    )
+    assert reconstructed == expected
     np.testing.assert_array_equal(first.targets[0], first.targets[1])
     np.testing.assert_array_equal(first.target_mask[0], first.target_mask[1])
     np.testing.assert_array_equal(first.time_s[0], first.time_s[1])

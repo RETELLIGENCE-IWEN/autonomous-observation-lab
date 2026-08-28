@@ -13,6 +13,7 @@ from .controllers import (
     PredictiveRateController,
     ProportionalController,
     ProportionalPositionController,
+    SearchFallbackController,
     TargetStatePositionController,
     TargetStateRateController,
     WrongSignController,
@@ -28,6 +29,7 @@ from .closed_loop import (
     closed_loop_benchmark_suite,
     closed_loop_comparison,
     closed_loop_scenarios,
+    run_closed_loop_controller,
 )
 from .disturbances import (
     ConstantRateAngularMotion,
@@ -78,6 +80,11 @@ from .randomization import (
     randomize_angular_motion,
     randomize_closed_loop_scenario,
 )
+from .serialization import (
+    angular_motion_from_dict,
+    closed_loop_scenario_from_dict,
+    gimbal_config_from_dict,
+)
 from .types import (
     GimbalAction,
     GimbalDiagnostics,
@@ -126,6 +133,7 @@ __all__ = [
     "PrivilegedTargetStateOracle",
     "ProportionalController",
     "ProportionalPositionController",
+    "SearchFallbackController",
     "RatePulseAngularMotion",
     "ScenarioConfig",
     "SampledAngularMotion",
@@ -146,10 +154,14 @@ __all__ = [
     "closed_loop_benchmark_suite",
     "closed_loop_comparison",
     "closed_loop_scenarios",
+    "run_closed_loop_controller",
+    "angular_motion_from_dict",
+    "closed_loop_scenario_from_dict",
     "encode_action",
     "encode_deployable_observation",
     "evaluate_privileged_oracle_ceilings",
     "generate_gimbal_dataset",
+    "gimbal_config_from_dict",
     "load_gimbal_dataset",
     "randomize_angular_motion",
     "randomize_closed_loop_scenario",

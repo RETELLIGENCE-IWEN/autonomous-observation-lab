@@ -51,6 +51,9 @@ class TrackingMetrics:
     tracking_lag_s: float
     loss_of_view_fraction: float
     loss_of_view_events: int
+    mean_recovery_time_s: float
+    max_recovery_time_s: float
+    unrecovered_loss_events: int
     rate_saturation_fraction: float
     angle_saturation_fraction: float
     command_rms_normalized: float
@@ -407,9 +410,23 @@ def tracking_metrics(episode: DemoEpisode) -> TrackingMetrics:
     visible = np.array([frame.diagnostics.target_in_view for frame in frames])
     lost = ~visible
     loss_events = int(lost[0]) + int(np.sum(lost[1:] & visible[:-1]))
+    period_s = episode.config.timing.control_period_s
+    recovery_times_s: list[float] = []
+    unrecovered_loss_events = 0
+    index = 0
+    while index < len(lost):
+        if not lost[index]:
+            index += 1
+            continue
+        start = index
+        while index < len(lost) and lost[index]:
+            index += 1
+        if index < len(lost):
+            recovery_times_s.append((index - start) * period_s)
+        else:
+            unrecovered_loss_events += 1
     actions = np.array([frame.action.command_normalized for frame in frames])
     rates = np.array([frame.diagnostics.gimbal_rate_rad_s for frame in frames])
-    period_s = episode.config.timing.control_period_s
     accelerations = np.diff(rates, prepend=rates[0]) / period_s
     duration_s = frames[-1].diagnostics.time_s - frames[0].diagnostics.time_s
     return TrackingMetrics(
@@ -419,6 +436,13 @@ def tracking_metrics(episode: DemoEpisode) -> TrackingMetrics:
         tracking_lag_s=_tracking_lag_s(episode),
         loss_of_view_fraction=float(np.mean(lost)),
         loss_of_view_events=loss_events,
+        mean_recovery_time_s=(
+            float(np.mean(recovery_times_s)) if recovery_times_s else 0.0
+        ),
+        max_recovery_time_s=(
+            float(np.max(recovery_times_s)) if recovery_times_s else 0.0
+        ),
+        unrecovered_loss_events=unrecovered_loss_events,
         rate_saturation_fraction=float(
             np.mean([frame.diagnostics.rate_saturated for frame in frames])
         ),
@@ -443,6 +467,33 @@ def tracking_metrics(episode: DemoEpisode) -> TrackingMetrics:
         command_variation_per_s=float(
             np.sum(np.abs(np.diff(actions))) / duration_s
         ),
+    )
+
+
+def run_closed_loop_controller(
+    *,
+    name: str,
+    description: str,
+    scenario: ClosedLoopScenario,
+    config: GimbalServoingConfig,
+    controller: Controller,
+    seed: int,
+) -> ControllerRun:
+    """Roll out one controller and compute tracking and estimator metrics."""
+    episode, estimates = _rollout(
+        name=name,
+        description=description,
+        config=config,
+        controller=controller,
+        target_motion=scenario.target_motion,
+        body_motion=scenario.body_motion,
+        seed=seed,
+    )
+    return ControllerRun(
+        episode=episode,
+        metrics=tracking_metrics(episode),
+        estimates=estimates,
+        estimator_metrics=estimator_metrics(episode, estimates),
     )
 
 

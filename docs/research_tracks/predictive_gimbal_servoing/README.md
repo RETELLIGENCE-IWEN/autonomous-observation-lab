@@ -26,6 +26,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Privileged Target-State Dataset](privileged_dataset.md)
 - [Causal GRU Smoke Experiment](gru_smoke_experiment.md)
 - [Randomized Observation-Profile Experiment](observation_profile_experiment.md)
+- [GRU Closed-Loop Control Experiment](gru_closed_loop_experiment.md)
 - [Prior Work and Novelty Boundary](prior_work_and_novelty.md)
 
 ## Foundation reading path
@@ -39,4 +40,4 @@ The project-specific reading path is maintained in the [Foundation Notes index](
 
 ## Status
 
-Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, and causal GRU predictor are implemented. A seed-disjoint randomized comparison finds O1 strongest for full-set bearing and O2 strongest for rate, with an O2 predictive advantage over constant velocity on matched support. Long loss-of-view recovery, uncertainty calibration, multiple training seeds, recorded motion, hardware parameters, and the final deployment telemetry contract remain open.
+Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, and causal GRU predictor are implemented. In paired randomized closed-loop tests, the disturbance-aware O2 GRU improves tail error and loss-of-view time over proportional and analytical control in both rate and position modes. A blind search fallback is ineffective at the physical travel limit. Belief-guided recovery, uncertainty calibration, multiple training seeds, recorded motion, hardware parameters, and the final deployment telemetry contract remain open.
