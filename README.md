@@ -77,3 +77,23 @@ The paired JSON manifest records the schema, exact configurable scenario and
 hardware values, split seeds, array shapes/dtypes, configuration hash, and optional
 privileged rate/position ceiling results. See the
 [dataset specification](docs/research_tracks/predictive_gimbal_servoing/privileged_dataset.md).
+
+## Causal gimbal GRU
+
+With the optional learning dependencies installed, train the first causal
+bearing/rate predictor with:
+
+```bash
+aol-train-gimbal-gru \
+  --train-data artifacts/gimbal_gru_train.npz \
+  --validation-data artifacts/gimbal_gru_validation.npz \
+  --test-data artifacts/gimbal_gru_test.npz \
+  --profile o1_servo_aware \
+  --checkpoint artifacts/gimbal_gru_o1.pt
+```
+
+The model predicts bearing, rate, and uncertainty at every configured horizon;
+its streaming adapter plugs into either rate or position control. The initial
+[GRU smoke experiment](docs/research_tracks/predictive_gimbal_servoing/gru_smoke_experiment.md)
+shows the expected crossover: analytical geometry is better at the current
+bearing, while the GRU becomes stronger at longer-horizon rate prediction.

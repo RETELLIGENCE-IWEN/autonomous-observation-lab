@@ -1,0 +1,860 @@
+"""Training, evaluation, and analytical comparison for the gimbal GRU."""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import math
+import random
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Sequence
+
+import numpy as np
+import torch
+from torch.utils.data import DataLoader, Dataset
+
+from .config import GimbalCommandMode, ObservationProfile
+from .dataset import (
+    FEATURE_NAMES,
+    TARGET_NAMES,
+    GimbalTargetStateDataset,
+    load_gimbal_dataset,
+    validate_disjoint_seed_blocks,
+)
+from .estimators import (
+    ConstantVelocityEstimatorConfig,
+    ConstantVelocityTargetEstimator,
+)
+from .gru import (
+    CausalTargetStateGRU,
+    GRULossConfig,
+    GRUTargetStateModelConfig,
+    gru_parameter_count,
+    save_gru_checkpoint,
+    target_state_nll,
+)
+from .types import GimbalObservation, MaskedScalar
+
+
+@dataclass(frozen=True)
+class GRUTrainingConfig:
+    epochs: int = 12
+    batch_size: int = 16
+    learning_rate: float = 1e-3
+    weight_decay: float = 1e-5
+    gradient_clip_norm: float = 5.0
+    seed: int = 17
+    device: str = "cpu"
+
+    def __post_init__(self) -> None:
+        if self.epochs <= 0 or self.batch_size <= 0:
+            raise ValueError("epochs and batch size must be positive")
+        if self.learning_rate <= 0.0 or self.weight_decay < 0.0:
+            raise ValueError("learning rate must be positive and decay non-negative")
+        if self.gradient_clip_norm <= 0.0:
+            raise ValueError("gradient clip norm must be positive")
+        if self.seed < 0:
+            raise ValueError("training seed must be non-negative")
+
+
+@dataclass(frozen=True)
+class HorizonMetrics:
+    horizon_s: float
+    valid_samples: int
+    availability_fraction: float
+    bearing_rmse_deg: float | None
+    rate_rmse_deg_s: float | None
+    bearing_nll: float | None
+    rate_nll: float | None
+    bearing_one_sigma_coverage: float | None
+    bearing_two_sigma_coverage: float | None
+    rate_one_sigma_coverage: float | None
+    rate_two_sigma_coverage: float | None
+
+
+@dataclass(frozen=True)
+class GRUEvaluationMetrics:
+    loss: float | None
+    valid_samples: int
+    availability_fraction: float
+    bearing_rmse_deg: float | None
+    rate_rmse_deg_s: float | None
+    bearing_nll: float | None
+    rate_nll: float | None
+    bearing_one_sigma_coverage: float | None
+    bearing_two_sigma_coverage: float | None
+    rate_one_sigma_coverage: float | None
+    rate_two_sigma_coverage: float | None
+    per_horizon: tuple[HorizonMetrics, ...]
+
+
+@dataclass(frozen=True)
+class GRUEpochRecord:
+    epoch: int
+    training_loss: float
+    validation_loss: float
+    validation_bearing_rmse_deg: float | None
+    validation_rate_rmse_deg_s: float | None
+
+
+@dataclass
+class GRUTrainingResult:
+    model: CausalTargetStateGRU
+    history: tuple[GRUEpochRecord, ...]
+    best_epoch: int
+    initial_validation: GRUEvaluationMetrics
+    best_validation: GRUEvaluationMetrics
+
+
+class GimbalTorchSequenceDataset(Dataset):
+    """One selected deployment profile from a multi-profile dataset."""
+
+    def __init__(
+        self,
+        dataset: GimbalTargetStateDataset,
+        profile: ObservationProfile,
+    ):
+        try:
+            self.profile_index = dataset.manifest.observation_profiles.index(
+                profile.value
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"profile {profile.value!r} is absent from the dataset"
+            ) from error
+        self.dataset = dataset
+
+    def __len__(self) -> int:
+        return self.dataset.episode_count
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        return {
+            "features": torch.from_numpy(
+                self.dataset.features[index, self.profile_index]
+            ).float(),
+            "sequence_mask": torch.from_numpy(
+                self.dataset.sequence_mask[index]
+            ).bool(),
+            "targets": torch.from_numpy(self.dataset.targets[index]).float(),
+            "target_mask": torch.from_numpy(
+                self.dataset.target_mask[index]
+            ).bool(),
+        }
+
+
+def set_gru_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+
+
+def _angle_residual_numpy(
+    prediction_rad: np.ndarray, target_rad: np.ndarray
+) -> np.ndarray:
+    difference = prediction_rad - target_rad
+    return np.arctan2(np.sin(difference), np.cos(difference))
+
+
+def _masked_metric(
+    values: np.ndarray, mask: np.ndarray, function
+) -> float | None:
+    selected = values[mask]
+    return float(function(selected)) if selected.size else None
+
+
+def _metrics_from_predictions(
+    *,
+    mean: np.ndarray,
+    std: np.ndarray,
+    targets: np.ndarray,
+    prediction_mask: np.ndarray,
+    possible_mask: np.ndarray,
+    horizons_s: tuple[float, ...],
+    loss_config: GRULossConfig | None = None,
+) -> GRUEvaluationMetrics:
+    loss_config = loss_config or GRULossConfig()
+    if mean.shape != targets.shape or std.shape != targets.shape:
+        raise ValueError("prediction arrays must match target shape")
+    if prediction_mask.shape != targets.shape[:-1]:
+        raise ValueError("prediction mask shape is invalid")
+    if possible_mask.shape != prediction_mask.shape:
+        raise ValueError("possible mask shape is invalid")
+    mask = prediction_mask & possible_mask
+    possible_count = int(possible_mask.sum())
+    valid_count = int(mask.sum())
+    availability = valid_count / possible_count if possible_count else 0.0
+
+    bearing_error = _angle_residual_numpy(mean[..., 0], targets[..., 0])
+    rate_error = mean[..., 1] - targets[..., 1]
+    bearing_std = std[..., 0]
+    rate_std = std[..., 1]
+    bearing_nll_values = np.log(bearing_std) + 0.5 * (
+        bearing_error / bearing_std
+    ) ** 2
+    rate_nll_values = np.log(rate_std) + 0.5 * (
+        rate_error / rate_std
+    ) ** 2
+
+    bearing_mse = _masked_metric(bearing_error**2, mask, np.mean)
+    rate_mse = _masked_metric(rate_error**2, mask, np.mean)
+    bearing_nll = _masked_metric(bearing_nll_values, mask, np.mean)
+    rate_nll = _masked_metric(rate_nll_values, mask, np.mean)
+    if bearing_nll is None or rate_nll is None:
+        loss = None
+    else:
+        assert bearing_mse is not None and rate_mse is not None
+        loss = (
+            loss_config.bearing_weight * bearing_nll
+            + loss_config.rate_weight * rate_nll
+            + loss_config.mean_error_weight * (bearing_mse + rate_mse)
+        )
+
+    def coverage(error: np.ndarray, sigma: np.ndarray, multiple: float):
+        return _masked_metric(
+            np.abs(error) <= multiple * sigma,
+            mask,
+            np.mean,
+        )
+
+    per_horizon = []
+    for horizon_index, horizon_s in enumerate(horizons_s):
+        horizon_mask = mask[..., horizon_index]
+        horizon_possible = possible_mask[..., horizon_index]
+        horizon_valid_count = int(horizon_mask.sum())
+        horizon_possible_count = int(horizon_possible.sum())
+
+        def horizon_metric(values: np.ndarray, function):
+            return _masked_metric(
+                values[..., horizon_index], horizon_mask, function
+            )
+
+        bearing_horizon_mse = horizon_metric(bearing_error**2, np.mean)
+        rate_horizon_mse = horizon_metric(rate_error**2, np.mean)
+        per_horizon.append(
+            HorizonMetrics(
+                horizon_s=horizon_s,
+                valid_samples=horizon_valid_count,
+                availability_fraction=(
+                    horizon_valid_count / horizon_possible_count
+                    if horizon_possible_count
+                    else 0.0
+                ),
+                bearing_rmse_deg=(
+                    math.degrees(math.sqrt(bearing_horizon_mse))
+                    if bearing_horizon_mse is not None
+                    else None
+                ),
+                rate_rmse_deg_s=(
+                    math.degrees(math.sqrt(rate_horizon_mse))
+                    if rate_horizon_mse is not None
+                    else None
+                ),
+                bearing_nll=horizon_metric(bearing_nll_values, np.mean),
+                rate_nll=horizon_metric(rate_nll_values, np.mean),
+                bearing_one_sigma_coverage=horizon_metric(
+                    np.abs(bearing_error) <= bearing_std, np.mean
+                ),
+                bearing_two_sigma_coverage=horizon_metric(
+                    np.abs(bearing_error) <= 2.0 * bearing_std, np.mean
+                ),
+                rate_one_sigma_coverage=horizon_metric(
+                    np.abs(rate_error) <= rate_std, np.mean
+                ),
+                rate_two_sigma_coverage=horizon_metric(
+                    np.abs(rate_error) <= 2.0 * rate_std, np.mean
+                ),
+            )
+        )
+
+    return GRUEvaluationMetrics(
+        loss=loss,
+        valid_samples=valid_count,
+        availability_fraction=availability,
+        bearing_rmse_deg=(
+            math.degrees(math.sqrt(bearing_mse))
+            if bearing_mse is not None
+            else None
+        ),
+        rate_rmse_deg_s=(
+            math.degrees(math.sqrt(rate_mse))
+            if rate_mse is not None
+            else None
+        ),
+        bearing_nll=bearing_nll,
+        rate_nll=rate_nll,
+        bearing_one_sigma_coverage=coverage(
+            bearing_error, bearing_std, 1.0
+        ),
+        bearing_two_sigma_coverage=coverage(
+            bearing_error, bearing_std, 2.0
+        ),
+        rate_one_sigma_coverage=coverage(rate_error, rate_std, 1.0),
+        rate_two_sigma_coverage=coverage(rate_error, rate_std, 2.0),
+        per_horizon=tuple(per_horizon),
+    )
+
+
+@torch.no_grad()
+def evaluate_gru(
+    model: CausalTargetStateGRU,
+    dataset: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+    *,
+    batch_size: int = 32,
+    device: str | torch.device = "cpu",
+    loss_config: GRULossConfig | None = None,
+    evaluation_mask: np.ndarray | None = None,
+) -> GRUEvaluationMetrics:
+    model.to(device)
+    model.eval()
+    loader = DataLoader(
+        GimbalTorchSequenceDataset(dataset, profile),
+        batch_size=batch_size,
+        shuffle=False,
+    )
+    means, stds, targets, prediction_masks, possible_masks = [], [], [], [], []
+    for batch in loader:
+        features = batch["features"].to(device)
+        output = model(features)
+        means.append(output.mean.cpu().numpy())
+        stds.append(output.std.cpu().numpy())
+        targets.append(batch["targets"].numpy())
+        sequence_mask = batch["sequence_mask"].numpy()
+        target_mask = batch["target_mask"].numpy()
+        possible = target_mask & sequence_mask[..., None]
+        prediction_masks.append(possible.copy())
+        possible_masks.append(possible)
+    prediction_mask = np.concatenate(prediction_masks)
+    possible_mask = np.concatenate(possible_masks)
+    if evaluation_mask is not None:
+        if evaluation_mask.shape != prediction_mask.shape:
+            raise ValueError("evaluation mask shape is invalid")
+        prediction_mask &= evaluation_mask
+    return _metrics_from_predictions(
+        mean=np.concatenate(means),
+        std=np.concatenate(stds),
+        targets=np.concatenate(targets),
+        prediction_mask=prediction_mask,
+        possible_mask=possible_mask,
+        horizons_s=dataset.manifest.prediction_horizons_s,
+        loss_config=loss_config,
+    )
+
+
+def _compatible_datasets(
+    train: GimbalTargetStateDataset,
+    validation: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+) -> None:
+    validate_disjoint_seed_blocks((train.manifest, validation.manifest))
+    for dataset in (train, validation):
+        if profile.value not in dataset.manifest.observation_profiles:
+            raise ValueError(f"profile {profile.value!r} is absent from a dataset")
+        if dataset.manifest.feature_names != FEATURE_NAMES:
+            raise ValueError("feature schema mismatch")
+        if dataset.manifest.target_names != TARGET_NAMES:
+            raise ValueError("target schema mismatch")
+    if (
+        train.manifest.prediction_horizons_s
+        != validation.manifest.prediction_horizons_s
+    ):
+        raise ValueError("training and validation horizons differ")
+
+
+def train_gru(
+    train: GimbalTargetStateDataset,
+    validation: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+    *,
+    model_config: GRUTargetStateModelConfig | None = None,
+    training_config: GRUTrainingConfig | None = None,
+    loss_config: GRULossConfig | None = None,
+) -> GRUTrainingResult:
+    training_config = training_config or GRUTrainingConfig()
+    loss_config = loss_config or GRULossConfig()
+    _compatible_datasets(train, validation, profile)
+    model_config = model_config or GRUTargetStateModelConfig(
+        input_dim=len(FEATURE_NAMES),
+        prediction_horizons_s=train.manifest.prediction_horizons_s,
+    )
+    if model_config.input_dim != len(FEATURE_NAMES):
+        raise ValueError("model input dimension does not match feature schema")
+    if (
+        model_config.prediction_horizons_s
+        != train.manifest.prediction_horizons_s
+    ):
+        raise ValueError("model and dataset prediction horizons differ")
+
+    set_gru_seed(training_config.seed)
+    device = torch.device(training_config.device)
+    model = CausalTargetStateGRU(model_config).to(device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=training_config.learning_rate,
+        weight_decay=training_config.weight_decay,
+    )
+    generator = torch.Generator().manual_seed(training_config.seed)
+    loader = DataLoader(
+        GimbalTorchSequenceDataset(train, profile),
+        batch_size=training_config.batch_size,
+        shuffle=True,
+        generator=generator,
+    )
+    initial_validation = evaluate_gru(
+        model,
+        validation,
+        profile,
+        batch_size=training_config.batch_size,
+        device=device,
+        loss_config=loss_config,
+    )
+    best_loss = math.inf
+    best_epoch = 0
+    best_state = copy.deepcopy(model.state_dict())
+    history = []
+
+    for epoch in range(1, training_config.epochs + 1):
+        model.train()
+        total_weighted_loss = 0.0
+        total_labels = 0
+        for batch in loader:
+            features = batch["features"].to(device)
+            targets = batch["targets"].to(device)
+            target_mask = batch["target_mask"].to(device)
+            sequence_mask = batch["sequence_mask"].to(device)
+            output = model(features)
+            loss = target_state_nll(
+                output,
+                targets,
+                target_mask,
+                sequence_mask,
+                loss_config,
+            )
+            optimizer.zero_grad(set_to_none=True)
+            loss.total.backward()
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), training_config.gradient_clip_norm
+            )
+            optimizer.step()
+            label_count = int(
+                (target_mask & sequence_mask.unsqueeze(-1)).sum().item()
+            )
+            total_weighted_loss += float(loss.total.detach()) * label_count
+            total_labels += label_count
+
+        validation_metrics = evaluate_gru(
+            model,
+            validation,
+            profile,
+            batch_size=training_config.batch_size,
+            device=device,
+            loss_config=loss_config,
+        )
+        if validation_metrics.loss is None:
+            raise RuntimeError("validation set contains no valid targets")
+        history.append(
+            GRUEpochRecord(
+                epoch=epoch,
+                training_loss=total_weighted_loss / max(1, total_labels),
+                validation_loss=validation_metrics.loss,
+                validation_bearing_rmse_deg=(
+                    validation_metrics.bearing_rmse_deg
+                ),
+                validation_rate_rmse_deg_s=(
+                    validation_metrics.rate_rmse_deg_s
+                ),
+            )
+        )
+        if validation_metrics.loss < best_loss:
+            best_loss = validation_metrics.loss
+            best_epoch = epoch
+            best_state = copy.deepcopy(model.state_dict())
+
+    model.load_state_dict(best_state)
+    best_validation = evaluate_gru(
+        model,
+        validation,
+        profile,
+        batch_size=training_config.batch_size,
+        device=device,
+        loss_config=loss_config,
+    )
+    return GRUTrainingResult(
+        model=model,
+        history=tuple(history),
+        best_epoch=best_epoch,
+        initial_validation=initial_validation,
+        best_validation=best_validation,
+    )
+
+
+def _feature_value(
+    row: np.ndarray,
+    indices: dict[str, int],
+    value_name: str,
+    validity_name: str,
+    transform=lambda value: value,
+) -> MaskedScalar:
+    valid = row[indices[validity_name]] > 0.5
+    value = transform(float(row[indices[value_name]])) if valid else 0.0
+    return MaskedScalar(value, bool(valid))
+
+
+def _scenario_payload(
+    dataset: GimbalTargetStateDataset, scenario_index: int
+) -> dict[str, object]:
+    scenarios = dataset.manifest.generation.get("scenarios")
+    if not isinstance(scenarios, list) or not 0 <= scenario_index < len(scenarios):
+        raise ValueError("manifest does not contain canonical scenario configs")
+    payload = scenarios[scenario_index]
+    if not isinstance(payload, dict):
+        raise ValueError("scenario payload is invalid")
+    return payload
+
+
+def constant_velocity_predictions(
+    dataset: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Replay the causal analytical estimator and return distribution arrays."""
+    try:
+        profile_index = dataset.manifest.observation_profiles.index(profile.value)
+    except ValueError as error:
+        raise ValueError(f"profile {profile.value!r} is absent") from error
+    indices = {name: index for index, name in enumerate(FEATURE_NAMES)}
+    mean = np.zeros_like(dataset.targets, dtype=np.float32)
+    std = np.ones_like(dataset.targets, dtype=np.float32)
+    prediction_mask = np.zeros_like(dataset.target_mask, dtype=np.bool_)
+    possible_mask = dataset.target_mask & dataset.sequence_mask[..., None]
+
+    for episode_index in range(dataset.episode_count):
+        scenario_index = int(dataset.scenario_index[episode_index])
+        payload = _scenario_payload(dataset, scenario_index)
+        config = payload["config"]
+        assert isinstance(config, dict)
+        servo = config["servo"]
+        camera = config["camera"]
+        assert isinstance(servo, dict) and isinstance(camera, dict)
+        min_angle = float(servo["min_angle_rad"])
+        max_angle = float(servo["max_angle_rad"])
+        max_rate = float(servo["max_rate_rad_s"])
+        fov = float(camera["selected_axis_fov_rad"])
+        frame_rate = float(camera["frame_rate_hz"])
+        maximum_projection_s = max(
+            0.30,
+            float(camera["detection_latency_s"])
+            + float(camera["detection_latency_jitter_s"])
+            + 2.0 / frame_rate,
+        )
+        estimator_config = ConstantVelocityEstimatorConfig(
+            selected_axis_fov_rad=fov,
+            center_noise_std_normalized=float(
+                camera["center_noise_std_normalized"]
+            ),
+            velocity_filter_coefficient=0.40,
+            uncertainty_filter_coefficient=0.20,
+            max_prediction_horizon_s=maximum_projection_s,
+            history_horizon_s=max(1.0, maximum_projection_s + 0.50),
+        )
+        estimator = ConstantVelocityTargetEstimator(estimator_config)
+        length = int(dataset.sequence_mask[episode_index].sum())
+        rows = dataset.features[episode_index, profile_index]
+
+        def position_from_normalized(value: float) -> float:
+            limit = max_angle if value >= 0.0 else -min_angle
+            return value * limit
+
+        for time_index in range(length):
+            row = rows[time_index]
+            rate_mode = row[indices["command_mode_rate"]] > 0.5
+            observation = GimbalObservation(
+                time_s=float(dataset.time_s[episode_index, time_index]),
+                control_dt_s=float(row[indices["control_dt_s"]]),
+                frame_updated=bool(row[indices["frame_updated"]] > 0.5),
+                measurement_age_s=_feature_value(
+                    row,
+                    indices,
+                    "measurement_age_s",
+                    "measurement_age_valid",
+                ),
+                image_error_normalized=_feature_value(
+                    row,
+                    indices,
+                    "image_error_normalized",
+                    "image_error_valid",
+                ),
+                bbox_width_fraction=_feature_value(
+                    row,
+                    indices,
+                    "bbox_width_fraction",
+                    "bbox_width_valid",
+                ),
+                bbox_height_fraction=_feature_value(
+                    row,
+                    indices,
+                    "bbox_height_fraction",
+                    "bbox_height_valid",
+                ),
+                confidence=_feature_value(
+                    row,
+                    indices,
+                    "confidence",
+                    "confidence_valid",
+                ),
+                gimbal_angle_rad=_feature_value(
+                    row,
+                    indices,
+                    "gimbal_position_normalized",
+                    "gimbal_position_valid",
+                    position_from_normalized,
+                ),
+                gimbal_rate_rad_s=_feature_value(
+                    row,
+                    indices,
+                    "gimbal_rate_normalized",
+                    "gimbal_rate_valid",
+                    lambda value: value * max_rate,
+                ),
+                body_rate_rad_s=_feature_value(
+                    row,
+                    indices,
+                    "body_rate_normalized",
+                    "body_rate_valid",
+                    lambda value: value * max_rate,
+                ),
+                command_mode=(
+                    GimbalCommandMode.RATE
+                    if rate_mode
+                    else GimbalCommandMode.POSITION
+                ),
+                previous_action_normalized=float(
+                    row[indices["previous_action_normalized"]]
+                ),
+            )
+            estimate = estimator.update(observation)
+            if not estimate.valid:
+                continue
+            for horizon_index, horizon_s in enumerate(
+                dataset.manifest.prediction_horizons_s
+            ):
+                if not possible_mask[
+                    episode_index, time_index, horizon_index
+                ]:
+                    continue
+                bearing = (
+                    estimate.body_relative_bearing_rad.value
+                    + horizon_s * estimate.body_relative_rate_rad_s.value
+                )
+                mean[episode_index, time_index, horizon_index, 0] = math.atan2(
+                    math.sin(bearing), math.cos(bearing)
+                )
+                mean[episode_index, time_index, horizon_index, 1] = (
+                    estimate.body_relative_rate_rad_s.value
+                )
+                acceleration_std = (
+                    estimator_config.process_acceleration_std_rad_s2
+                )
+                std[episode_index, time_index, horizon_index, 0] = math.sqrt(
+                    estimate.bearing_std_rad.value**2
+                    + (horizon_s * estimate.rate_std_rad_s.value) ** 2
+                    + (0.5 * acceleration_std * horizon_s**2) ** 2
+                )
+                std[episode_index, time_index, horizon_index, 1] = math.hypot(
+                    estimate.rate_std_rad_s.value,
+                    acceleration_std * horizon_s,
+                )
+                prediction_mask[
+                    episode_index, time_index, horizon_index
+                ] = True
+
+    return mean, std, prediction_mask, possible_mask
+
+
+def evaluate_constant_velocity_baseline(
+    dataset: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+    *,
+    loss_config: GRULossConfig | None = None,
+) -> GRUEvaluationMetrics:
+    """Score the existing causal analytical estimator on encoded features."""
+    mean, std, prediction_mask, possible_mask = constant_velocity_predictions(
+        dataset, profile
+    )
+    return _metrics_from_predictions(
+        mean=mean,
+        std=std,
+        targets=dataset.targets,
+        prediction_mask=prediction_mask,
+        possible_mask=possible_mask,
+        horizons_s=dataset.manifest.prediction_horizons_s,
+        loss_config=loss_config,
+    )
+
+
+def run_gru_experiment(
+    *,
+    train_path: str | Path,
+    validation_path: str | Path,
+    test_path: str | Path,
+    checkpoint_path: str | Path,
+    profile: ObservationProfile = ObservationProfile.SERVO_AWARE,
+    hidden_dim: int = 64,
+    embedding_dim: int = 64,
+    training_config: GRUTrainingConfig | None = None,
+) -> dict[str, object]:
+    training_config = training_config or GRUTrainingConfig()
+    train = load_gimbal_dataset(train_path)
+    validation = load_gimbal_dataset(validation_path)
+    test = load_gimbal_dataset(test_path)
+    validate_disjoint_seed_blocks(
+        (train.manifest, validation.manifest, test.manifest)
+    )
+    _compatible_datasets(train, test, profile)
+    model_config = GRUTargetStateModelConfig(
+        input_dim=len(FEATURE_NAMES),
+        prediction_horizons_s=train.manifest.prediction_horizons_s,
+        hidden_dim=hidden_dim,
+        embedding_dim=embedding_dim,
+    )
+    training = train_gru(
+        train,
+        validation,
+        profile,
+        model_config=model_config,
+        training_config=training_config,
+    )
+    learned_test = evaluate_gru(
+        training.model,
+        test,
+        profile,
+        batch_size=training_config.batch_size,
+        device=training_config.device,
+    )
+    analytical_mean, analytical_std, analytical_mask, possible_mask = (
+        constant_velocity_predictions(test, profile)
+    )
+    analytical_test = _metrics_from_predictions(
+        mean=analytical_mean,
+        std=analytical_std,
+        targets=test.targets,
+        prediction_mask=analytical_mask,
+        possible_mask=possible_mask,
+        horizons_s=test.manifest.prediction_horizons_s,
+    )
+    learned_test_matched = evaluate_gru(
+        training.model,
+        test,
+        profile,
+        batch_size=training_config.batch_size,
+        device=training_config.device,
+        evaluation_mask=analytical_mask,
+    )
+    result: dict[str, object] = {
+        "experiment": "gimbal_causal_gru_smoke",
+        "profile": profile.value,
+        "torch_version": torch.__version__,
+        "model_config": asdict(model_config),
+        "training_config": asdict(training_config),
+        "parameter_count": gru_parameter_count(training.model),
+        "dataset_hashes": {
+            "train": train.manifest.configuration_hash,
+            "validation": validation.manifest.configuration_hash,
+            "test": test.manifest.configuration_hash,
+        },
+        "dataset_episodes": {
+            "train": train.episode_count,
+            "validation": validation.episode_count,
+            "test": test.episode_count,
+        },
+        "best_epoch": training.best_epoch,
+        "initial_validation": asdict(training.initial_validation),
+        "best_validation": asdict(training.best_validation),
+        "learned_test": asdict(learned_test),
+        "learned_test_on_analytical_support": asdict(learned_test_matched),
+        "constant_velocity_test": asdict(analytical_test),
+        "history": [asdict(record) for record in training.history],
+        "interpretation": (
+            "Pipeline smoke test on fixed development trajectories; not an "
+            "independent-motion generalization result."
+        ),
+    }
+    save_gru_checkpoint(
+        checkpoint_path,
+        training.model,
+        metadata={
+            "profile": profile.value,
+            "feature_names": list(FEATURE_NAMES),
+            "target_names": list(TARGET_NAMES),
+            "dataset_hashes": result["dataset_hashes"],
+            "training_config": result["training_config"],
+            "best_epoch": training.best_epoch,
+            "best_validation": result["best_validation"],
+            "learned_test": result["learned_test"],
+            "learned_test_on_analytical_support": result[
+                "learned_test_on_analytical_support"
+            ],
+        },
+    )
+    result["checkpoint"] = str(checkpoint_path)
+    return result
+
+
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Train the causal gimbal target-state GRU."
+    )
+    parser.add_argument("--train-data", type=Path, required=True)
+    parser.add_argument("--validation-data", type=Path, required=True)
+    parser.add_argument("--test-data", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--profile",
+        choices=[profile.value for profile in ObservationProfile],
+        default=ObservationProfile.SERVO_AWARE.value,
+    )
+    parser.add_argument("--epochs", type=int, default=12)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--learning-rate", type=float, default=1e-3)
+    parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--gradient-clip", type=float, default=5.0)
+    parser.add_argument("--seed", type=int, default=17)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--hidden-dim", type=int, default=64)
+    parser.add_argument("--embedding-dim", type=int, default=64)
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = _parse_args(argv)
+    training_config = GRUTrainingConfig(
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        gradient_clip_norm=args.gradient_clip,
+        seed=args.seed,
+        device=args.device,
+    )
+    result = run_gru_experiment(
+        train_path=args.train_data,
+        validation_path=args.validation_data,
+        test_path=args.test_data,
+        checkpoint_path=args.checkpoint,
+        profile=ObservationProfile(args.profile),
+        hidden_dim=args.hidden_dim,
+        embedding_dim=args.embedding_dim,
+        training_config=training_config,
+    )
+    text = json.dumps(result, indent=2)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(text + "\n", encoding="utf-8")
+    print(text)
+
+
+if __name__ == "__main__":
+    main()
