@@ -80,6 +80,16 @@ from .randomization import (
     randomize_angular_motion,
     randomize_closed_loop_scenario,
 )
+from .recovery import (
+    BeliefRecoveryConfig,
+    BeliefRecoveryController,
+    RecoveryState,
+    RecoveryTransition,
+)
+from .recovery_scenarios import (
+    recovery_domain_randomization,
+    recovery_scenarios,
+)
 from .serialization import (
     angular_motion_from_dict,
     closed_loop_scenario_from_dict,
@@ -96,6 +106,8 @@ from .types import (
 __all__ = [
     "ACTION_NAMES",
     "BEHAVIOR_NAMES",
+    "BeliefRecoveryConfig",
+    "BeliefRecoveryController",
     "CameraConfig",
     "BodyRateFeedforwardController",
     "ClosedLoopBenchmarkSuite",
@@ -135,6 +147,8 @@ __all__ = [
     "ProportionalPositionController",
     "SearchFallbackController",
     "RatePulseAngularMotion",
+    "RecoveryState",
+    "RecoveryTransition",
     "ScenarioConfig",
     "SampledAngularMotion",
     "ServoConfig",
@@ -165,6 +179,8 @@ __all__ = [
     "load_gimbal_dataset",
     "randomize_angular_motion",
     "randomize_closed_loop_scenario",
+    "recovery_domain_randomization",
+    "recovery_scenarios",
     "rollout_privileged_oracle",
     "save_gimbal_dataset",
     "validate_disjoint_seed_blocks",

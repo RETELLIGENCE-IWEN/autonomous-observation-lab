@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 
 import pytest
@@ -22,6 +23,13 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
 )
 from autonomous_observation_lab.gimbal_servoing.gru_control import (
     evaluate_gru_closed_loop,
+)
+from autonomous_observation_lab.gimbal_servoing.recovery_evaluation import (
+    RecoveryEvaluationConfig,
+    evaluate_belief_recovery,
+)
+from autonomous_observation_lab.gimbal_servoing.recovery_scenarios import (
+    recovery_domain_randomization,
 )
 
 
@@ -113,3 +121,67 @@ def test_checkpoint_driven_control_evaluation_uses_paired_splits(tmp_path):
     assert result["paired_comparisons"]["gru_o2_rate"]["reference"] == (
         "analytical_rate"
     )
+
+
+def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
+    profile = ObservationProfile.DISTURBANCE_AWARE
+    model = CausalTargetStateGRU(
+        GRUTargetStateModelConfig(
+            input_dim=len(FEATURE_NAMES),
+            prediction_horizons_s=(0.0,),
+            hidden_dim=8,
+            embedding_dim=8,
+        )
+    )
+    hashes = {"train": "a", "validation": "b", "test": "c"}
+    checkpoint = save_gru_checkpoint(
+        tmp_path / "o2.pt",
+        model,
+        metadata={
+            "profile": profile.value,
+            "feature_names": list(FEATURE_NAMES),
+            "dataset_hashes": hashes,
+        },
+    )
+    control_results = tmp_path / "control.json"
+    control_results.write_text(
+        json.dumps(
+            {
+                "dataset_hashes": hashes,
+                "validation_horizon_selection": {
+                    profile.value: {
+                        mode: {
+                            "selected_horizon_index": 0,
+                            "selected_horizon_s": 0.0,
+                        }
+                        for mode in ("desired_rate", "desired_position")
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    scenario = replace(nominal_scenario(), name="recovery_smoke")
+    result = evaluate_belief_recovery(
+        o2_checkpoint=checkpoint,
+        control_results=control_results,
+        evaluation=RecoveryEvaluationConfig(
+            seeds=(1201,),
+            include_position=False,
+            randomization=recovery_domain_randomization(
+                episode_duration_s=0.25
+            ),
+        ),
+        scenarios=(scenario,),
+    )
+
+    assert result["variant_count"] == 1
+    assert result["selected_horizons"]["desired_rate"]["seconds"] == 0.0
+    assert set(result["summary"]) == {
+        "analytical_rate_hold",
+        "analytical_rate_blind",
+        "analytical_rate_belief",
+        "gru_o2_rate_hold",
+        "gru_o2_rate_blind",
+        "gru_o2_rate_belief",
+    }

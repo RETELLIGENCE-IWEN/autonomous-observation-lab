@@ -64,13 +64,17 @@ def angular_motion_from_dict(value: Any) -> AngularMotion:
 def gimbal_config_from_dict(value: Any) -> GimbalServoingConfig:
     """Reconstruct a fully configurable plant and observation contract."""
     payload = _typed_payload(value, "GimbalServoingConfig")
+    camera_payload = _typed_payload(payload["camera"], "CameraConfig")
+    if "forced_dropout_intervals_s" in camera_payload:
+        camera_payload["forced_dropout_intervals_s"] = tuple(
+            tuple(interval)
+            for interval in camera_payload["forced_dropout_intervals_s"]
+        )
     return GimbalServoingConfig(
         servo=ServoConfig(
             **_typed_payload(payload["servo"], "ServoConfig")
         ),
-        camera=CameraConfig(
-            **_typed_payload(payload["camera"], "CameraConfig")
-        ),
+        camera=CameraConfig(**camera_payload),
         timing=TimingConfig(
             **_typed_payload(payload["timing"], "TimingConfig")
         ),

@@ -88,6 +88,7 @@ class CameraConfig:
     confidence_mean: float = 0.95
     confidence_noise_std: float = 0.0
     miss_probability: float = 0.0
+    forced_dropout_intervals_s: tuple[tuple[float, float], ...] = ()
     require_full_bbox_in_view: bool = False
 
     def __post_init__(self) -> None:
@@ -107,6 +108,21 @@ class CameraConfig:
             raise ValueError("confidence_mean must be in [0, 1]")
         if not 0.0 <= self.miss_probability <= 1.0:
             raise ValueError("miss_probability must be in [0, 1]")
+        previous_end = -math.inf
+        for interval in self.forced_dropout_intervals_s:
+            if len(interval) != 2:
+                raise ValueError("dropout intervals must contain start/end pairs")
+            start_s, end_s = interval
+            if (
+                not math.isfinite(start_s)
+                or not math.isfinite(end_s)
+                or start_s < 0.0
+                or end_s <= start_s
+            ):
+                raise ValueError("dropout intervals must be finite and increasing")
+            if start_s < previous_end:
+                raise ValueError("dropout intervals must be sorted and disjoint")
+            previous_end = end_s
 
     @property
     def frame_period_s(self) -> float:

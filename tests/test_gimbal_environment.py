@@ -245,6 +245,48 @@ def test_random_imperfection_streams_are_independent():
     assert schedules[0] == schedules[1]
 
 
+def test_forced_dropout_intervals_are_exact_and_seed_independent():
+    base = ideal_config()
+    config = replace(
+        base,
+        camera=replace(
+            base.camera,
+            forced_dropout_intervals_s=((0.10, 0.20),),
+        ),
+        timing=replace(base.timing, episode_duration_s=0.30),
+    )
+    schedules = []
+    for seed in (1, 999):
+        env = GimbalServoEnv(config)
+        observation, _ = env.reset(seed=seed)
+        schedule = [(observation.time_s, observation.detection_valid)]
+        while True:
+            result = env.step(GimbalAction.rate(0.0))
+            observation = result.observation
+            if observation.frame_updated:
+                schedule.append(
+                    (observation.time_s, observation.detection_valid)
+                )
+            if result.truncated:
+                break
+        schedules.append(schedule)
+
+    assert schedules[0] == schedules[1]
+    assert all(
+        valid == (not 0.10 <= round(time_s, 8) < 0.20)
+        for time_s, valid in schedules[0]
+    )
+
+
+def test_forced_dropout_intervals_must_be_ordered_and_disjoint():
+    with pytest.raises(ValueError, match="sorted and disjoint"):
+        CameraConfig(
+            forced_dropout_intervals_s=((0.4, 0.8), (0.2, 0.3))
+        )
+    with pytest.raises(ValueError, match="finite and increasing"):
+        CameraConfig(forced_dropout_intervals_s=((0.3, 0.3),))
+
+
 @pytest.mark.parametrize(
     ("profile", "servo_valid", "body_valid"),
     [

@@ -343,8 +343,11 @@ class GimbalServoEnv:
         visible_limit = half_fov - half_target_width if camera.require_full_bbox_in_view else half_fov
         geometrically_visible = abs(error_rad) <= max(0.0, visible_limit)
 
-        missed = False
-        if camera.miss_probability > 0.0:
+        missed = any(
+            start_s <= capture_time_s < end_s
+            for start_s, end_s in camera.forced_dropout_intervals_s
+        )
+        if not missed and camera.miss_probability > 0.0:
             missed = bool(self._rng_dropout.random() < camera.miss_probability)
         center_noise = 0.0
         if camera.center_noise_std_normalized > 0.0:

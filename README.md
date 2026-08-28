@@ -132,3 +132,18 @@ aol-evaluate-gimbal-gru-control \
 The [closed-loop experiment](docs/research_tracks/predictive_gimbal_servoing/gru_closed_loop_experiment.md)
 reports tracking error, loss of view, recovery, saturation, command effort, and
 the negative result from a naive search fallback.
+
+Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
+scheduled detector outages, target re-entry, and a physically unreachable
+ceiling with:
+
+```bash
+aol-evaluate-gimbal-recovery \
+  --o2-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --control-results artifacts/gimbal_mixed_gru_closed_loop_comparison.json \
+  --output artifacts/gimbal_belief_recovery_comparison.json
+```
+
+The [belief-guided recovery experiment](docs/research_tracks/predictive_gimbal_servoing/belief_recovery_experiment.md)
+compares estimator-native hold, blind travel sweep, and directed belief recovery
+for analytical/O2 estimators and both hardware command modes.
