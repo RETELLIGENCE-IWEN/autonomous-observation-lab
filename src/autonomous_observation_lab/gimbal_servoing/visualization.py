@@ -1,11 +1,11 @@
-"""Rerun visualization for the paired gimbal-causality demonstration."""
+"""Rerun dashboards for gimbal causality, control, and recovery."""
 
 from __future__ import annotations
 
 import argparse
 import math
 from pathlib import Path
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 from .closed_loop import (
     ClosedLoopBenchmarkSuite,
@@ -17,10 +17,20 @@ from .closed_loop import (
 from .config import GimbalCommandMode
 from .demos import DemoEpisode, DemoFrame, paired_cause_demo
 from .estimators import TargetStateEstimate
+from .recovery import RecoveryState
+
+if TYPE_CHECKING:
+    from .recovery_evaluation import RecoveryReplay, RecoveryReplayRun
 
 
 _APP_ID = "autonomous_observation_lab_gimbal_demo"
 _TIMELINE = "sim_time"
+_RECOVERY_STATE_CODE = {
+    RecoveryState.TRACK: 0.0,
+    RecoveryState.COAST: 1.0,
+    RecoveryState.SEARCH: 2.0,
+    RecoveryState.REACQUIRE: 3.0,
+}
 
 
 def _point_at(angle_rad: float, distance: float) -> list[float]:
@@ -133,6 +143,72 @@ def _closed_loop_blueprint(
             ),
             *rows,
             row_shares=[0.75] + [1.0] * len(rows),
+        ),
+        collapse_panels=True,
+    )
+
+
+def _recovery_blueprint(rrb: Any, replay: RecoveryReplay) -> Any:
+    rows = []
+    for replay_run in replay.runs:
+        run = replay_run.run
+        episode = run.episode
+        root = f"/{episode.name}"
+        mode_unit = (
+            "deg/s"
+            if episode.config.command_mode is GimbalCommandMode.RATE
+            else "deg"
+        )
+        signals = rrb.Vertical(
+            rrb.TimeSeriesView(
+                origin=f"{root}/comparison/tracking_deg",
+                name="True / belief / gimbal (deg)",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/recovery/visibility",
+                name="Target / detector / frame update",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/recovery/state",
+                name="Phase: TRACK 0, COAST 1, SEARCH 2, REACQUIRE 3",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/signals/bbox_error",
+                name="BBox center error",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/comparison/actuator",
+                name=f"Requested / applied / actual ({mode_unit})",
+            ),
+            row_shares=[1.25, 0.7, 0.7, 0.8, 1.0],
+        )
+        rows.append(
+            rrb.Horizontal(
+                rrb.Spatial3DView(
+                    origin=f"{root}/world",
+                    name=f"{episode.name}: world",
+                ),
+                rrb.Spatial2DView(
+                    origin=f"{root}/image",
+                    name="Normalized image frame",
+                    visual_bounds=rrb.VisualBounds2D(
+                        x_range=[-1.15, 1.15],
+                        y_range=[-1.15, 1.15],
+                    ),
+                ),
+                signals,
+                column_shares=[1.15, 0.85, 2.0],
+                name=episode.description,
+            )
+        )
+    return rrb.Blueprint(
+        rrb.Vertical(
+            rrb.TextDocumentView(
+                origin="/recovery/summary",
+                name="Recovery replay summary",
+            ),
+            *rows,
+            row_shares=[0.8] + [1.0] * len(rows),
         ),
         collapse_panels=True,
     )
@@ -353,6 +429,97 @@ def _metrics_markdown(comparison: ClosedLoopComparison) -> str:
     return "\n".join(lines)
 
 
+def _recovery_markdown(replay: RecoveryReplay) -> str:
+    lines = [
+        f"# Recovery replay: {replay.scenario.name}",
+        "",
+        f"Exact recorded hardware variant at seed **{replay.seed}**; "
+        f"estimator **{replay.estimator_kind}**, command mode "
+        f"**{replay.command_mode.value}**.",
+        "",
+        replay.scenario.description,
+        "",
+        "Phase code: `0 TRACK`, `1 COAST/hold`, `2 SEARCH`, "
+        "`3 REACQUIRE`.",
+        "",
+        "## Selected-variant metrics",
+        "",
+        "| Strategy | Mean error | P95 error | Lost view | Recovery | "
+        "Unrecovered | Control cost |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    from .gru_control import _control_cost
+
+    for replay_run in replay.runs:
+        run = replay_run.run
+        metrics = run.metrics
+        strategy = run.episode.name.rsplit("_", 1)[-1]
+        lines.append(
+            f"| {strategy} | {metrics.mean_absolute_error_deg:.2f}° | "
+            f"{metrics.p95_absolute_error_deg:.2f}° | "
+            f"{100.0 * metrics.loss_of_view_fraction:.1f}% | "
+            f"{metrics.mean_recovery_time_s:.2f} s | "
+            f"{metrics.unrecovered_loss_events} | {_control_cost(run):.3f} |"
+        )
+    if replay.aggregate_summary:
+        lines.extend(
+            (
+                "",
+                "## Full 24-variant aggregate",
+                "",
+                "| Strategy | Mean error | P95 error | Lost view | Cost | "
+                "Unrecovered |",
+                "|---|---:|---:|---:|---:|---:|",
+            )
+        )
+        for replay_run in replay.runs:
+            name = replay_run.run.episode.name
+            aggregate = replay.aggregate_summary.get(name)
+            if aggregate is None:
+                continue
+            strategy = name.rsplit("_", 1)[-1]
+            lines.append(
+                f"| {strategy} | "
+                f"{aggregate['mean_absolute_error_deg']:.2f}° | "
+                f"{aggregate['p95_absolute_error_deg']:.2f}° | "
+                f"{100.0 * aggregate['loss_of_view_fraction']:.1f}% | "
+                f"{aggregate['mean_control_cost']:.3f} | "
+                f"{aggregate['total_unrecovered_loss_events']} |"
+            )
+    belief_run = next(
+        (
+            replay_run
+            for replay_run in replay.runs
+            if replay_run.transitions
+        ),
+        None,
+    )
+    if belief_run is not None:
+        lines.extend(
+            (
+                "",
+                "## Belief-recovery transitions",
+                "",
+                "| Time | From | To | Reason |",
+                "|---:|---|---|---|",
+            )
+        )
+        for transition in belief_run.transitions:
+            lines.append(
+                f"| {transition.time_s:.2f} s | "
+                f"{transition.previous.value} | {transition.current.value} | "
+                f"{transition.reason} |"
+            )
+    lines.extend(
+        (
+            "",
+            "All three rows replay identical target motion, body rotation, "
+            "detector randomness, initial state, and configured hardware.",
+        )
+    )
+    return "\n".join(lines)
+
+
 def _suite_metric_table(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -551,6 +718,74 @@ def _log_closed_loop_frame(
         )
 
 
+def _recovery_state_at(
+    replay_run: RecoveryReplayRun, frame_index: int
+) -> RecoveryState:
+    if replay_run.state_trace:
+        index = min(frame_index, len(replay_run.state_trace) - 1)
+        return replay_run.state_trace[index][1]
+    run = replay_run.run
+    estimate_valid = (
+        frame_index < len(run.estimates) and run.estimates[frame_index].valid
+    )
+    if estimate_valid:
+        return RecoveryState.TRACK
+    strategy = run.episode.name.rsplit("_", 1)[-1]
+    return (
+        RecoveryState.SEARCH
+        if strategy == "blind"
+        else RecoveryState.COAST
+    )
+
+
+def _log_recovery_static(rr: Any, replay_run: RecoveryReplayRun) -> None:
+    run = replay_run.run
+    root = run.episode.name
+    _log_closed_loop_static(rr, run)
+    styles = (
+        ("visibility/target_in_view", [50, 220, 100], "target in camera FOV"),
+        ("visibility/detection_valid", [255, 150, 40], "detector valid"),
+        ("visibility/frame_updated", [130, 150, 255], "new detector frame"),
+        (
+            "state/code",
+            [230, 100, 255],
+            "phase: TRACK 0 / COAST 1 / SEARCH 2 / REACQUIRE 3",
+        ),
+    )
+    for suffix, color, label in styles:
+        rr.log(
+            f"{root}/recovery/{suffix}",
+            rr.SeriesLines(colors=color, names=label),
+            static=True,
+        )
+
+
+def _log_recovery_frame(
+    rr: Any,
+    replay_run: RecoveryReplayRun,
+    frame: DemoFrame,
+    frame_index: int,
+) -> None:
+    run = replay_run.run
+    estimate = (
+        run.estimates[frame_index]
+        if frame_index < len(run.estimates)
+        else None
+    )
+    _log_closed_loop_frame(rr, run, frame, estimate)
+    rr.set_time(_TIMELINE, duration=frame.diagnostics.time_s)
+    root = run.episode.name
+    observation = frame.observation
+    state = _recovery_state_at(replay_run, frame_index)
+    for suffix, value in (
+        ("visibility/target_in_view", frame.diagnostics.target_in_view),
+        ("visibility/detection_valid", observation.detection_valid),
+        ("visibility/frame_updated", observation.frame_updated),
+        ("state/code", _RECOVERY_STATE_CODE[state]),
+    ):
+        rr.log(f"{root}/recovery/{suffix}", rr.Scalars(float(value)))
+
+
 def write_rerun_demo(
     episodes: Sequence[DemoEpisode],
     *,
@@ -637,6 +872,52 @@ def write_closed_loop_comparison(
             _log_closed_loop_frame(rr, run, frame, estimate)
 
 
+def write_recovery_replay(
+    replay: RecoveryReplay,
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show an exact hold/blind/belief recovery replay."""
+    if not replay.runs:
+        raise ValueError("at least one recovery run is required")
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _recovery_blueprint(rrb, replay)
+    rr.init(f"{_APP_ID}_belief_recovery_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.set_time(_TIMELINE, duration=0.0)
+    rr.log(
+        "recovery/summary",
+        rr.TextDocument(
+            _recovery_markdown(replay),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+    )
+    for replay_run in replay.runs:
+        _log_recovery_static(rr, replay_run)
+    frame_sequences = tuple(
+        replay_run.run.episode.frames for replay_run in replay.runs
+    )
+    for frame_index, frames in enumerate(
+        zip(*frame_sequences, strict=True)
+    ):
+        for replay_run, frame in zip(replay.runs, frames, strict=True):
+            _log_recovery_frame(rr, replay_run, frame, frame_index)
+
+
 def write_benchmark_suite(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -701,17 +982,80 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--demo",
-        choices=("causality", "closed-loop", "benchmark-suite"),
+        choices=("causality", "closed-loop", "benchmark-suite", "recovery"),
         default="causality",
-        help="select a causality, controller, or stress-suite dashboard",
+        help="select a causality, controller, stress, or recovery dashboard",
     )
+    parser.add_argument(
+        "--recovery-results",
+        type=Path,
+        default=Path("artifacts/gimbal_belief_recovery_comparison.json"),
+        help="recorded belief-recovery JSON used for exact replay",
+    )
+    parser.add_argument(
+        "--recovery-scenario",
+        choices=(
+            "detector_burst_recovery",
+            "travel_limit_reentry",
+            "physically_unreachable",
+        ),
+        default="detector_burst_recovery",
+        help="recorded recovery scenario to replay",
+    )
+    parser.add_argument(
+        "--recovery-estimator",
+        choices=("analytical", "gru_o2"),
+        default="gru_o2",
+        help="target-state estimator for hold/blind/belief replay",
+    )
+    parser.add_argument(
+        "--recovery-command-mode",
+        choices=("rate", "position"),
+        default="rate",
+        help="hardware command adapter for recovery replay",
+    )
+    parser.add_argument(
+        "--o2-checkpoint",
+        type=Path,
+        help="override the O2 checkpoint recorded in recovery results",
+    )
+    parser.add_argument(
+        "--control-results",
+        type=Path,
+        help="override the prior control result recorded in recovery results",
+    )
+    parser.add_argument("--device", default="cpu")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "benchmark-suite":
+    if args.demo == "recovery":
+        from .recovery_evaluation import replay_recovery_variant
+
+        seed = 41000 if args.seed is None else args.seed
+        command_mode = (
+            GimbalCommandMode.RATE
+            if args.recovery_command_mode == "rate"
+            else GimbalCommandMode.POSITION
+        )
+        replay = replay_recovery_variant(
+            results=args.recovery_results,
+            scenario_name=args.recovery_scenario,
+            seed=seed,
+            estimator_kind=args.recovery_estimator,
+            command_mode=command_mode,
+            o2_checkpoint=args.o2_checkpoint,
+            control_results=args.control_results,
+            device=args.device,
+        )
+        write_recovery_replay(
+            replay,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "benchmark-suite":
         seed = 41 if args.seed is None else args.seed
         suite = closed_loop_benchmark_suite(seed=seed)
         write_benchmark_suite(

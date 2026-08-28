@@ -147,3 +147,17 @@ aol-evaluate-gimbal-recovery \
 The [belief-guided recovery experiment](docs/research_tracks/predictive_gimbal_servoing/belief_recovery_experiment.md)
 compares estimator-native hold, blind travel sweep, and directed belief recovery
 for analytical/O2 estimators and both hardware command modes.
+
+Inspect an exact recorded recovery variant as synchronized hold, blind, and
+belief-controller rows with:
+
+```bash
+aol-visualize-gimbal --demo recovery
+```
+
+The recovery dashboard includes the 3D geometry, normalized camera image,
+target belief and uncertainty, detector/FOV visibility, actuator commands, and
+the `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` phase. Choose another recorded case or
+adapter with `--recovery-scenario` and `--recovery-command-mode`. For mouse-only
+launching, use `scripts/open_gimbal_recovery_dashboard.sh` directly or point a
+desktop shortcut at it.

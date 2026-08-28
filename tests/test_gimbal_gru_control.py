@@ -6,6 +6,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from autonomous_observation_lab.gimbal_servoing import (
+    GimbalCommandMode,
     GimbalDatasetGenerationConfig,
     GimbalDomainRandomizationConfig,
     ObservationProfile,
@@ -27,9 +28,14 @@ from autonomous_observation_lab.gimbal_servoing.gru_control import (
 from autonomous_observation_lab.gimbal_servoing.recovery_evaluation import (
     RecoveryEvaluationConfig,
     evaluate_belief_recovery,
+    replay_recovery_variant,
 )
 from autonomous_observation_lab.gimbal_servoing.recovery_scenarios import (
     recovery_domain_randomization,
+)
+from autonomous_observation_lab.gimbal_servoing.recovery import RecoveryState
+from autonomous_observation_lab.gimbal_servoing.visualization import (
+    _recovery_state_at,
 )
 
 
@@ -185,3 +191,37 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
         "gru_o2_rate_blind",
         "gru_o2_rate_belief",
     }
+
+    results_path = tmp_path / "recovery.json"
+    results_path.write_text(json.dumps(result), encoding="utf-8")
+    replay = replay_recovery_variant(
+        results=results_path,
+        scenario_name=scenario.name,
+        seed=1201,
+        command_mode=GimbalCommandMode.RATE,
+        o2_checkpoint=checkpoint,
+        control_results=control_results,
+    )
+    assert replay.scenario.name == scenario.name
+    assert replay.seed == 1201
+    assert [item.run.episode.name for item in replay.runs] == [
+        "gru_o2_rate_hold",
+        "gru_o2_rate_blind",
+        "gru_o2_rate_belief",
+    ]
+    reference_frames = replay.runs[0].run.episode.frames
+    for replay_run in replay.runs[1:]:
+        for expected, actual in zip(
+            reference_frames,
+            replay_run.run.episode.frames,
+            strict=True,
+        ):
+            assert actual.diagnostics.target_bearing_rad == pytest.approx(
+                expected.diagnostics.target_bearing_rad
+            )
+            assert actual.diagnostics.body_bearing_rad == pytest.approx(
+                expected.diagnostics.body_bearing_rad
+            )
+    assert _recovery_state_at(replay.runs[0], 0) is RecoveryState.COAST
+    assert _recovery_state_at(replay.runs[1], 0) is RecoveryState.SEARCH
+    assert _recovery_state_at(replay.runs[2], 0) is RecoveryState.TRACK

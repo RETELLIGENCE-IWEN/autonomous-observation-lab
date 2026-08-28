@@ -43,11 +43,13 @@ from .recovery import (
     BeliefRecoveryConfig,
     BeliefRecoveryController,
     RecoveryState,
+    RecoveryTransition,
 )
 from .recovery_scenarios import (
     recovery_domain_randomization,
     recovery_scenarios,
 )
+from .serialization import closed_loop_scenario_from_dict
 
 
 EstimatorKind = Literal["analytical", "gru_o2"]
@@ -86,6 +88,24 @@ class RecoveryEvaluationConfig:
                 raise ValueError(f"{name} must be in (0, 1]")
         if self.search_boundary_margin_rad < 0.0:
             raise ValueError("search boundary margin must be non-negative")
+
+
+@dataclass(frozen=True)
+class RecoveryReplayRun:
+    run: ControllerRun
+    state_trace: tuple[tuple[float, RecoveryState], ...]
+    transitions: tuple[RecoveryTransition, ...]
+
+
+@dataclass(frozen=True)
+class RecoveryReplay:
+    scenario: ClosedLoopScenario
+    seed: int
+    estimator_kind: EstimatorKind
+    command_mode: GimbalCommandMode
+    runs: tuple[RecoveryReplayRun, ...]
+    aggregate_summary: dict[str, dict[str, Any]]
+    source_results: Path
 
 
 def _load_control_selection(
@@ -585,6 +605,124 @@ def evaluate_belief_recovery(
         "paired_comparisons": comparisons,
         "runs": records,
     }
+
+
+def _replay_evaluation_config(
+    result: dict[str, Any], *, device: str
+) -> RecoveryEvaluationConfig:
+    raw = result.get("evaluation_config")
+    if not isinstance(raw, dict):
+        raise ValueError("recovery result has no evaluation configuration")
+    belief = raw.get("belief")
+    if not isinstance(belief, dict):
+        raise ValueError("recovery result has no belief configuration")
+    return RecoveryEvaluationConfig(
+        seeds=tuple(int(seed) for seed in raw["seeds"]),
+        rate_feedback_gain_s_inv=float(raw["rate_feedback_gain_s_inv"]),
+        maximum_staleness_s=float(raw["maximum_staleness_s"]),
+        blind_search_rate_normalized=float(
+            raw["blind_search_rate_normalized"]
+        ),
+        blind_search_position_fraction=float(
+            raw["blind_search_position_fraction"]
+        ),
+        search_boundary_margin_rad=float(
+            raw["search_boundary_margin_rad"]
+        ),
+        belief=BeliefRecoveryConfig(**belief),
+        include_position=bool(raw["include_position"]),
+        device=device,
+    )
+
+
+def replay_recovery_variant(
+    *,
+    results: str | Path,
+    scenario_name: str,
+    seed: int,
+    estimator_kind: EstimatorKind = "gru_o2",
+    command_mode: GimbalCommandMode = GimbalCommandMode.RATE,
+    o2_checkpoint: str | Path | None = None,
+    control_results: str | Path | None = None,
+    device: str = "cpu",
+) -> RecoveryReplay:
+    """Replay hold/blind/belief on one exact recorded recovery variant."""
+    results_path = Path(results)
+    result = json.loads(results_path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_belief_recovery_v1":
+        raise ValueError("unsupported recovery result schema")
+    checkpoint_path = Path(o2_checkpoint or result["o2_checkpoint"])
+    control_path = Path(control_results or result["control_results"])
+    if _sha256(checkpoint_path) != result.get("o2_checkpoint_sha256"):
+        raise ValueError("O2 checkpoint checksum does not match recovery result")
+    if _sha256(control_path) != result.get("control_results_sha256"):
+        raise ValueError("control-result checksum does not match recovery result")
+    model, horizon_indices, dataset_hashes = _load_o2_model(
+        checkpoint_path, control_path, device
+    )
+    if dataset_hashes != result.get("dataset_hashes"):
+        raise ValueError("recovery result dataset hashes are inconsistent")
+    selected = result.get("selected_horizons", {}).get(command_mode.value)
+    if not isinstance(selected, dict):
+        raise ValueError("recovery result has no selected command-mode horizon")
+    if int(selected["index"]) != horizon_indices[command_mode]:
+        raise ValueError("recorded and validated horizon selections differ")
+
+    matching_variants = [
+        entry
+        for entry in result.get("scenario_variants", ())
+        if int(entry["seed"]) == seed
+        and entry.get("scenario", {}).get("name") == scenario_name
+    ]
+    if len(matching_variants) != 1:
+        raise ValueError(
+            "recovery result must contain exactly one matching scenario/seed"
+        )
+    scenario = closed_loop_scenario_from_dict(
+        matching_variants[0]["scenario"]
+    )
+    evaluation = _replay_evaluation_config(result, device=device)
+    replay_runs: list[RecoveryReplayRun] = []
+    for strategy in ("hold", "blind", "belief"):
+        run, belief_controller = _run_strategy(
+            scenario=scenario,
+            seed=seed,
+            model=model,
+            horizon_index=horizon_indices[command_mode],
+            estimator_kind=estimator_kind,
+            command_mode=command_mode,
+            strategy=strategy,
+            evaluation=evaluation,
+        )
+        replay_runs.append(
+            RecoveryReplayRun(
+                run=run,
+                state_trace=(
+                    tuple(belief_controller.state_trace)
+                    if belief_controller is not None
+                    else ()
+                ),
+                transitions=(
+                    tuple(belief_controller.transitions)
+                    if belief_controller is not None
+                    else ()
+                ),
+            )
+        )
+    names = {replay.run.episode.name for replay in replay_runs}
+    raw_summary = result.get("summary", {})
+    aggregate_summary = {
+        name: dict(raw_summary[name]) for name in names if name in raw_summary
+    }
+    return RecoveryReplay(
+        scenario=scenario,
+        seed=seed,
+        estimator_kind=estimator_kind,
+        command_mode=command_mode,
+        runs=tuple(replay_runs),
+        aggregate_summary=aggregate_summary,
+        source_results=results_path,
+    )
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

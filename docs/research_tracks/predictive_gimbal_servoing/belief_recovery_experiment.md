@@ -124,3 +124,31 @@ aol-evaluate-gimbal-recovery \
 The JSON records the complete recovery and domain-randomization configuration,
 per-episode transitions and metrics, aggregate state occupancy, exact seed
 block, selected O2 horizons, and paired hold/blind deltas.
+
+## Visual inspection
+
+Replay the seed-41000 detector-outage variant with O2 rate control:
+
+```bash
+aol-visualize-gimbal --demo recovery
+```
+
+The Rerun dashboard synchronizes hold, blind sweep, and belief recovery. Each
+row contains the 3D target/gimbal geometry, 2D detector bbox, true and predicted
+bearing with uncertainty, visibility signals, actuator response, and recovery
+phase. The summary includes both selected-variant metrics and the full
+24-variant aggregate.
+
+Select other recorded cases and adapters without changing code:
+
+```bash
+aol-visualize-gimbal --demo recovery \
+  --recovery-scenario travel_limit_reentry \
+  --recovery-command-mode position \
+  --seed 41003
+```
+
+For a portable recording, add
+`--output artifacts/gimbal_recovery_dashboard.rrd`. The visualizer verifies the
+checkpoint and source-result checksums before replaying the exact serialized
+hardware variant.
