@@ -504,8 +504,23 @@ def _feature_value(
 
 
 def _scenario_payload(
-    dataset: GimbalTargetStateDataset, scenario_index: int
+    dataset: GimbalTargetStateDataset,
+    scenario_index: int,
+    episode_seed: int,
 ) -> dict[str, object]:
+    variants = dataset.manifest.generation.get("scenario_variants")
+    if isinstance(variants, list):
+        for variant in variants:
+            if not isinstance(variant, dict):
+                continue
+            if (
+                int(variant.get("seed", -1)) == episode_seed
+                and int(variant.get("scenario_index", -1)) == scenario_index
+            ):
+                payload = variant.get("scenario")
+                if isinstance(payload, dict):
+                    return payload
+        raise ValueError("manifest is missing an episode scenario variant")
     scenarios = dataset.manifest.generation.get("scenarios")
     if not isinstance(scenarios, list) or not 0 <= scenario_index < len(scenarios):
         raise ValueError("manifest does not contain canonical scenario configs")
@@ -532,7 +547,8 @@ def constant_velocity_predictions(
 
     for episode_index in range(dataset.episode_count):
         scenario_index = int(dataset.scenario_index[episode_index])
-        payload = _scenario_payload(dataset, scenario_index)
+        episode_seed = int(dataset.episode_seed[episode_index])
+        payload = _scenario_payload(dataset, scenario_index, episode_seed)
         config = payload["config"]
         assert isinstance(config, dict)
         servo = config["servo"]

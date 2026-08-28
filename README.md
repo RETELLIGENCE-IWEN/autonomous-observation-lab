@@ -73,6 +73,10 @@ aol-generate-gimbal-dataset \
   --episodes 8
 ```
 
+Use `--domain-randomization` with disjoint seed ranges for learning experiments;
+the seed then controls independently varied motion, camera, servo, timing, and
+initial state, all recorded exactly in the manifest.
+
 The paired JSON manifest records the schema, exact configurable scenario and
 hardware values, split seeds, array shapes/dtypes, configuration hash, and optional
 privileged rate/position ceiling results. See the
@@ -97,3 +101,17 @@ its streaming adapter plugs into either rate or position control. The initial
 [GRU smoke experiment](docs/research_tracks/predictive_gimbal_servoing/gru_smoke_experiment.md)
 shows the expected crossover: analytical geometry is better at the current
 bearing, while the GRU becomes stronger at longer-horizon rate prediction.
+
+Train a matched observation-profile ablation with:
+
+```bash
+aol-compare-gimbal-gru-profiles \
+  --train-data artifacts/gimbal_randomized_train.npz \
+  --validation-data artifacts/gimbal_randomized_validation.npz \
+  --test-data artifacts/gimbal_randomized_test.npz \
+  --checkpoint-directory artifacts/gimbal_profile_checkpoints \
+  --output artifacts/gimbal_gru_profile_comparison.json
+```
+
+See the [randomized O0/O1/O2 experiment](docs/research_tracks/predictive_gimbal_servoing/observation_profile_experiment.md)
+for the matched analytical comparison and current loss-of-view limitation.

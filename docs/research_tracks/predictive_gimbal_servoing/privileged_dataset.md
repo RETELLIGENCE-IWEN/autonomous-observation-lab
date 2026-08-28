@@ -37,19 +37,27 @@ Each observation profile uses the same fixed-width feature vector. Missing
 capabilities are encoded as zero values with false validity masks, not as
 apparently valid zeros.
 
-The schema contains:
+Schema v2 contains:
 
 - control interval and frame-update indicator;
 - measurement age and validity;
-- bbox center error, width, height, confidence, and validity;
-- normalized gimbal position/rate and validity;
-- normalized body rate and validity;
-- previous normalized action;
+- bbox center error in normalized and calibrated radians, width, height,
+  confidence, and validity;
+- normalized and calibrated-radian gimbal position/rate, with validity;
+- normalized and calibrated-radian body rate, with validity;
+- previous normalized action plus typed physical rate/position command channels;
 - rate/position command-mode one-hot fields.
 
 It contains no target bearing, target rate, body bearing, future motion, servo
 queue state, or simulator episode identifier. Absolute simulator time is stored
 as metadata for alignment, not as a model feature.
+
+Keeping both representations is deliberate. Normalized values remain useful to
+the controller, while physical values make labels in radians identifiable when
+camera FOV, servo travel, and servo rate vary. The conversion uses the
+deployment's configurable camera/servo calibration and does not require
+privileged simulator state. Schema-v1 datasets remain loadable for historical
+experiments.
 
 ## Array layout
 
@@ -84,10 +92,12 @@ The loader disables NumPy pickle support and validates every loaded array
 against the manifest. `validate_disjoint_seed_blocks` rejects reused simulator
 seeds across manifests.
 
-The current six named scenarios are fixed development probes. They are useful
-for exercising the data plumbing, but they are not a substitute for the
-independently randomized target/body motion families and untouched seed blocks
-required for training and final claims.
+Without domain randomization, the six named scenarios remain fixed development
+probes. With `--domain-randomization`, each split seed independently varies
+target motion, body motion, maneuver pulses, camera, servo, timing, and initial
+state around those authored families. The manifest stores every realized
+variant, making the seed block a genuine motion/plant split rather than merely a
+detector-noise split.
 
 ## Generate a dataset
 
@@ -100,6 +110,9 @@ aol-generate-gimbal-dataset \
   --seed-start 1000 \
   --episodes 8
 ```
+
+Add `--domain-randomization` for learning splits. Use disjoint seed ranges for
+train, validation, and test.
 
 Repeat `--scenario`, `--behavior`, or `--profile` to select subsets. The
 defaults include all six development scenarios, all three observation profiles,

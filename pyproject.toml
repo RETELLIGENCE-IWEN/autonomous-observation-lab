@@ -21,6 +21,7 @@ aol-train-world-model = "autonomous_observation_lab.world_models.train:main"
 aol-visualize-gimbal = "autonomous_observation_lab.gimbal_servoing.visualization:main"
 aol-generate-gimbal-dataset = "autonomous_observation_lab.gimbal_servoing.dataset:main"
 aol-train-gimbal-gru = "autonomous_observation_lab.gimbal_servoing.gru_training:main"
+aol-compare-gimbal-gru-profiles = "autonomous_observation_lab.gimbal_servoing.gru_profiles:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

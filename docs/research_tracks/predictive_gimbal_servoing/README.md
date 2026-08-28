@@ -25,6 +25,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Benchmark Specification](benchmark_specification.md)
 - [Privileged Target-State Dataset](privileged_dataset.md)
 - [Causal GRU Smoke Experiment](gru_smoke_experiment.md)
+- [Randomized Observation-Profile Experiment](observation_profile_experiment.md)
 - [Prior Work and Novelty Boundary](prior_work_and_novelty.md)
 
 ## Foundation reading path
@@ -38,4 +39,4 @@ The project-specific reading path is maintained in the [Foundation Notes index](
 
 ## Status
 
-Concept locked on 2026-08-26. A configurable deterministic one-axis environment, analytical target-state estimator, rate/position adapters, Rerun diagnostics, six-case stress matrix, privileged target-state oracle, deterministic dataset format, and first causal GRU predictor are implemented. The GRU smoke result is promising at longer horizons but uses fixed development motions and is not a generalization or control claim. Hardware parameters and the final deployment telemetry contract remain open.
+Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, and causal GRU predictor are implemented. A seed-disjoint randomized comparison finds O1 strongest for full-set bearing and O2 strongest for rate, with an O2 predictive advantage over constant velocity on matched support. Long loss-of-view recovery, uncertainty calibration, multiple training seeds, recorded motion, hardware parameters, and the final deployment telemetry contract remain open.

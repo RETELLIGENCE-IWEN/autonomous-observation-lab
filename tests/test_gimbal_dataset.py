@@ -7,6 +7,7 @@ import pytest
 from autonomous_observation_lab.gimbal_servoing import (
     FEATURE_NAMES,
     ConstantRateAngularMotion,
+    GimbalCommandMode,
     GimbalDatasetGenerationConfig,
     GimbalServoEnv,
     ObservationProfile,
@@ -165,6 +166,45 @@ def test_observation_encoder_masks_profile_capabilities_without_truth_inputs():
     assert vectors[ObservationProfile.DISTURBANCE_AWARE][
         index["body_rate_valid"]
     ] == 1.0
+    assert vectors[ObservationProfile.DISTURBANCE_AWARE][
+        index["image_error_rad"]
+    ] == pytest.approx(
+        vectors[ObservationProfile.DISTURBANCE_AWARE][
+            index["image_error_normalized"]
+        ]
+        * 0.5
+        * config.camera.selected_axis_fov_rad
+    )
+    assert vectors[ObservationProfile.SERVO_AWARE][
+        index["gimbal_angle_rad"]
+    ] == pytest.approx(observation.gimbal_angle_rad.value)
+    assert vectors[ObservationProfile.DISTURBANCE_AWARE][
+        index["body_rate_rad_s"]
+    ] == pytest.approx(observation.body_rate_rad_s.value)
+    assert vectors[ObservationProfile.VISION_ONLY][
+        index["previous_rate_command_rad_s"]
+    ] == pytest.approx(
+        observation.previous_action_normalized
+        * config.servo.max_rate_rad_s
+    )
+    assert vectors[ObservationProfile.VISION_ONLY][
+        index["previous_position_command_rad"]
+    ] == 0.0
+
+    position_observation = replace(
+        observation,
+        command_mode=GimbalCommandMode.POSITION,
+        previous_action_normalized=-0.4,
+    )
+    position_vector = encode_deployable_observation(
+        position_observation,
+        profile=ObservationProfile.VISION_ONLY,
+        config=replace(config, command_mode=GimbalCommandMode.POSITION),
+    )
+    assert position_vector[index["previous_rate_command_rad_s"]] == 0.0
+    assert position_vector[
+        index["previous_position_command_rad"]
+    ] == pytest.approx(config.servo.position_from_normalized(-0.4))
 
 
 def test_dataset_replay_is_deterministic_and_profiles_share_labels():

@@ -150,9 +150,10 @@ Use identical trajectories and initial states across controllers. Store generato
 The current dataset manifest records schema version, full scenario and hardware
 configuration, seed block, profiles, behaviors, horizons, array shapes, and a
 SHA-256 configuration hash. A validation helper rejects overlapping seed blocks.
-Final learning experiments must additionally instantiate the independently
-randomized target/body motion families above; replaying the fixed six-case
-development suite under different detector seeds is not a valid train/test
+The domain-randomized generator now independently varies target/body motion,
+maneuver pulses, sensing, actuation, timing, and initial state from the split
+seed, and records each realized scenario for exact replay. Replaying the fixed
+six-case development suite without that option remains invalid as a train/test
 separation.
 
 ---

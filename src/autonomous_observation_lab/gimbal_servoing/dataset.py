@@ -32,10 +32,17 @@ from .oracles import (
     PrivilegedTargetStateOracle,
     rollout_privileged_oracle,
 )
+from .randomization import (
+    GimbalDomainRandomizationConfig,
+    randomize_closed_loop_scenario,
+)
 from .types import GimbalAction, GimbalObservation, MaskedScalar
 
 
-SCHEMA_VERSION = "gimbal_target_state_v1"
+SCHEMA_VERSION = "gimbal_target_state_v2"
+SUPPORTED_SCHEMA_VERSIONS = frozenset(
+    {"gimbal_target_state_v1", SCHEMA_VERSION}
+)
 VALID_SPLITS = frozenset(
     {"train", "validation", "development", "test", "shift_test"}
 )
@@ -47,7 +54,7 @@ BEHAVIOR_NAMES = (
     "privileged_oracle_rate",
     "privileged_oracle_position",
 )
-FEATURE_NAMES = (
+LEGACY_FEATURE_NAMES = (
     "control_dt_s",
     "frame_updated",
     "measurement_age_s",
@@ -67,6 +74,35 @@ FEATURE_NAMES = (
     "body_rate_normalized",
     "body_rate_valid",
     "previous_action_normalized",
+    "command_mode_rate",
+    "command_mode_position",
+)
+FEATURE_NAMES = (
+    "control_dt_s",
+    "frame_updated",
+    "measurement_age_s",
+    "measurement_age_valid",
+    "image_error_normalized",
+    "image_error_rad",
+    "image_error_valid",
+    "bbox_width_fraction",
+    "bbox_width_valid",
+    "bbox_height_fraction",
+    "bbox_height_valid",
+    "confidence",
+    "confidence_valid",
+    "gimbal_position_normalized",
+    "gimbal_angle_rad",
+    "gimbal_position_valid",
+    "gimbal_rate_normalized",
+    "gimbal_rate_rad_s",
+    "gimbal_rate_valid",
+    "body_rate_normalized",
+    "body_rate_rad_s",
+    "body_rate_valid",
+    "previous_action_normalized",
+    "previous_rate_command_rad_s",
+    "previous_position_command_rad",
     "command_mode_rate",
     "command_mode_position",
 )
@@ -118,6 +154,7 @@ class GimbalDatasetGenerationConfig:
     )
     prediction_horizons_s: tuple[float, ...] = (0.0, 0.1, 0.2, 0.3)
     oracle_control: OracleControlConfig = OracleControlConfig()
+    domain_randomization: GimbalDomainRandomizationConfig | None = None
     include_oracle_ceilings: bool = True
 
     def __post_init__(self) -> None:
@@ -155,6 +192,12 @@ class GimbalDatasetGenerationConfig:
             for profile in self.observation_profiles
         ):
             raise ValueError("observation profiles must use ObservationProfile")
+        if self.domain_randomization is not None and not isinstance(
+            self.domain_randomization, GimbalDomainRandomizationConfig
+        ):
+            raise ValueError(
+                "domain_randomization must use GimbalDomainRandomizationConfig"
+            )
 
 
 @dataclass(frozen=True)
@@ -290,40 +333,67 @@ def encode_deployable_observation(
         ObservationProfile.SERVO_AWARE,
         ObservationProfile.DISTURBANCE_AWARE,
     }
-    angle, angle_valid = _masked(
+    image_error_rad = (
+        image_error[0] * 0.5 * config.camera.selected_axis_fov_rad
+        if image_error[1]
+        else 0.0
+    )
+    angle_rad, angle_valid = _masked(
         observation.gimbal_angle_rad, servo_available
     )
+    angle = angle_rad
     if angle_valid:
-        angle = config.servo.normalized_from_position(angle)
-    rate, rate_valid = _masked(
+        angle = config.servo.normalized_from_position(angle_rad)
+    rate_rad_s, rate_valid = _masked(
         observation.gimbal_rate_rad_s, servo_available
     )
+    rate = rate_rad_s
     if rate_valid:
         rate /= config.servo.max_rate_rad_s
-    body_rate, body_rate_valid = _masked(
+    body_rate_rad_s, body_rate_valid = _masked(
         observation.body_rate_rad_s,
         profile is ObservationProfile.DISTURBANCE_AWARE,
     )
+    body_rate = body_rate_rad_s
     if body_rate_valid:
         body_rate /= config.servo.max_rate_rad_s
 
     rate_mode = observation.command_mode is GimbalCommandMode.RATE
+    previous_rate_command_rad_s = (
+        observation.previous_action_normalized * config.servo.max_rate_rad_s
+        if rate_mode
+        else 0.0
+    )
+    previous_position_command_rad = (
+        0.0
+        if rate_mode
+        else config.servo.position_from_normalized(
+            observation.previous_action_normalized
+        )
+    )
     vector = np.asarray(
         (
             observation.control_dt_s,
             float(observation.frame_updated),
             *age,
-            *image_error,
+            image_error[0],
+            image_error_rad,
+            image_error[1],
             *width,
             *height,
             *confidence,
             angle,
+            angle_rad,
             angle_valid,
             rate,
+            rate_rad_s,
             rate_valid,
             body_rate,
+            body_rate_rad_s,
             body_rate_valid,
             observation.previous_action_normalized,
+            previous_rate_command_rad_s,
+            previous_position_command_rad,
             float(rate_mode),
             float(not rate_mode),
         ),
@@ -569,14 +639,35 @@ def generate_gimbal_dataset(
     selected = tuple(available[name] for name in request.scenario_names)
 
     episodes = []
+    scenario_variants = []
+    first_seed_variants = []
     for seed in request.seeds:
         for scenario_index, scenario in enumerate(selected):
+            episode_scenario = (
+                randomize_closed_loop_scenario(
+                    scenario,
+                    seed=seed,
+                    config=request.domain_randomization,
+                )
+                if request.domain_randomization is not None
+                else scenario
+            )
+            if request.domain_randomization is not None:
+                scenario_variants.append(
+                    {
+                        "seed": seed,
+                        "scenario_index": scenario_index,
+                        "scenario": _canonical(episode_scenario),
+                    }
+                )
+                if seed == request.seeds[0]:
+                    first_seed_variants.append(episode_scenario)
             for behavior_index, behavior_name in enumerate(
                 request.behavior_names
             ):
                 episodes.append(
                     _collect_episode(
-                        scenario=scenario,
+                        scenario=episode_scenario,
                         scenario_index=scenario_index,
                         behavior_name=behavior_name,
                         behavior_index=behavior_index,
@@ -650,6 +741,8 @@ def generate_gimbal_dataset(
         ),
         "scenarios": [_canonical(scenario) for scenario in selected],
     }
+    if scenario_variants:
+        generation["scenario_variants"] = scenario_variants
     configuration_hash = hashlib.sha256(
         json.dumps(
             generation, sort_keys=True, separators=(",", ":")
@@ -657,7 +750,7 @@ def generate_gimbal_dataset(
     ).hexdigest()
     ceilings = (
         evaluate_privileged_oracle_ceilings(
-            selected,
+            tuple(first_seed_variants) if first_seed_variants else selected,
             seed=request.seeds[0],
             oracle_control=request.oracle_control,
         )
@@ -740,7 +833,12 @@ def _validate_dataset(dataset: GimbalTargetStateDataset) -> None:
     episode_count, profile_count, max_steps, feature_count = (
         dataset.features.shape
     )
-    if dataset.manifest.feature_names != FEATURE_NAMES:
+    expected_feature_names = (
+        LEGACY_FEATURE_NAMES
+        if dataset.manifest.schema_version == "gimbal_target_state_v1"
+        else FEATURE_NAMES
+    )
+    if dataset.manifest.feature_names != expected_feature_names:
         raise ValueError("unsupported feature schema")
     if dataset.manifest.action_names != ACTION_NAMES:
         raise ValueError("unsupported action schema")
@@ -802,7 +900,7 @@ def _validate_dataset(dataset: GimbalTargetStateDataset) -> None:
     ).hexdigest()
     if dataset.manifest.configuration_hash != expected_configuration_hash:
         raise ValueError("configuration hash does not match the manifest")
-    if dataset.manifest.schema_version != SCHEMA_VERSION:
+    if dataset.manifest.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError("unsupported dataset schema version")
 
 
@@ -873,6 +971,11 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         dest="profiles",
     )
     parser.add_argument("--no-oracle-ceilings", action="store_true")
+    parser.add_argument(
+        "--domain-randomization",
+        action="store_true",
+        help="randomize motion, camera, servo, and timing from each split seed",
+    )
     args = parser.parse_args(argv)
     if args.episodes <= 0:
         parser.error("--episodes must be positive")
@@ -893,6 +996,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         ),
         prediction_horizons_s=defaults.prediction_horizons_s,
         oracle_control=defaults.oracle_control,
+        domain_randomization=(
+            GimbalDomainRandomizationConfig()
+            if args.domain_randomization
+            else None
+        ),
         include_oracle_ceilings=not args.no_oracle_ceilings,
     )
     dataset = generate_gimbal_dataset(request)

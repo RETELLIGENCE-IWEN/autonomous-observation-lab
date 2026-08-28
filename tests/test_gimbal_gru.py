@@ -8,6 +8,7 @@ torch = pytest.importorskip("torch")
 
 from autonomous_observation_lab.gimbal_servoing import (
     GimbalServoEnv,
+    GimbalDomainRandomizationConfig,
     ObservationProfile,
 )
 from autonomous_observation_lab.gimbal_servoing.closed_loop import (
@@ -18,6 +19,7 @@ from autonomous_observation_lab.gimbal_servoing.dataset import (
     FEATURE_NAMES,
     GimbalDatasetGenerationConfig,
     generate_gimbal_dataset,
+    save_gimbal_dataset,
 )
 from autonomous_observation_lab.gimbal_servoing.gru import (
     CausalTargetStateGRU,
@@ -36,6 +38,9 @@ from autonomous_observation_lab.gimbal_servoing.gru_training import (
     evaluate_constant_velocity_baseline,
     evaluate_gru,
     train_gru,
+)
+from autonomous_observation_lab.gimbal_servoing.gru_profiles import (
+    run_gru_profile_comparison,
 )
 
 
@@ -262,3 +267,98 @@ def test_checkpoint_round_trip_and_analytical_comparison(trained_gru, tmp_path):
     assert analytical.rate_rmse_deg_s is not None
     assert np.isfinite(analytical.bearing_rmse_deg)
     assert np.isfinite(analytical.rate_rmse_deg_s)
+
+
+def test_analytical_replay_uses_randomized_episode_hardware():
+    scenario = learning_scenario()
+    randomization = GimbalDomainRandomizationConfig()
+    randomization = replace(
+        randomization,
+        hardware=replace(
+            randomization.hardware,
+            episode_duration_s=0.8,
+        ),
+    )
+    request = GimbalDatasetGenerationConfig(
+        split="test",
+        seeds=(404,),
+        scenario_names=(scenario.name,),
+        behavior_names=("privileged_oracle_rate",),
+        observation_profiles=(ObservationProfile.SERVO_AWARE,),
+        prediction_horizons_s=(0.0, 0.1),
+        domain_randomization=randomization,
+        include_oracle_ceilings=False,
+    )
+    dataset = generate_gimbal_dataset(request, scenarios=(scenario,))
+    metrics = evaluate_constant_velocity_baseline(
+        dataset, ObservationProfile.SERVO_AWARE
+    )
+
+    assert metrics.availability_fraction > 0.5
+    assert metrics.bearing_rmse_deg is not None
+    assert np.isfinite(metrics.bearing_rmse_deg)
+
+
+def test_profile_comparison_uses_matched_architecture_and_data(tmp_path):
+    scenario = learning_scenario()
+    randomization = GimbalDomainRandomizationConfig()
+    randomization = replace(
+        randomization,
+        hardware=replace(randomization.hardware, episode_duration_s=0.6),
+    )
+
+    def make_split(split: str, seeds: tuple[int, ...], filename: str):
+        request = GimbalDatasetGenerationConfig(
+            split=split,
+            seeds=seeds,
+            scenario_names=(scenario.name,),
+            behavior_names=("privileged_oracle_rate",),
+            observation_profiles=tuple(ObservationProfile),
+            prediction_horizons_s=(0.0, 0.1),
+            domain_randomization=randomization,
+            include_oracle_ceilings=False,
+        )
+        dataset = generate_gimbal_dataset(request, scenarios=(scenario,))
+        path, _ = save_gimbal_dataset(tmp_path / filename, dataset)
+        return path
+
+    train_path = make_split("train", (501, 502), "train")
+    validation_path = make_split("validation", (601,), "validation")
+    test_path = make_split("test", (701,), "test")
+    result = run_gru_profile_comparison(
+        train_path=train_path,
+        validation_path=validation_path,
+        test_path=test_path,
+        checkpoint_directory=tmp_path / "checkpoints",
+        hidden_dim=12,
+        embedding_dim=12,
+        training_config=GRUTrainingConfig(
+            epochs=2,
+            batch_size=2,
+            learning_rate=3e-3,
+            seed=8,
+        ),
+    )
+
+    assert result["profiles"] == [profile.value for profile in ObservationProfile]
+    assert result["parameter_count_per_model"] > 0
+    profile_results = result["profile_results"]
+    assert set(profile_results) == {
+        profile.value for profile in ObservationProfile
+    }
+    assert (
+        profile_results[ObservationProfile.VISION_ONLY.value][
+            "constant_velocity_test"
+        ]["availability_fraction"]
+        == 0.0
+    )
+    assert (
+        profile_results[ObservationProfile.SERVO_AWARE.value][
+            "constant_velocity_test"
+        ]["availability_fraction"]
+        > 0.5
+    )
+    assert all(
+        (tmp_path / "checkpoints" / f"gimbal_gru_o{index}.pt").exists()
+        for index in range(3)
+    )
