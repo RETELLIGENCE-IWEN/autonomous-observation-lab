@@ -161,3 +161,26 @@ the `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` phase. Choose another recorded case or
 adapter with `--recovery-scenario` and `--recovery-command-mode`. For mouse-only
 launching, use `scripts/open_gimbal_recovery_dashboard.sh` directly or point a
 desktop shortcut at it.
+
+Calibrate the O2 GRU's predicted standard deviations on validation data, then
+evaluate reliability once on the untouched test split:
+
+```bash
+aol-calibrate-gimbal-uncertainty \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --output artifacts/gimbal_o2_uncertainty_calibration.json \
+  --batch-size 24
+```
+
+Open the reliability and per-horizon coverage dashboard with:
+
+```bash
+aol-visualize-gimbal --demo calibration
+```
+
+For mouse-only access, launch `scripts/open_gimbal_calibration_dashboard.sh`.
+The [uncertainty calibration experiment](docs/research_tracks/predictive_gimbal_servoing/uncertainty_calibration_experiment.md)
+reports the held-out improvement in Gaussian likelihood and 2σ coverage, the
+full reliability-curve limitation, and the null effect on recovery behavior.

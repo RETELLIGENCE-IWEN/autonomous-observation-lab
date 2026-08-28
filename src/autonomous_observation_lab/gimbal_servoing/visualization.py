@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 
 _APP_ID = "autonomous_observation_lab_gimbal_demo"
 _TIMELINE = "sim_time"
+_CALIBRATION_TIMELINE = "calibration_axis"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -209,6 +211,42 @@ def _recovery_blueprint(rrb: Any, replay: RecoveryReplay) -> Any:
             ),
             *rows,
             row_shares=[0.8] + [1.0] * len(rows),
+        ),
+        collapse_panels=True,
+    )
+
+
+def _uncertainty_calibration_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/calibration/summary",
+                name="Uncertainty calibration summary",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/calibration/test/bearing/reliability",
+                        name="Test bearing reliability (50–99% grid)",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/calibration/test/rate/reliability",
+                        name="Test rate reliability (50–99% grid)",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/calibration/test/bearing/two_sigma_by_horizon",
+                        name="Test bearing 2σ (0/100/200/300 ms)",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/calibration/test/rate/two_sigma_by_horizon",
+                        name="Test rate 2σ (0/100/200/300 ms)",
+                    ),
+                ),
+                row_shares=[1.0, 1.0],
+            ),
+            column_shares=[1.15, 1.85],
         ),
         collapse_panels=True,
     )
@@ -518,6 +556,112 @@ def _recovery_markdown(replay: RecoveryReplay) -> str:
         )
     )
     return "\n".join(lines)
+
+
+def _uncertainty_calibration_markdown(result: dict[str, Any]) -> str:
+    calibration = result["calibration"]
+    horizons = calibration["prediction_horizons_s"]
+    bearing_scales = calibration["bearing_std_scale"]
+    rate_scales = calibration["rate_std_scale"]
+    lines = [
+        "# O2 GRU uncertainty calibration",
+        "",
+        "Scale factors were fit **only on validation predictions**, frozen, "
+        "and then evaluated on the untouched test split. Predicted bearing "
+        "and rate means are unchanged.",
+        "",
+        f"Method: `{result['method']}`",
+        "",
+        "## Learned standard-deviation scales",
+        "",
+        "| Horizon | Bearing | Rate |",
+        "|---:|---:|---:|",
+    ]
+    for horizon, bearing, rate in zip(
+        horizons, bearing_scales, rate_scales, strict=True
+    ):
+        lines.append(
+            f"| {1000.0 * horizon:.0f} ms | {bearing:.3f} | {rate:.3f} |"
+        )
+
+    lines.extend(
+        (
+            "",
+            "## Aggregate results",
+            "",
+            "| Split / signal | NLL b | NLL a | 1σ b | 1σ a | "
+            "2σ b | 2σ a | MACE b | MACE a |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        )
+    )
+    for split_name in ("validation", "test"):
+        split = result[split_name]
+        for signal in ("bearing", "rate"):
+            before = split["uncalibrated"]
+            after = split["calibrated"]
+            reliability = split["reliability"]
+            lines.append(
+                f"| {split_name} {signal} | "
+                f"{before[f'{signal}_nll']:.4f} | "
+                f"{after[f'{signal}_nll']:.4f} | "
+                f"{100.0 * before[f'{signal}_one_sigma_coverage']:.2f}% | "
+                f"{100.0 * after[f'{signal}_one_sigma_coverage']:.2f}% | "
+                f"{100.0 * before[f'{signal}_two_sigma_coverage']:.2f}% | "
+                f"{100.0 * after[f'{signal}_two_sigma_coverage']:.2f}% | "
+                f"{100.0 * reliability['uncalibrated'][signal]['mean_absolute_calibration_error']:.2f}% | "
+                f"{100.0 * reliability['calibrated'][signal]['mean_absolute_calibration_error']:.2f}% |"
+            )
+
+    lines.extend(
+        (
+            "",
+            "## Test regimes most relevant to recovery",
+            "",
+            "| Regime | Samples | Bearing 2σ before → after | "
+            "Rate 2σ before → after |",
+            "|---|---:|---:|---:|",
+        )
+    )
+    for name in (
+        "fresh_valid_detection",
+        "detection_gap_150_to_650ms",
+        "detection_gap_ge_650ms",
+        "target_out_of_view",
+    ):
+        record = result["test"]["strata"].get(name)
+        if record is None:
+            continue
+        before = record["uncalibrated"]
+        after = record["calibrated"]
+        lines.append(
+            f"| `{name}` | {before['valid_samples']} | "
+            f"{100.0 * before['bearing_two_sigma_coverage']:.2f}% → "
+            f"{100.0 * after['bearing_two_sigma_coverage']:.2f}% | "
+            f"{100.0 * before['rate_two_sigma_coverage']:.2f}% → "
+            f"{100.0 * after['rate_two_sigma_coverage']:.2f}% |"
+        )
+    lines.extend(
+        (
+            "",
+            "The scaling improves held-out Gaussian likelihood and 2σ tail "
+            "coverage. The full reliability-curve error does not improve: "
+            "residuals are non-Gaussian and their calibration depends on the "
+            "measurement/dropout regime. This artifact is therefore an "
+            "optional variance correction, not a claim of complete "
+            "distribution calibration.",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _load_uncertainty_calibration_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_uncertainty_calibration_v1":
+        raise ValueError("unsupported uncertainty calibration result")
+    for key in ("calibration", "validation", "test"):
+        if not isinstance(result.get(key), dict):
+            raise ValueError(f"calibration result is missing {key}")
+    return result
 
 
 def _suite_metric_table(
@@ -918,6 +1062,86 @@ def write_recovery_replay(
             _log_recovery_frame(rr, replay_run, frame, frame_index)
 
 
+def write_uncertainty_calibration_dashboard(
+    result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show validation/test uncertainty reliability diagnostics."""
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _uncertainty_calibration_blueprint(rrb)
+    rr.init(f"{_APP_ID}_uncertainty_calibration_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "calibration/summary",
+        rr.TextDocument(
+            _uncertainty_calibration_markdown(result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    test = result["test"]
+    for signal in ("bearing", "rate"):
+        uncalibrated = test["reliability"]["uncalibrated"][signal]
+        calibrated = test["reliability"]["calibrated"][signal]
+        nominal_values = uncalibrated["nominal_coverage"]
+        for index, nominal in enumerate(nominal_values):
+            rr.set_time(
+                _CALIBRATION_TIMELINE,
+                sequence=index,
+            )
+            root = f"calibration/test/{signal}/reliability"
+            rr.log(f"{root}/ideal", rr.Scalars(100.0 * nominal))
+            rr.log(
+                f"{root}/uncalibrated",
+                rr.Scalars(
+                    100.0 * uncalibrated["empirical_coverage"][index]
+                ),
+            )
+            rr.log(
+                f"{root}/calibrated",
+                rr.Scalars(
+                    100.0 * calibrated["empirical_coverage"][index]
+                ),
+            )
+
+        metric_name = f"{signal}_two_sigma_coverage"
+        before_horizons = test["uncalibrated"]["per_horizon"]
+        after_horizons = test["calibrated"]["per_horizon"]
+        for horizon_index, (before, after) in enumerate(
+            zip(before_horizons, after_horizons, strict=True)
+        ):
+            rr.set_time(
+                _CALIBRATION_TIMELINE,
+                sequence=horizon_index,
+            )
+            root = f"calibration/test/{signal}/two_sigma_by_horizon"
+            rr.log(f"{root}/nominal", rr.Scalars(95.45))
+            rr.log(
+                f"{root}/uncalibrated",
+                rr.Scalars(100.0 * before[metric_name]),
+            )
+            rr.log(
+                f"{root}/calibrated",
+                rr.Scalars(100.0 * after[metric_name]),
+            )
+
+
 def write_benchmark_suite(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -982,9 +1206,21 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--demo",
-        choices=("causality", "closed-loop", "benchmark-suite", "recovery"),
+        choices=(
+            "causality",
+            "closed-loop",
+            "benchmark-suite",
+            "recovery",
+            "calibration",
+        ),
         default="causality",
-        help="select a causality, controller, stress, or recovery dashboard",
+        help="select a causality, controller, stress, recovery, or calibration dashboard",
+    )
+    parser.add_argument(
+        "--uncertainty-calibration",
+        type=Path,
+        default=Path("artifacts/gimbal_o2_uncertainty_calibration.json"),
+        help="validation-fit uncertainty calibration result JSON",
     )
     parser.add_argument(
         "--recovery-results",
@@ -1031,7 +1267,16 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "recovery":
+    if args.demo == "calibration":
+        result = _load_uncertainty_calibration_result(
+            args.uncertainty_calibration
+        )
+        write_uncertainty_calibration_dashboard(
+            result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "recovery":
         from .recovery_evaluation import replay_recovery_variant
 
         seed = 41000 if args.seed is None else args.seed

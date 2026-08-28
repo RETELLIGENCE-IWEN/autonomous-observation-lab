@@ -50,6 +50,10 @@ from .recovery_scenarios import (
     recovery_scenarios,
 )
 from .serialization import closed_loop_scenario_from_dict
+from .uncertainty_calibration import (
+    GaussianUncertaintyCalibration,
+    load_uncertainty_calibration,
+)
 
 
 EstimatorKind = Literal["analytical", "gru_o2"]
@@ -68,6 +72,7 @@ class RecoveryEvaluationConfig:
     randomization: GimbalDomainRandomizationConfig = (
         recovery_domain_randomization()
     )
+    uncertainty_calibration: GaussianUncertaintyCalibration | None = None
     include_position: bool = True
     device: str = "cpu"
 
@@ -188,6 +193,14 @@ def _target_state_controller(
     if estimator_kind == "analytical":
         estimator = _analytical_estimator(scenario)
     else:
+        bearing_std_scale = 1.0
+        rate_std_scale = 1.0
+        if evaluation.uncertainty_calibration is not None:
+            bearing_std_scale, rate_std_scale = (
+                evaluation.uncertainty_calibration.scales_for_horizon(
+                    horizon_index
+                )
+            )
         estimator = GRUTargetStateEstimator(
             model,
             config,
@@ -195,6 +208,8 @@ def _target_state_controller(
                 observation_profile=ObservationProfile.DISTURBANCE_AWARE,
                 horizon_index=horizon_index,
                 maximum_staleness_s=evaluation.maximum_staleness_s,
+                bearing_std_scale=bearing_std_scale,
+                rate_std_scale=rate_std_scale,
                 device=evaluation.device,
             ),
         )
@@ -465,6 +480,20 @@ def evaluate_belief_recovery(
     model, horizon_indices, dataset_hashes = _load_o2_model(
         o2_checkpoint, control_results, evaluation.device
     )
+    calibration = evaluation.uncertainty_calibration
+    if calibration is not None:
+        if calibration.profile is not ObservationProfile.DISTURBANCE_AWARE:
+            raise ValueError("recovery requires an O2 uncertainty calibration")
+        if calibration.prediction_horizons_s != model.config.prediction_horizons_s:
+            raise ValueError("calibration and checkpoint horizons differ")
+        if calibration.checkpoint_sha256 != _sha256(o2_checkpoint):
+            raise ValueError("calibration checkpoint checksum mismatch")
+        if (
+            calibration.validation_dataset_hash
+            != dataset_hashes.get("validation")
+            or calibration.test_dataset_hash != dataset_hashes.get("test")
+        ):
+            raise ValueError("calibration and checkpoint dataset hashes differ")
     command_modes = [GimbalCommandMode.RATE]
     if evaluation.include_position:
         command_modes.append(GimbalCommandMode.POSITION)
@@ -616,6 +645,12 @@ def _replay_evaluation_config(
     belief = raw.get("belief")
     if not isinstance(belief, dict):
         raise ValueError("recovery result has no belief configuration")
+    raw_calibration = raw.get("uncertainty_calibration")
+    calibration = (
+        GaussianUncertaintyCalibration.from_dict(raw_calibration)
+        if isinstance(raw_calibration, dict)
+        else None
+    )
     return RecoveryEvaluationConfig(
         seeds=tuple(int(seed) for seed in raw["seeds"]),
         rate_feedback_gain_s_inv=float(raw["rate_feedback_gain_s_inv"]),
@@ -630,6 +665,7 @@ def _replay_evaluation_config(
             raw["search_boundary_margin_rad"]
         ),
         belief=BeliefRecoveryConfig(**belief),
+        uncertainty_calibration=calibration,
         include_position=bool(raw["include_position"]),
         device=device,
     )
@@ -735,6 +771,11 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed-start", type=int, default=41000)
     parser.add_argument("--episodes", type=int, default=8)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--uncertainty-calibration",
+        type=Path,
+        help="validation-fit uncertainty calibration JSON for O2 inference",
+    )
     parser.add_argument("--skip-position", action="store_true")
     return parser.parse_args(argv)
 
@@ -743,8 +784,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = _parse_args(argv)
     if args.episodes <= 0:
         raise ValueError("episodes must be positive")
+    calibration = (
+        load_uncertainty_calibration(args.uncertainty_calibration)
+        if args.uncertainty_calibration is not None
+        else None
+    )
     evaluation = RecoveryEvaluationConfig(
         seeds=tuple(range(args.seed_start, args.seed_start + args.episodes)),
+        uncertainty_calibration=calibration,
         include_position=not args.skip_position,
         device=args.device,
     )

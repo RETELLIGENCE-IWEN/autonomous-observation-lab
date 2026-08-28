@@ -24,6 +24,7 @@ aol-train-gimbal-gru = "autonomous_observation_lab.gimbal_servoing.gru_training:
 aol-compare-gimbal-gru-profiles = "autonomous_observation_lab.gimbal_servoing.gru_profiles:main"
 aol-evaluate-gimbal-gru-control = "autonomous_observation_lab.gimbal_servoing.gru_control:main"
 aol-evaluate-gimbal-recovery = "autonomous_observation_lab.gimbal_servoing.recovery_evaluation:main"
+aol-calibrate-gimbal-uncertainty = "autonomous_observation_lab.gimbal_servoing.uncertainty_calibration:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -106,11 +106,12 @@ The state machine fixes the catastrophic blind-sweep behavior and provides a
 clear, configurable recovery contract. It is beneficial for rate adapters, but
 the position adapter's native hold remains the stronger aggregate default.
 
-The next experiment should calibrate the GRU's bearing/rate uncertainty under
-missing detections, then use that calibrated uncertainty to select coast
-duration and whether directed search is warranted. Recovery parameters must be
-tuned on a development seed block before evaluation on a newly held-out block;
-the present authored suite must not be reused as an untouched test claim.
+The follow-on [uncertainty calibration experiment](uncertainty_calibration_experiment.md)
+fits per-horizon bearing/rate variance scales on validation data. It improves
+held-out likelihood and 2σ coverage, but exposes conditional miscalibration and
+does not change any recovery transition in this suite. Recovery parameters must
+still be tuned on a development seed block before evaluation on a newly held-out
+block; the present authored suite must not be reused as an untouched test claim.
 
 ## Reproduce
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from dataclasses import replace
 
@@ -36,6 +37,10 @@ from autonomous_observation_lab.gimbal_servoing.recovery_scenarios import (
 from autonomous_observation_lab.gimbal_servoing.recovery import RecoveryState
 from autonomous_observation_lab.gimbal_servoing.visualization import (
     _recovery_state_at,
+)
+from autonomous_observation_lab.gimbal_servoing.uncertainty_calibration import (
+    CALIBRATION_SCHEMA_VERSION,
+    GaussianUncertaintyCalibration,
 )
 
 
@@ -168,6 +173,18 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
         encoding="utf-8",
     )
     scenario = replace(nominal_scenario(), name="recovery_smoke")
+    calibration = GaussianUncertaintyCalibration(
+        schema_version=CALIBRATION_SCHEMA_VERSION,
+        profile=profile,
+        prediction_horizons_s=(0.0,),
+        bearing_std_scale=(1.1,),
+        rate_std_scale=(1.2,),
+        validation_dataset_hash=hashes["validation"],
+        test_dataset_hash=hashes["test"],
+        checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        minimum_scale=0.25,
+        maximum_scale=4.0,
+    )
     result = evaluate_belief_recovery(
         o2_checkpoint=checkpoint,
         control_results=control_results,
@@ -177,12 +194,18 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
             randomization=recovery_domain_randomization(
                 episode_duration_s=0.25
             ),
+            uncertainty_calibration=calibration,
         ),
         scenarios=(scenario,),
     )
 
     assert result["variant_count"] == 1
     assert result["selected_horizons"]["desired_rate"]["seconds"] == 0.0
+    serialized_calibration = result["evaluation_config"][
+        "uncertainty_calibration"
+    ]
+    assert serialized_calibration["bearing_std_scale"] == (1.1,)
+    assert serialized_calibration["rate_std_scale"] == (1.2,)
     assert set(result["summary"]) == {
         "analytical_rate_hold",
         "analytical_rate_blind",

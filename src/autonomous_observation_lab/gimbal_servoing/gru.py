@@ -245,6 +245,8 @@ class GRUInferenceConfig:
     observation_profile: ObservationProfile
     horizon_index: int = 0
     maximum_staleness_s: float = 0.50
+    bearing_std_scale: float = 1.0
+    rate_std_scale: float = 1.0
     device: str = "cpu"
 
     def __post_init__(self) -> None:
@@ -252,6 +254,10 @@ class GRUInferenceConfig:
             raise ValueError("horizon_index must be non-negative")
         if self.maximum_staleness_s < 0.0:
             raise ValueError("maximum staleness must be non-negative")
+        for name in ("bearing_std_scale", "rate_std_scale"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
 
 
 class GRUTargetStateEstimator:
@@ -321,8 +327,14 @@ class GRUTargetStateEstimator:
             measurement_time_s=MaskedScalar(measurement_time_s, True),
             body_relative_bearing_rad=MaskedScalar(float(mean[0]), True),
             body_relative_rate_rad_s=MaskedScalar(float(mean[1]), True),
-            bearing_std_rad=MaskedScalar(float(std[0]), True),
-            rate_std_rad_s=MaskedScalar(float(std[1]), True),
+            bearing_std_rad=MaskedScalar(
+                float(std[0]) * self.inference.bearing_std_scale,
+                True,
+            ),
+            rate_std_rad_s=MaskedScalar(
+                float(std[1]) * self.inference.rate_std_scale,
+                True,
+            ),
             prediction_horizon_s=MaskedScalar(
                 estimate_time_s - measurement_time_s, True
             ),

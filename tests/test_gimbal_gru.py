@@ -165,8 +165,9 @@ def test_streaming_estimator_produces_controller_compatible_state():
         target_motion=scenario.target_motion,
         body_motion=scenario.body_motion,
     ).reset(seed=4)
+    model = small_model()
     estimator = GRUTargetStateEstimator(
-        small_model(),
+        model,
         config,
         GRUInferenceConfig(
             observation_profile=ObservationProfile.SERVO_AWARE,
@@ -174,13 +175,37 @@ def test_streaming_estimator_produces_controller_compatible_state():
             maximum_staleness_s=0.2,
         ),
     )
+    scaled_estimator = GRUTargetStateEstimator(
+        model,
+        config,
+        GRUInferenceConfig(
+            observation_profile=ObservationProfile.SERVO_AWARE,
+            horizon_index=0,
+            maximum_staleness_s=0.2,
+            bearing_std_scale=1.25,
+            rate_std_scale=0.75,
+        ),
+    )
     estimate = estimator.update(observation)
+    scaled = scaled_estimator.update(observation)
 
     assert estimate.valid
     assert estimate.measurement_time_s.valid
     assert estimate.bearing_std_rad.value > 0.0
     assert estimate.rate_std_rad_s.value > 0.0
     assert estimate.time_s == pytest.approx(observation.time_s)
+    assert scaled.body_relative_bearing_rad.value == pytest.approx(
+        estimate.body_relative_bearing_rad.value
+    )
+    assert scaled.body_relative_rate_rad_s.value == pytest.approx(
+        estimate.body_relative_rate_rad_s.value
+    )
+    assert scaled.bearing_std_rad.value == pytest.approx(
+        1.25 * estimate.bearing_std_rad.value
+    )
+    assert scaled.rate_std_rad_s.value == pytest.approx(
+        0.75 * estimate.rate_std_rad_s.value
+    )
 
 
 @pytest.fixture(scope="module")
