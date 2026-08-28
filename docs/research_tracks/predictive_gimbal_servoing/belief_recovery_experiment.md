@@ -113,6 +113,12 @@ does not change any recovery transition in this suite. Recovery parameters must
 still be tuned on a development seed block before evaluation on a newly held-out
 block; the present authored suite must not be reused as an untouched test claim.
 
+The subsequent [development/test protocol](contextual_calibration_and_recovery_protocol.md)
+uses disjoint 42000-series development and 43000-series test seeds. Its selected
+O2 rate policy improves average tracking and cost on fresh test variants but
+adds two unrecovered detector-outage events, so it fails the deployment safety
+gate and does not replace native hold.
+
 ## Reproduce
 
 ```bash

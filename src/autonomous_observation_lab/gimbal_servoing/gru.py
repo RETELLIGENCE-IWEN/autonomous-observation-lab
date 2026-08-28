@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import torch
@@ -24,6 +24,17 @@ from .types import GimbalObservation, MaskedScalar
 
 
 GRU_CHECKPOINT_SCHEMA_VERSION = "gimbal_gru_v1"
+
+
+class UncertaintyScaleProvider(Protocol):
+    """Deployable post-hoc uncertainty scaling contract."""
+
+    def scales_for_observation(
+        self,
+        horizon_index: int,
+        observation: GimbalObservation,
+        detection_gap_s: float | None,
+    ) -> tuple[float, float]: ...
 
 
 @dataclass(frozen=True)
@@ -247,6 +258,7 @@ class GRUInferenceConfig:
     maximum_staleness_s: float = 0.50
     bearing_std_scale: float = 1.0
     rate_std_scale: float = 1.0
+    uncertainty_calibration: UncertaintyScaleProvider | None = None
     device: str = "cpu"
 
     def __post_init__(self) -> None:
@@ -258,6 +270,12 @@ class GRUInferenceConfig:
             value = getattr(self, name)
             if not math.isfinite(value) or value <= 0.0:
                 raise ValueError(f"{name} must be finite and positive")
+        if self.uncertainty_calibration is not None and (
+            self.bearing_std_scale != 1.0 or self.rate_std_scale != 1.0
+        ):
+            raise ValueError(
+                "choose either fixed scales or an uncertainty calibration"
+            )
 
 
 class GRUTargetStateEstimator:
@@ -283,11 +301,13 @@ class GRUTargetStateEstimator:
         self.model.eval()
         self._hidden: torch.Tensor | None = None
         self._last_measurement_time_s: float | None = None
+        self._last_valid_detection_arrival_s: float | None = None
         self.last_estimate = TargetStateEstimate.missing(0.0)
 
     def reset(self) -> None:
         self._hidden = None
         self._last_measurement_time_s = None
+        self._last_valid_detection_arrival_s = None
         self.last_estimate = TargetStateEstimate.missing(0.0)
 
     @torch.no_grad()
@@ -301,14 +321,12 @@ class GRUTargetStateEstimator:
         output = self.model.forward_step(feature, self._hidden)
         self._hidden = output.hidden.detach()
 
-        if (
-            observation.frame_updated
-            and observation.detection_valid
-            and observation.measurement_age_s.valid
-        ):
-            self._last_measurement_time_s = (
-                observation.time_s - observation.measurement_age_s.value
-            )
+        if observation.frame_updated and observation.detection_valid:
+            self._last_valid_detection_arrival_s = observation.time_s
+            if observation.measurement_age_s.valid:
+                self._last_measurement_time_s = (
+                    observation.time_s - observation.measurement_age_s.value
+                )
         measurement_time_s = self._last_measurement_time_s
         if measurement_time_s is None or (
             observation.time_s - measurement_time_s
@@ -321,6 +339,23 @@ class GRUTargetStateEstimator:
         horizon_s = self.model.config.prediction_horizons_s[horizon_index]
         mean = output.mean[0, horizon_index].cpu().numpy()
         std = output.std[0, horizon_index].cpu().numpy()
+        bearing_scale = self.inference.bearing_std_scale
+        rate_scale = self.inference.rate_std_scale
+        if self.inference.uncertainty_calibration is not None:
+            detection_gap_s = (
+                observation.time_s - self._last_valid_detection_arrival_s
+                if self._last_valid_detection_arrival_s is not None
+                else None
+            )
+            contextual_scales = (
+                self.inference.uncertainty_calibration.scales_for_observation(
+                    horizon_index,
+                    observation,
+                    detection_gap_s,
+                )
+            )
+            bearing_scale *= contextual_scales[0]
+            rate_scale *= contextual_scales[1]
         estimate_time_s = observation.time_s + horizon_s
         self.last_estimate = TargetStateEstimate(
             time_s=estimate_time_s,
@@ -328,11 +363,11 @@ class GRUTargetStateEstimator:
             body_relative_bearing_rad=MaskedScalar(float(mean[0]), True),
             body_relative_rate_rad_s=MaskedScalar(float(mean[1]), True),
             bearing_std_rad=MaskedScalar(
-                float(std[0]) * self.inference.bearing_std_scale,
+                float(std[0]) * bearing_scale,
                 True,
             ),
             rate_std_rad_s=MaskedScalar(
-                float(std[1]) * self.inference.rate_std_scale,
+                float(std[1]) * rate_scale,
                 True,
             ),
             prediction_horizon_s=MaskedScalar(

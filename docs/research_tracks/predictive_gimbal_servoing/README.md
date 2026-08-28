@@ -29,6 +29,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [GRU Closed-Loop Control Experiment](gru_closed_loop_experiment.md)
 - [Belief-Guided Recovery Experiment](belief_recovery_experiment.md)
 - [O2 GRU Uncertainty Calibration Experiment](uncertainty_calibration_experiment.md)
+- [Contextual Calibration and Recovery Development/Test Protocol](contextual_calibration_and_recovery_protocol.md)
 - [Prior Work and Novelty Boundary](prior_work_and_novelty.md)
 
 ## Foundation reading path
@@ -42,4 +43,4 @@ The project-specific reading path is maintained in the [Foundation Notes index](
 
 ## Status
 
-Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, causal GRU predictor, configurable belief-recovery state machine, and validation-fit O2 variance calibration are implemented. In paired randomized closed-loop tests, the disturbance-aware O2 GRU improves tail error and loss-of-view time over proportional and analytical control in both rate and position modes. Belief-guided recovery fixes the catastrophic blind-sweep behavior and benefits rate control; native position hold remains the stronger aggregate position default. Gaussian scale calibration improves held-out likelihood and 2σ coverage but not the complete reliability curve, and its modest correction does not change recovery behavior. Conditional calibration, development/test recovery tuning, multiple training seeds, recorded motion, hardware parameters, and the final deployment telemetry contract remain open.
+Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, causal GRU predictor, configurable belief-recovery state machine, validation-fit O2 variance calibration, contextual-calibration ablation, and disjoint recovery development/test protocol are implemented. In paired randomized closed-loop tests, the disturbance-aware O2 GRU improves tail error and loss-of-view time over proportional and analytical control in both rate and position modes. The global variance scale improves held-out likelihood and 2σ coverage; the contextual table overfits validation and is rejected. Development-selected belief recovery improves average fresh-test O2 rate metrics but produces two additional unrecovered events, so native hold remains the deployment default. Multiple training seeds, broader recovery development data, recorded motion, hardware parameters, and the final deployment telemetry contract remain open.

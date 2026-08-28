@@ -186,8 +186,36 @@ def test_streaming_estimator_produces_controller_compatible_state():
             rate_std_scale=0.75,
         ),
     )
+
+    class FreshScale:
+        def scales_for_observation(
+            self, horizon_index, current_observation, detection_gap_s
+        ):
+            assert horizon_index == 0
+            assert current_observation is observation
+            assert detection_gap_s == pytest.approx(0.0)
+            return 2.0, 3.0
+
+    with pytest.raises(ValueError, match="either fixed scales"):
+        GRUInferenceConfig(
+            observation_profile=ObservationProfile.SERVO_AWARE,
+            bearing_std_scale=1.1,
+            uncertainty_calibration=FreshScale(),
+        )
+
+    contextual_estimator = GRUTargetStateEstimator(
+        model,
+        config,
+        GRUInferenceConfig(
+            observation_profile=ObservationProfile.SERVO_AWARE,
+            horizon_index=0,
+            maximum_staleness_s=0.2,
+            uncertainty_calibration=FreshScale(),
+        ),
+    )
     estimate = estimator.update(observation)
     scaled = scaled_estimator.update(observation)
+    contextual = contextual_estimator.update(observation)
 
     assert estimate.valid
     assert estimate.measurement_time_s.valid
@@ -205,6 +233,12 @@ def test_streaming_estimator_produces_controller_compatible_state():
     )
     assert scaled.rate_std_rad_s.value == pytest.approx(
         0.75 * estimate.rate_std_rad_s.value
+    )
+    assert contextual.bearing_std_rad.value == pytest.approx(
+        2.0 * estimate.bearing_std_rad.value
+    )
+    assert contextual.rate_std_rad_s.value == pytest.approx(
+        3.0 * estimate.rate_std_rad_s.value
     )
 
 

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 from dataclasses import replace
 
 import pytest
@@ -30,6 +31,10 @@ from autonomous_observation_lab.gimbal_servoing.recovery_evaluation import (
     RecoveryEvaluationConfig,
     evaluate_belief_recovery,
     replay_recovery_variant,
+)
+from autonomous_observation_lab.gimbal_servoing.recovery_protocol import (
+    RecoveryDevelopmentTestConfig,
+    run_recovery_development_test,
 )
 from autonomous_observation_lab.gimbal_servoing.recovery_scenarios import (
     recovery_domain_randomization,
@@ -248,3 +253,87 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
     assert _recovery_state_at(replay.runs[0], 0) is RecoveryState.COAST
     assert _recovery_state_at(replay.runs[1], 0) is RecoveryState.SEARCH
     assert _recovery_state_at(replay.runs[2], 0) is RecoveryState.TRACK
+
+
+def test_recovery_protocol_selects_only_on_disjoint_development_seeds(
+    tmp_path,
+):
+    profile = ObservationProfile.DISTURBANCE_AWARE
+    hashes = {"train": "train", "validation": "validation", "test": "test"}
+    model = CausalTargetStateGRU(
+        GRUTargetStateModelConfig(
+            input_dim=len(FEATURE_NAMES),
+            prediction_horizons_s=(0.0,),
+            hidden_dim=8,
+            embedding_dim=8,
+        )
+    )
+    checkpoint = save_gru_checkpoint(
+        tmp_path / "protocol_o2.pt",
+        model,
+        metadata={
+            "profile": profile.value,
+            "feature_names": list(FEATURE_NAMES),
+            "dataset_hashes": hashes,
+        },
+    )
+    control_results = tmp_path / "protocol_control.json"
+    control_results.write_text(
+        json.dumps(
+            {
+                "dataset_hashes": hashes,
+                "validation_horizon_selection": {
+                    profile.value: {
+                        mode: {
+                            "selected_horizon_index": 0,
+                            "selected_horizon_s": 0.0,
+                        }
+                        for mode in ("desired_rate", "desired_position")
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    calibration = GaussianUncertaintyCalibration(
+        schema_version=CALIBRATION_SCHEMA_VERSION,
+        profile=profile,
+        prediction_horizons_s=(0.0,),
+        bearing_std_scale=(1.0,),
+        rate_std_scale=(1.0,),
+        validation_dataset_hash=hashes["validation"],
+        test_dataset_hash=hashes["test"],
+        checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+        minimum_scale=0.25,
+        maximum_scale=4.0,
+    )
+    base = nominal_scenario()
+    scenario = replace(
+        base,
+        name="recovery_protocol_smoke",
+        config=replace(
+            base.config,
+            timing=replace(base.config.timing, episode_duration_s=0.2),
+        ),
+    )
+    result = run_recovery_development_test(
+        o2_checkpoint=checkpoint,
+        control_results=control_results,
+        uncertainty_calibration=calibration,
+        protocol=RecoveryDevelopmentTestConfig(
+            development_seeds=(1301,),
+            test_seeds=(1401,),
+            maximum_coast_candidates_s=(0.45, 0.65),
+            maximum_coast_bearing_std_candidates_rad=(math.radians(18.0),),
+        ),
+        scenarios=(scenario,),
+        randomization=recovery_domain_randomization(
+            episode_duration_s=0.2
+        ),
+    )
+
+    assert result["development_world_variant_count"] == 1
+    assert len(result["development_candidates"]) == 2
+    assert result["selected_candidate_index"] in {0, 1}
+    assert result["test_result"]["variant_count"] == 1
+    assert result["test_result"]["evaluation_config"]["seeds"] == (1401,)

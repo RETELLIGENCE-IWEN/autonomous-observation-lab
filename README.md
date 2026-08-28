@@ -184,3 +184,33 @@ For mouse-only access, launch `scripts/open_gimbal_calibration_dashboard.sh`.
 The [uncertainty calibration experiment](docs/research_tracks/predictive_gimbal_servoing/uncertainty_calibration_experiment.md)
 reports the held-out improvement in Gaussian likelihood and 2σ coverage, the
 full reliability-curve limitation, and the null effect on recovery behavior.
+
+Evaluate the deployable context-aware calibration ablation with:
+
+```bash
+aol-calibrate-gimbal-contextual-uncertainty \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --output artifacts/gimbal_o2_contextual_uncertainty_calibration.json \
+  --batch-size 24
+```
+
+Then run recovery threshold selection on development seeds and one frozen
+evaluation on fresh test seeds:
+
+```bash
+aol-evaluate-gimbal-recovery-protocol \
+  --o2-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --control-results artifacts/gimbal_mixed_gru_closed_loop_comparison.json \
+  --uncertainty-calibration artifacts/gimbal_o2_uncertainty_calibration.json \
+  --output artifacts/gimbal_recovery_development_test_protocol.json \
+  --test-output artifacts/gimbal_recovery_fresh_test.json
+```
+
+The [development/test report](docs/research_tracks/predictive_gimbal_servoing/contextual_calibration_and_recovery_protocol.md)
+documents both negative gates: contextual scaling does not generalize, and the
+development-selected recovery threshold improves averages but adds two
+unrecovered fresh-test events. Mouse-only launchers are available at
+`scripts/open_gimbal_contextual_calibration_dashboard.sh` and
+`scripts/open_gimbal_fresh_recovery_dashboard.sh`.

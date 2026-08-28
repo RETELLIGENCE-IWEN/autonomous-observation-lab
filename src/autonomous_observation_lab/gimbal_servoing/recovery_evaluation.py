@@ -51,8 +51,9 @@ from .recovery_scenarios import (
 )
 from .serialization import closed_loop_scenario_from_dict
 from .uncertainty_calibration import (
-    GaussianUncertaintyCalibration,
+    UncertaintyCalibration,
     load_uncertainty_calibration,
+    uncertainty_calibration_from_dict,
 )
 
 
@@ -72,7 +73,7 @@ class RecoveryEvaluationConfig:
     randomization: GimbalDomainRandomizationConfig = (
         recovery_domain_randomization()
     )
-    uncertainty_calibration: GaussianUncertaintyCalibration | None = None
+    uncertainty_calibration: UncertaintyCalibration | None = None
     include_position: bool = True
     device: str = "cpu"
 
@@ -176,6 +177,29 @@ def _sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_uncertainty_calibration(
+    calibration: UncertaintyCalibration | None,
+    *,
+    model: CausalTargetStateGRU,
+    dataset_hashes: dict[str, str],
+    checkpoint: str | Path,
+) -> None:
+    if calibration is None:
+        return
+    if calibration.profile is not ObservationProfile.DISTURBANCE_AWARE:
+        raise ValueError("recovery requires an O2 uncertainty calibration")
+    if calibration.prediction_horizons_s != model.config.prediction_horizons_s:
+        raise ValueError("calibration and checkpoint horizons differ")
+    if calibration.checkpoint_sha256 != _sha256(checkpoint):
+        raise ValueError("calibration checkpoint checksum mismatch")
+    if (
+        calibration.validation_dataset_hash
+        != dataset_hashes.get("validation")
+        or calibration.test_dataset_hash != dataset_hashes.get("test")
+    ):
+        raise ValueError("calibration and checkpoint dataset hashes differ")
+
+
 def _target_state_controller(
     *,
     scenario: ClosedLoopScenario,
@@ -193,14 +217,6 @@ def _target_state_controller(
     if estimator_kind == "analytical":
         estimator = _analytical_estimator(scenario)
     else:
-        bearing_std_scale = 1.0
-        rate_std_scale = 1.0
-        if evaluation.uncertainty_calibration is not None:
-            bearing_std_scale, rate_std_scale = (
-                evaluation.uncertainty_calibration.scales_for_horizon(
-                    horizon_index
-                )
-            )
         estimator = GRUTargetStateEstimator(
             model,
             config,
@@ -208,8 +224,7 @@ def _target_state_controller(
                 observation_profile=ObservationProfile.DISTURBANCE_AWARE,
                 horizon_index=horizon_index,
                 maximum_staleness_s=evaluation.maximum_staleness_s,
-                bearing_std_scale=bearing_std_scale,
-                rate_std_scale=rate_std_scale,
+                uncertainty_calibration=evaluation.uncertainty_calibration,
                 device=evaluation.device,
             ),
         )
@@ -480,20 +495,12 @@ def evaluate_belief_recovery(
     model, horizon_indices, dataset_hashes = _load_o2_model(
         o2_checkpoint, control_results, evaluation.device
     )
-    calibration = evaluation.uncertainty_calibration
-    if calibration is not None:
-        if calibration.profile is not ObservationProfile.DISTURBANCE_AWARE:
-            raise ValueError("recovery requires an O2 uncertainty calibration")
-        if calibration.prediction_horizons_s != model.config.prediction_horizons_s:
-            raise ValueError("calibration and checkpoint horizons differ")
-        if calibration.checkpoint_sha256 != _sha256(o2_checkpoint):
-            raise ValueError("calibration checkpoint checksum mismatch")
-        if (
-            calibration.validation_dataset_hash
-            != dataset_hashes.get("validation")
-            or calibration.test_dataset_hash != dataset_hashes.get("test")
-        ):
-            raise ValueError("calibration and checkpoint dataset hashes differ")
+    _validate_uncertainty_calibration(
+        evaluation.uncertainty_calibration,
+        model=model,
+        dataset_hashes=dataset_hashes,
+        checkpoint=o2_checkpoint,
+    )
     command_modes = [GimbalCommandMode.RATE]
     if evaluation.include_position:
         command_modes.append(GimbalCommandMode.POSITION)
@@ -647,7 +654,7 @@ def _replay_evaluation_config(
         raise ValueError("recovery result has no belief configuration")
     raw_calibration = raw.get("uncertainty_calibration")
     calibration = (
-        GaussianUncertaintyCalibration.from_dict(raw_calibration)
+        uncertainty_calibration_from_dict(raw_calibration)
         if isinstance(raw_calibration, dict)
         else None
     )

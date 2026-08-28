@@ -559,6 +559,8 @@ def _recovery_markdown(replay: RecoveryReplay) -> str:
 
 
 def _uncertainty_calibration_markdown(result: dict[str, Any]) -> str:
+    if result["experiment"] == "gimbal_contextual_uncertainty_calibration_v1":
+        return _contextual_uncertainty_calibration_markdown(result)
     calibration = result["calibration"]
     horizons = calibration["prediction_horizons_s"]
     bearing_scales = calibration["bearing_std_scale"]
@@ -654,9 +656,78 @@ def _uncertainty_calibration_markdown(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _contextual_uncertainty_calibration_markdown(
+    result: dict[str, Any],
+) -> str:
+    calibration = result["calibration"]
+    lines = [
+        "# Context-aware O2 uncertainty calibration",
+        "",
+        "Eight deployable measurement regimes use shrinkage toward the "
+        "global per-horizon scale. The fit uses only validation predictions; "
+        "the test split is evaluated once.",
+        "",
+        "## Context scale ranges across horizons",
+        "",
+        "| Context | Bearing scale | Rate scale | Validation labels |",
+        "|---|---:|---:|---:|",
+    ]
+    counts = result["context_fit_sample_count_per_horizon"]
+    for name, bearing, rate in zip(
+        calibration["context_names"],
+        calibration["bearing_std_scale_by_context"],
+        calibration["rate_std_scale_by_context"],
+        strict=True,
+    ):
+        lines.append(
+            f"| `{name}` | {min(bearing):.3f}–{max(bearing):.3f} | "
+            f"{min(rate):.3f}–{max(rate):.3f} | {sum(counts[name])} |"
+        )
+    lines.extend(
+        (
+            "",
+            "## Aggregate comparison",
+            "",
+            "| Split / method | Bearing NLL | Rate NLL | Bearing 2σ | "
+            "Rate 2σ | Bearing MACE | Rate MACE |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        )
+    )
+    for split_name in ("validation", "test"):
+        split = result[split_name]
+        for variant in ("uncalibrated", "global", "contextual"):
+            metrics = split[variant]
+            reliability = split["reliability"][variant]
+            lines.append(
+                f"| {split_name} {variant} | "
+                f"{metrics['bearing_nll']:.4f} | {metrics['rate_nll']:.4f} | "
+                f"{100.0 * metrics['bearing_two_sigma_coverage']:.2f}% | "
+                f"{100.0 * metrics['rate_two_sigma_coverage']:.2f}% | "
+                f"{100.0 * reliability['bearing']['mean_absolute_calibration_error']:.2f}% | "
+                f"{100.0 * reliability['rate']['mean_absolute_calibration_error']:.2f}% |"
+            )
+    lines.extend(
+        (
+            "",
+            "## Decision",
+            "",
+            "The contextual table improves validation NLL, but fails the "
+            "held-out generalization gate. On test, bearing NLL worsens from "
+            "-1.3813 uncalibrated / -1.3823 global to -1.3561 contextual, "
+            "and bearing 2σ coverage falls to 93.88%. The contextual artifact "
+            "is retained as a negative experiment and is **not selected for "
+            "recovery deployment**.",
+        )
+    )
+    return "\n".join(lines)
+
+
 def _load_uncertainty_calibration_result(path: Path) -> dict[str, Any]:
     result = json.loads(path.read_text(encoding="utf-8"))
-    if result.get("experiment") != "gimbal_uncertainty_calibration_v1":
+    if result.get("experiment") not in {
+        "gimbal_uncertainty_calibration_v1",
+        "gimbal_contextual_uncertainty_calibration_v1",
+    }:
         raise ValueError("unsupported uncertainty calibration result")
     for key in ("calibration", "validation", "test"):
         if not isinstance(result.get(key), dict):
@@ -1096,9 +1167,14 @@ def write_uncertainty_calibration_dashboard(
     )
 
     test = result["test"]
+    variants = (
+        ("uncalibrated", "global", "contextual")
+        if result["experiment"]
+        == "gimbal_contextual_uncertainty_calibration_v1"
+        else ("uncalibrated", "calibrated")
+    )
     for signal in ("bearing", "rate"):
         uncalibrated = test["reliability"]["uncalibrated"][signal]
-        calibrated = test["reliability"]["calibrated"][signal]
         nominal_values = uncalibrated["nominal_coverage"]
         for index, nominal in enumerate(nominal_values):
             rr.set_time(
@@ -1107,39 +1183,30 @@ def write_uncertainty_calibration_dashboard(
             )
             root = f"calibration/test/{signal}/reliability"
             rr.log(f"{root}/ideal", rr.Scalars(100.0 * nominal))
-            rr.log(
-                f"{root}/uncalibrated",
-                rr.Scalars(
-                    100.0 * uncalibrated["empirical_coverage"][index]
-                ),
-            )
-            rr.log(
-                f"{root}/calibrated",
-                rr.Scalars(
-                    100.0 * calibrated["empirical_coverage"][index]
-                ),
-            )
+            for variant in variants:
+                empirical = test["reliability"][variant][signal][
+                    "empirical_coverage"
+                ]
+                rr.log(
+                    f"{root}/{variant}",
+                    rr.Scalars(100.0 * empirical[index]),
+                )
 
         metric_name = f"{signal}_two_sigma_coverage"
-        before_horizons = test["uncalibrated"]["per_horizon"]
-        after_horizons = test["calibrated"]["per_horizon"]
-        for horizon_index, (before, after) in enumerate(
-            zip(before_horizons, after_horizons, strict=True)
-        ):
+        horizon_count = len(test["uncalibrated"]["per_horizon"])
+        for horizon_index in range(horizon_count):
             rr.set_time(
                 _CALIBRATION_TIMELINE,
                 sequence=horizon_index,
             )
             root = f"calibration/test/{signal}/two_sigma_by_horizon"
             rr.log(f"{root}/nominal", rr.Scalars(95.45))
-            rr.log(
-                f"{root}/uncalibrated",
-                rr.Scalars(100.0 * before[metric_name]),
-            )
-            rr.log(
-                f"{root}/calibrated",
-                rr.Scalars(100.0 * after[metric_name]),
-            )
+            for variant in variants:
+                horizon = test[variant]["per_horizon"][horizon_index]
+                rr.log(
+                    f"{root}/{variant}",
+                    rr.Scalars(100.0 * horizon[metric_name]),
+                )
 
 
 def write_benchmark_suite(

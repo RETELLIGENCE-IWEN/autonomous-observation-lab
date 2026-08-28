@@ -8,6 +8,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from autonomous_observation_lab.gimbal_servoing import (
+    GimbalCommandMode,
     GimbalDatasetGenerationConfig,
     ObservationProfile,
     generate_gimbal_dataset,
@@ -24,12 +25,21 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
 )
 from autonomous_observation_lab.gimbal_servoing.uncertainty_calibration import (
     CALIBRATION_SCHEMA_VERSION,
+    CONTEXTUAL_CALIBRATION_SCHEMA_VERSION,
+    CONTEXT_NAMES,
     CalibrationExperimentConfig,
+    ContextualCalibrationExperimentConfig,
+    ContextualGaussianUncertaintyCalibration,
     GaussianUncertaintyCalibration,
     _fit_scales,
     apply_uncertainty_calibration,
+    calibrate_contextual_gru_uncertainty,
     calibrate_gru_uncertainty,
     load_uncertainty_calibration,
+)
+from autonomous_observation_lab.gimbal_servoing.types import (
+    GimbalObservation,
+    MaskedScalar,
 )
 
 
@@ -49,6 +59,50 @@ def _calibration(
         checkpoint_sha256="checkpoint",
         minimum_scale=0.25,
         maximum_scale=4.0,
+    )
+
+
+def _observation(
+    *, frame_updated: bool, detection_valid: bool, measurement_age_s: float
+) -> GimbalObservation:
+    detected = MaskedScalar(0.0, detection_valid)
+    return GimbalObservation(
+        time_s=1.0,
+        control_dt_s=0.01,
+        frame_updated=frame_updated,
+        measurement_age_s=MaskedScalar(measurement_age_s, detection_valid),
+        image_error_normalized=detected,
+        bbox_width_fraction=detected,
+        bbox_height_fraction=detected,
+        confidence=detected,
+        gimbal_angle_rad=MaskedScalar(0.0, True),
+        gimbal_rate_rad_s=MaskedScalar(0.0, True),
+        body_rate_rad_s=MaskedScalar(0.0, True),
+        command_mode=GimbalCommandMode.RATE,
+        previous_action_normalized=0.0,
+    )
+
+
+def _contextual_calibration() -> ContextualGaussianUncertaintyCalibration:
+    return ContextualGaussianUncertaintyCalibration(
+        schema_version=CONTEXTUAL_CALIBRATION_SCHEMA_VERSION,
+        profile=ObservationProfile.DISTURBANCE_AWARE,
+        prediction_horizons_s=(0.0,),
+        context_names=CONTEXT_NAMES,
+        bearing_std_scale_by_context=tuple(
+            (float(index + 1),) for index in range(len(CONTEXT_NAMES))
+        ),
+        rate_std_scale_by_context=tuple(
+            (0.5 * float(index + 1),) for index in range(len(CONTEXT_NAMES))
+        ),
+        measurement_age_threshold_s=0.16,
+        detection_gap_thresholds_s=(0.15, 0.65),
+        prior_strength=512.0,
+        validation_dataset_hash="validation",
+        test_dataset_hash="test",
+        checkpoint_sha256="checkpoint",
+        minimum_scale=0.25,
+        maximum_scale=8.0,
     )
 
 
@@ -79,6 +133,27 @@ def test_closed_form_gaussian_scaling_recovers_known_residual_scale():
     assert counts == (4, 4)
     np.testing.assert_allclose(calibrated[..., 0], 2.0)
     np.testing.assert_allclose(calibrated[..., 1], 3.0)
+
+
+def test_contextual_calibration_maps_only_deployable_measurement_state():
+    calibration = _contextual_calibration()
+    cases = (
+        (_observation(frame_updated=True, detection_valid=True, measurement_age_s=0.1), 0.0),
+        (_observation(frame_updated=True, detection_valid=True, measurement_age_s=0.2), 0.0),
+        (_observation(frame_updated=False, detection_valid=True, measurement_age_s=0.1), 0.1),
+        (_observation(frame_updated=False, detection_valid=True, measurement_age_s=0.2), 0.2),
+        (_observation(frame_updated=True, detection_valid=False, measurement_age_s=0.0), 0.1),
+        (_observation(frame_updated=True, detection_valid=False, measurement_age_s=0.0), 0.3),
+        (_observation(frame_updated=True, detection_valid=False, measurement_age_s=0.0), 0.8),
+        (_observation(frame_updated=True, detection_valid=False, measurement_age_s=0.0), None),
+    )
+
+    for expected, (observation, gap_s) in enumerate(cases):
+        assert calibration.context_index(observation, gap_s) == expected
+        assert calibration.scales_for_observation(0, observation, gap_s) == (
+            float(expected + 1),
+            0.5 * float(expected + 1),
+        )
 
 
 def test_calibration_fits_validation_and_evaluates_disjoint_test(tmp_path):
@@ -140,6 +215,20 @@ def test_calibration_fits_validation_and_evaluates_disjoint_test(tmp_path):
     output = tmp_path / "calibration.json"
     output.write_text(json.dumps(result), encoding="utf-8")
     restored = load_uncertainty_calibration(output)
+    contextual_result = calibrate_contextual_gru_uncertainty(
+        validation_data=paths["validation"],
+        test_data=paths["test"],
+        checkpoint=checkpoint,
+        config=ContextualCalibrationExperimentConfig(
+            batch_size=1,
+            prior_strength=16.0,
+        ),
+    )
+    contextual_output = tmp_path / "contextual_calibration.json"
+    contextual_output.write_text(
+        json.dumps(contextual_result), encoding="utf-8"
+    )
+    contextual_restored = load_uncertainty_calibration(contextual_output)
 
     assert result["fit_split"] == "validation"
     assert result["evaluation_split"] == "test"
@@ -154,3 +243,11 @@ def test_calibration_fits_validation_and_evaluates_disjoint_test(tmp_path):
         for scale in restored.bearing_std_scale + restored.rate_std_scale
     )
     assert asdict(restored) == result["calibration"]
+    assert isinstance(
+        contextual_restored, ContextualGaussianUncertaintyCalibration
+    )
+    assert contextual_result["test"]["uncalibrated"][
+        "bearing_rmse_deg"
+    ] == pytest.approx(
+        contextual_result["test"]["contextual"]["bearing_rmse_deg"]
+    )

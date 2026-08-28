@@ -31,10 +31,24 @@ from .gru_training import (
     _angle_residual_numpy,
     _metrics_from_predictions,
 )
+from .types import GimbalObservation
 
 
 CALIBRATION_SCHEMA_VERSION = "gimbal_uncertainty_calibration_v1"
+CONTEXTUAL_CALIBRATION_SCHEMA_VERSION = (
+    "gimbal_contextual_uncertainty_calibration_v1"
+)
 DEFAULT_NOMINAL_COVERAGES = (0.50, 0.6827, 0.80, 0.90, 0.9545, 0.99)
+CONTEXT_NAMES = (
+    "fresh_young",
+    "fresh_old",
+    "between_young",
+    "between_old",
+    "invalid_short_gap",
+    "invalid_medium_gap",
+    "invalid_long_gap",
+    "no_valid_detection_history",
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +93,15 @@ class GaussianUncertaintyCalibration:
             self.rate_std_scale[horizon_index],
         )
 
+    def scales_for_observation(
+        self,
+        horizon_index: int,
+        observation: GimbalObservation,
+        detection_gap_s: float | None,
+    ) -> tuple[float, float]:
+        del observation, detection_gap_s
+        return self.scales_for_horizon(horizon_index)
+
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "GaussianUncertaintyCalibration":
         payload = dict(value)
@@ -90,6 +113,134 @@ class GaussianUncertaintyCalibration:
         ):
             payload[name] = tuple(payload[name])
         return cls(**payload)
+
+
+@dataclass(frozen=True)
+class ContextualGaussianUncertaintyCalibration:
+    """Piecewise variance scaling from deployable detector context."""
+
+    schema_version: str
+    profile: ObservationProfile
+    prediction_horizons_s: tuple[float, ...]
+    context_names: tuple[str, ...]
+    bearing_std_scale_by_context: tuple[tuple[float, ...], ...]
+    rate_std_scale_by_context: tuple[tuple[float, ...], ...]
+    measurement_age_threshold_s: float
+    detection_gap_thresholds_s: tuple[float, float]
+    prior_strength: float
+    validation_dataset_hash: str
+    test_dataset_hash: str
+    checkpoint_sha256: str
+    minimum_scale: float
+    maximum_scale: float
+
+    def __post_init__(self) -> None:
+        if self.schema_version != CONTEXTUAL_CALIBRATION_SCHEMA_VERSION:
+            raise ValueError("unsupported contextual calibration schema")
+        if self.context_names != CONTEXT_NAMES:
+            raise ValueError("unsupported contextual calibration contexts")
+        horizon_count = len(self.prediction_horizons_s)
+        if horizon_count == 0:
+            raise ValueError("calibration requires prediction horizons")
+        if not 0.0 < self.minimum_scale <= self.maximum_scale:
+            raise ValueError("calibration scale bounds are invalid")
+        if not math.isfinite(self.prior_strength) or self.prior_strength < 0.0:
+            raise ValueError("prior strength must be finite and non-negative")
+        if (
+            not math.isfinite(self.measurement_age_threshold_s)
+            or self.measurement_age_threshold_s <= 0.0
+        ):
+            raise ValueError("measurement-age threshold must be positive")
+        short_gap, medium_gap = self.detection_gap_thresholds_s
+        if not 0.0 < short_gap < medium_gap:
+            raise ValueError("detection-gap thresholds must be increasing")
+        for table in (
+            self.bearing_std_scale_by_context,
+            self.rate_std_scale_by_context,
+        ):
+            if len(table) != len(self.context_names):
+                raise ValueError("calibration context table length differs")
+            if any(len(row) != horizon_count for row in table):
+                raise ValueError("calibration horizon table length differs")
+            for scale in (value for row in table for value in row):
+                if (
+                    not math.isfinite(scale)
+                    or not self.minimum_scale <= scale <= self.maximum_scale
+                ):
+                    raise ValueError("calibration scale is outside bounds")
+
+    def context_index(
+        self,
+        observation: GimbalObservation,
+        detection_gap_s: float | None,
+    ) -> int:
+        age_is_young = (
+            observation.measurement_age_s.valid
+            and observation.measurement_age_s.value
+            < self.measurement_age_threshold_s
+        )
+        if observation.frame_updated and observation.detection_valid:
+            return 0 if age_is_young else 1
+        if observation.detection_valid:
+            return 2 if age_is_young else 3
+        if detection_gap_s is None:
+            return 7
+        short_gap, medium_gap = self.detection_gap_thresholds_s
+        if detection_gap_s < short_gap:
+            return 4
+        if detection_gap_s < medium_gap:
+            return 5
+        return 6
+
+    def scales_for_observation(
+        self,
+        horizon_index: int,
+        observation: GimbalObservation,
+        detection_gap_s: float | None,
+    ) -> tuple[float, float]:
+        if not 0 <= horizon_index < len(self.prediction_horizons_s):
+            raise ValueError("calibration horizon index is out of range")
+        context_index = self.context_index(observation, detection_gap_s)
+        return (
+            self.bearing_std_scale_by_context[context_index][horizon_index],
+            self.rate_std_scale_by_context[context_index][horizon_index],
+        )
+
+    @classmethod
+    def from_dict(
+        cls, value: dict[str, Any]
+    ) -> "ContextualGaussianUncertaintyCalibration":
+        payload = dict(value)
+        payload["profile"] = ObservationProfile(payload["profile"])
+        payload["prediction_horizons_s"] = tuple(
+            payload["prediction_horizons_s"]
+        )
+        payload["context_names"] = tuple(payload["context_names"])
+        payload["detection_gap_thresholds_s"] = tuple(
+            payload["detection_gap_thresholds_s"]
+        )
+        for name in (
+            "bearing_std_scale_by_context",
+            "rate_std_scale_by_context",
+        ):
+            payload[name] = tuple(tuple(row) for row in payload[name])
+        return cls(**payload)
+
+
+UncertaintyCalibration = (
+    GaussianUncertaintyCalibration | ContextualGaussianUncertaintyCalibration
+)
+
+
+def uncertainty_calibration_from_dict(
+    value: dict[str, Any],
+) -> UncertaintyCalibration:
+    schema = value.get("schema_version")
+    if schema == CALIBRATION_SCHEMA_VERSION:
+        return GaussianUncertaintyCalibration.from_dict(value)
+    if schema == CONTEXTUAL_CALIBRATION_SCHEMA_VERSION:
+        return ContextualGaussianUncertaintyCalibration.from_dict(value)
+    raise ValueError("unsupported uncertainty calibration schema")
 
 
 @dataclass(frozen=True)
@@ -115,6 +266,26 @@ class CalibrationExperimentConfig:
             raise ValueError("nominal coverages must be finite and in (0, 1)")
         if tuple(sorted(set(self.nominal_coverages))) != self.nominal_coverages:
             raise ValueError("nominal coverages must be unique and increasing")
+
+
+@dataclass(frozen=True)
+class ContextualCalibrationExperimentConfig(CalibrationExperimentConfig):
+    measurement_age_threshold_s: float = 0.16
+    detection_gap_thresholds_s: tuple[float, float] = (0.15, 0.65)
+    prior_strength: float = 512.0
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (
+            not math.isfinite(self.measurement_age_threshold_s)
+            or self.measurement_age_threshold_s <= 0.0
+        ):
+            raise ValueError("measurement-age threshold must be positive")
+        short_gap, medium_gap = self.detection_gap_thresholds_s
+        if not 0.0 < short_gap < medium_gap:
+            raise ValueError("detection-gap thresholds must be increasing")
+        if not math.isfinite(self.prior_strength) or self.prior_strength < 0.0:
+            raise ValueError("prior strength must be finite and non-negative")
 
 
 def _sha256(path: str | Path) -> str:
@@ -183,6 +354,141 @@ def _fit_scales(
     return dimension_scales[0], dimension_scales[1], sample_counts
 
 
+def _detection_gap_array(
+    dataset: GimbalTargetStateDataset,
+    features: np.ndarray,
+) -> np.ndarray:
+    indices = {name: index for index, name in enumerate(FEATURE_NAMES)}
+    frame_updated = features[..., indices["frame_updated"]] > 0.5
+    detection_valid = features[..., indices["image_error_valid"]] > 0.5
+    detection_gap = np.full(
+        dataset.sequence_mask.shape, np.inf, dtype=np.float64
+    )
+    for episode_index in range(dataset.episode_count):
+        length = int(dataset.sequence_mask[episode_index].sum())
+        last_valid_arrival: float | None = None
+        for time_index in range(length):
+            if (
+                frame_updated[episode_index, time_index]
+                and detection_valid[episode_index, time_index]
+            ):
+                last_valid_arrival = float(
+                    dataset.time_s[episode_index, time_index]
+                )
+            if last_valid_arrival is not None:
+                detection_gap[episode_index, time_index] = max(
+                    0.0,
+                    float(dataset.time_s[episode_index, time_index])
+                    - last_valid_arrival,
+                )
+    return detection_gap
+
+
+def _context_index_array(
+    dataset: GimbalTargetStateDataset,
+    profile: ObservationProfile,
+    *,
+    measurement_age_threshold_s: float,
+    detection_gap_thresholds_s: tuple[float, float],
+) -> np.ndarray:
+    profile_index = dataset.manifest.observation_profiles.index(profile.value)
+    features = dataset.features[:, profile_index]
+    indices = {name: index for index, name in enumerate(FEATURE_NAMES)}
+    sequence = dataset.sequence_mask
+    frame_updated = features[..., indices["frame_updated"]] > 0.5
+    detection_valid = features[..., indices["image_error_valid"]] > 0.5
+    age_valid = features[..., indices["measurement_age_valid"]] > 0.5
+    measurement_age = features[..., indices["measurement_age_s"]]
+    young = age_valid & (measurement_age < measurement_age_threshold_s)
+    detection_gap = _detection_gap_array(dataset, features)
+    short_gap, medium_gap = detection_gap_thresholds_s
+    context = np.full(sequence.shape, 7, dtype=np.int64)
+    context[sequence & frame_updated & detection_valid & young] = 0
+    context[sequence & frame_updated & detection_valid & ~young] = 1
+    context[sequence & ~frame_updated & detection_valid & young] = 2
+    context[sequence & ~frame_updated & detection_valid & ~young] = 3
+    invalid = sequence & ~detection_valid & np.isfinite(detection_gap)
+    context[invalid & (detection_gap < short_gap)] = 4
+    context[
+        invalid
+        & (detection_gap >= short_gap)
+        & (detection_gap < medium_gap)
+    ] = 5
+    context[invalid & (detection_gap >= medium_gap)] = 6
+    return context
+
+
+def _fit_contextual_scales(
+    mean: np.ndarray,
+    std: np.ndarray,
+    targets: np.ndarray,
+    mask: np.ndarray,
+    context_index: np.ndarray,
+    *,
+    global_bearing_scale: tuple[float, ...],
+    global_rate_scale: tuple[float, ...],
+    prior_strength: float,
+    minimum_scale: float,
+    maximum_scale: float,
+) -> tuple[
+    tuple[tuple[float, ...], ...],
+    tuple[tuple[float, ...], ...],
+    tuple[tuple[int, ...], ...],
+]:
+    errors = (
+        _angle_residual_numpy(mean[..., 0], targets[..., 0]),
+        mean[..., 1] - targets[..., 1],
+    )
+    global_scales = (global_bearing_scale, global_rate_scale)
+    tables: list[tuple[tuple[float, ...], ...]] = []
+    sample_counts: list[tuple[int, ...]] = []
+    for context in range(len(CONTEXT_NAMES)):
+        context_counts = []
+        for horizon_index in range(mean.shape[-2]):
+            context_counts.append(
+                int(
+                    (
+                        mask[..., horizon_index]
+                        & (context_index == context)
+                    ).sum()
+                )
+            )
+        sample_counts.append(tuple(context_counts))
+    for dimension, error in enumerate(errors):
+        rows = []
+        for context in range(len(CONTEXT_NAMES)):
+            scales = []
+            for horizon_index in range(mean.shape[-2]):
+                selected = mask[..., horizon_index] & (
+                    context_index == context
+                )
+                standardized_squared = (
+                    error[..., horizon_index][selected]
+                    / std[..., horizon_index, dimension][selected]
+                ) ** 2
+                count = standardized_squared.size
+                prior_variance = global_scales[dimension][horizon_index] ** 2
+                denominator = count + prior_strength
+                if denominator == 0.0:
+                    raise ValueError("empty context requires positive shrinkage")
+                variance = (
+                    float(np.sum(standardized_squared))
+                    + prior_strength * prior_variance
+                ) / denominator
+                scales.append(
+                    float(
+                        np.clip(
+                            math.sqrt(variance),
+                            minimum_scale,
+                            maximum_scale,
+                        )
+                    )
+                )
+            rows.append(tuple(scales))
+        tables.append(tuple(rows))
+    return tables[0], tables[1], tuple(sample_counts)
+
+
 def apply_uncertainty_calibration(
     std: np.ndarray,
     calibration: GaussianUncertaintyCalibration,
@@ -192,6 +498,32 @@ def apply_uncertainty_calibration(
     calibrated = std.copy()
     calibrated[..., 0] *= np.asarray(calibration.bearing_std_scale)
     calibrated[..., 1] *= np.asarray(calibration.rate_std_scale)
+    return calibrated
+
+
+def apply_contextual_uncertainty_calibration(
+    std: np.ndarray,
+    dataset: GimbalTargetStateDataset,
+    calibration: ContextualGaussianUncertaintyCalibration,
+) -> np.ndarray:
+    if (
+        std.shape[-2] != len(calibration.prediction_horizons_s)
+        or std.shape[-1] != 2
+    ):
+        raise ValueError("prediction standard-deviation shape is incompatible")
+    context_index = _context_index_array(
+        dataset,
+        calibration.profile,
+        measurement_age_threshold_s=(
+            calibration.measurement_age_threshold_s
+        ),
+        detection_gap_thresholds_s=calibration.detection_gap_thresholds_s,
+    )
+    calibrated = std.copy()
+    bearing_table = np.asarray(calibration.bearing_std_scale_by_context)
+    rate_table = np.asarray(calibration.rate_std_scale_by_context)
+    calibrated[..., 0] *= bearing_table[context_index]
+    calibrated[..., 1] *= rate_table[context_index]
     return calibrated
 
 
@@ -391,14 +723,17 @@ def _stratified_metrics(
 
 def load_uncertainty_calibration(
     path: str | Path,
-) -> GaussianUncertaintyCalibration:
+) -> UncertaintyCalibration:
     result = json.loads(Path(path).read_text(encoding="utf-8"))
-    if result.get("experiment") != CALIBRATION_SCHEMA_VERSION:
+    if result.get("experiment") not in {
+        CALIBRATION_SCHEMA_VERSION,
+        CONTEXTUAL_CALIBRATION_SCHEMA_VERSION,
+    }:
         raise ValueError("unsupported uncertainty calibration result")
     calibration = result.get("calibration")
     if not isinstance(calibration, dict):
         raise ValueError("calibration result has no calibration payload")
-    return GaussianUncertaintyCalibration.from_dict(calibration)
+    return uncertainty_calibration_from_dict(calibration)
 
 
 def calibrate_gru_uncertainty(
@@ -532,6 +867,205 @@ def calibrate_gru_uncertainty(
     }
 
 
+def _stratified_variant_metrics(
+    *,
+    mean: np.ndarray,
+    std_by_variant: dict[str, np.ndarray],
+    dataset: GimbalTargetStateDataset,
+    possible_mask: np.ndarray,
+    profile: ObservationProfile,
+) -> dict[str, Any]:
+    result = {}
+    for name, context_mask in _context_masks(dataset, profile).items():
+        mask = possible_mask & context_mask[..., None]
+        if not mask.any():
+            continue
+        result[name] = {
+            variant: _metrics(
+                mean=mean,
+                std=std,
+                dataset=dataset,
+                mask=mask,
+            )
+            for variant, std in std_by_variant.items()
+        }
+    return result
+
+
+def calibrate_contextual_gru_uncertainty(
+    *,
+    validation_data: str | Path,
+    test_data: str | Path,
+    checkpoint: str | Path,
+    config: ContextualCalibrationExperimentConfig | None = None,
+) -> dict[str, Any]:
+    """Fit context-conditioned scales on validation and evaluate test once."""
+    config = config or ContextualCalibrationExperimentConfig()
+    validation = load_gimbal_dataset(validation_data)
+    test = load_gimbal_dataset(test_data)
+    validate_disjoint_seed_blocks((validation.manifest, test.manifest))
+    if validation.manifest.feature_names != test.manifest.feature_names:
+        raise ValueError("validation and test feature schemas differ")
+    if (
+        validation.manifest.prediction_horizons_s
+        != test.manifest.prediction_horizons_s
+    ):
+        raise ValueError("validation and test horizons differ")
+    model, metadata = load_gru_checkpoint(checkpoint, device=config.device)
+    if metadata.get("profile") != config.profile.value:
+        raise ValueError("checkpoint profile does not match calibration profile")
+    if tuple(metadata.get("feature_names", ())) != FEATURE_NAMES:
+        raise ValueError("checkpoint feature schema does not match calibration")
+    dataset_hashes = metadata.get("dataset_hashes")
+    if not isinstance(dataset_hashes, dict):
+        raise ValueError("checkpoint is missing dataset hashes")
+    if dataset_hashes.get("validation") != validation.manifest.configuration_hash:
+        raise ValueError("checkpoint validation dataset hash mismatch")
+    if dataset_hashes.get("test") != test.manifest.configuration_hash:
+        raise ValueError("checkpoint test dataset hash mismatch")
+    horizons = validation.manifest.prediction_horizons_s
+    if model.config.prediction_horizons_s != horizons:
+        raise ValueError("checkpoint and dataset horizons differ")
+
+    validation_mean, validation_std, validation_mask = _gru_predictions(
+        model,
+        validation,
+        config.profile,
+        batch_size=config.batch_size,
+        device=config.device,
+    )
+    global_bearing, global_rate, global_counts = _fit_scales(
+        validation_mean,
+        validation_std,
+        validation.targets,
+        validation_mask,
+        minimum_scale=config.minimum_scale,
+        maximum_scale=config.maximum_scale,
+    )
+    validation_context = _context_index_array(
+        validation,
+        config.profile,
+        measurement_age_threshold_s=config.measurement_age_threshold_s,
+        detection_gap_thresholds_s=config.detection_gap_thresholds_s,
+    )
+    bearing_table, rate_table, context_counts = _fit_contextual_scales(
+        validation_mean,
+        validation_std,
+        validation.targets,
+        validation_mask,
+        validation_context,
+        global_bearing_scale=global_bearing,
+        global_rate_scale=global_rate,
+        prior_strength=config.prior_strength,
+        minimum_scale=config.minimum_scale,
+        maximum_scale=config.maximum_scale,
+    )
+    checkpoint_sha256 = _sha256(checkpoint)
+    calibration = ContextualGaussianUncertaintyCalibration(
+        schema_version=CONTEXTUAL_CALIBRATION_SCHEMA_VERSION,
+        profile=config.profile,
+        prediction_horizons_s=horizons,
+        context_names=CONTEXT_NAMES,
+        bearing_std_scale_by_context=bearing_table,
+        rate_std_scale_by_context=rate_table,
+        measurement_age_threshold_s=config.measurement_age_threshold_s,
+        detection_gap_thresholds_s=config.detection_gap_thresholds_s,
+        prior_strength=config.prior_strength,
+        validation_dataset_hash=validation.manifest.configuration_hash,
+        test_dataset_hash=test.manifest.configuration_hash,
+        checkpoint_sha256=checkpoint_sha256,
+        minimum_scale=config.minimum_scale,
+        maximum_scale=config.maximum_scale,
+    )
+    global_calibration = GaussianUncertaintyCalibration(
+        schema_version=CALIBRATION_SCHEMA_VERSION,
+        profile=config.profile,
+        prediction_horizons_s=horizons,
+        bearing_std_scale=global_bearing,
+        rate_std_scale=global_rate,
+        validation_dataset_hash=validation.manifest.configuration_hash,
+        test_dataset_hash=test.manifest.configuration_hash,
+        checkpoint_sha256=checkpoint_sha256,
+        minimum_scale=config.minimum_scale,
+        maximum_scale=config.maximum_scale,
+    )
+    test_mean, test_std, test_mask = _gru_predictions(
+        model,
+        test,
+        config.profile,
+        batch_size=config.batch_size,
+        device=config.device,
+    )
+
+    def split_result(
+        dataset: GimbalTargetStateDataset,
+        mean: np.ndarray,
+        std: np.ndarray,
+        mask: np.ndarray,
+    ) -> dict[str, Any]:
+        global_std = apply_uncertainty_calibration(std, global_calibration)
+        contextual_std = apply_contextual_uncertainty_calibration(
+            std, dataset, calibration
+        )
+        variants = {
+            "uncalibrated": std,
+            "global": global_std,
+            "contextual": contextual_std,
+        }
+        return {
+            **{
+                name: _metrics(
+                    mean=mean,
+                    std=variant_std,
+                    dataset=dataset,
+                    mask=mask,
+                )
+                for name, variant_std in variants.items()
+            },
+            "reliability": {
+                name: _reliability(
+                    mean=mean,
+                    std=variant_std,
+                    targets=dataset.targets,
+                    mask=mask,
+                    nominal_coverages=config.nominal_coverages,
+                )
+                for name, variant_std in variants.items()
+            },
+            "strata": _stratified_variant_metrics(
+                mean=mean,
+                std_by_variant=variants,
+                dataset=dataset,
+                possible_mask=mask,
+                profile=config.profile,
+            ),
+        }
+
+    return {
+        "experiment": CONTEXTUAL_CALIBRATION_SCHEMA_VERSION,
+        "method": "shrinkage_contextual_gaussian_std_scaling",
+        "fit_split": "validation",
+        "evaluation_split": "test",
+        "config": asdict(config),
+        "checkpoint": str(checkpoint),
+        "checkpoint_sha256": checkpoint_sha256,
+        "dataset_hashes": dataset_hashes,
+        "global_fit_sample_count_per_horizon": list(global_counts),
+        "context_fit_sample_count_per_horizon": {
+            name: list(counts)
+            for name, counts in zip(
+                CONTEXT_NAMES, context_counts, strict=True
+            )
+        },
+        "global_calibration": asdict(global_calibration),
+        "calibration": asdict(calibration),
+        "validation": split_result(
+            validation, validation_mean, validation_std, validation_mask
+        ),
+        "test": split_result(test, test_mean, test_std, test_mask),
+    }
+
+
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Calibrate causal gimbal GRU uncertainty on validation data."
@@ -577,6 +1111,65 @@ def main(argv: Sequence[str] | None = None) -> None:
         "test_calibrated": result["test"]["calibrated"],
     }
     print(json.dumps(summary, indent=2))
+
+
+def _parse_contextual_args(
+    argv: Sequence[str] | None = None,
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Fit deployable context-aware gimbal GRU uncertainty scaling."
+        )
+    )
+    parser.add_argument("--validation-data", type=Path, required=True)
+    parser.add_argument("--test-data", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--measurement-age-threshold-s", type=float, default=0.16)
+    parser.add_argument("--short-gap-threshold-s", type=float, default=0.15)
+    parser.add_argument("--medium-gap-threshold-s", type=float, default=0.65)
+    parser.add_argument("--prior-strength", type=float, default=512.0)
+    parser.add_argument("--minimum-scale", type=float, default=0.25)
+    parser.add_argument("--maximum-scale", type=float, default=4.0)
+    parser.add_argument("--device", default="cpu")
+    return parser.parse_args(argv)
+
+
+def contextual_main(argv: Sequence[str] | None = None) -> None:
+    args = _parse_contextual_args(argv)
+    result = calibrate_contextual_gru_uncertainty(
+        validation_data=args.validation_data,
+        test_data=args.test_data,
+        checkpoint=args.checkpoint,
+        config=ContextualCalibrationExperimentConfig(
+            batch_size=args.batch_size,
+            measurement_age_threshold_s=args.measurement_age_threshold_s,
+            detection_gap_thresholds_s=(
+                args.short_gap_threshold_s,
+                args.medium_gap_threshold_s,
+            ),
+            prior_strength=args.prior_strength,
+            minimum_scale=args.minimum_scale,
+            maximum_scale=args.maximum_scale,
+            device=args.device,
+        ),
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(result, indent=2) + "\n", encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "contexts": result["calibration"]["context_names"],
+                "test_uncalibrated": result["test"]["uncalibrated"],
+                "test_global": result["test"]["global"],
+                "test_contextual": result["test"]["contextual"],
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -99,9 +99,11 @@ The test stratification makes the conditional effect explicit:
 
 Fresh and short-gap predictions remain under-covered after scaling, while long
 dropouts and out-of-view samples were already over-dispersed. A single
-per-horizon factor cannot correct both regimes. A future conditional calibrator
-should use deployable context such as measurement age, frame validity, and time
-since the last valid detection.
+per-horizon factor cannot correct both regimes. The follow-on
+[contextual calibration experiment](contextual_calibration_and_recovery_protocol.md)
+uses measurement age, frame validity, and time since the last valid detection.
+It improves validation likelihood but fails to generalize on test, so the
+global calibration remains the accepted artifact.
 
 ## Recovery-policy result
 
