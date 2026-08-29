@@ -111,6 +111,7 @@ class RecoveryReplay:
     command_mode: GimbalCommandMode
     runs: tuple[RecoveryReplayRun, ...]
     aggregate_summary: dict[str, dict[str, Any]]
+    variant_count: int
     source_results: Path
 
 
@@ -764,6 +765,7 @@ def replay_recovery_variant(
         command_mode=command_mode,
         runs=tuple(replay_runs),
         aggregate_summary=aggregate_summary,
+        variant_count=int(result.get("variant_count", 0)),
         source_results=results_path,
     )
 

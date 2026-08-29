@@ -87,6 +87,7 @@ from .recovery import (
     RecoveryTransition,
 )
 from .recovery_scenarios import (
+    expanded_recovery_scenarios,
     recovery_domain_randomization,
     recovery_scenarios,
 )
@@ -174,6 +175,7 @@ __all__ = [
     "encode_action",
     "encode_deployable_observation",
     "evaluate_privileged_oracle_ceilings",
+    "expanded_recovery_scenarios",
     "generate_gimbal_dataset",
     "gimbal_config_from_dict",
     "load_gimbal_dataset",

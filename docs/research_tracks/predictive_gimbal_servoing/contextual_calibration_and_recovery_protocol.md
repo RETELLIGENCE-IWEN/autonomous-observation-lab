@@ -153,3 +153,8 @@ aol-visualize-gimbal --demo recovery \
 The protocol artifact records every candidate, selection key, disjoint seed
 blocks, selected configuration, calibration/checkpoint provenance, and complete
 fresh-test result. The test result is also written separately for exact replay.
+
+The follow-up [expanded recovery robustness experiment](recovery_robustness_experiment.md)
+adds four threshold- and direction-sensitive scenarios plus a per-scenario
+native-hold safety gate. It rejects every current belief threshold on
+development and confirms the rejection on a new 45000-series test block.

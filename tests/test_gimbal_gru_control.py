@@ -34,9 +34,13 @@ from autonomous_observation_lab.gimbal_servoing.recovery_evaluation import (
 )
 from autonomous_observation_lab.gimbal_servoing.recovery_protocol import (
     RecoveryDevelopmentTestConfig,
+    _recoverability_gate,
     run_recovery_development_test,
+    run_recovery_robustness_development_test,
 )
 from autonomous_observation_lab.gimbal_servoing.recovery_scenarios import (
+    EXPANDED_RECOVERY_SUITE_VERSION,
+    expanded_recovery_scenarios,
     recovery_domain_randomization,
 )
 from autonomous_observation_lab.gimbal_servoing.recovery import RecoveryState
@@ -232,6 +236,7 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
     )
     assert replay.scenario.name == scenario.name
     assert replay.seed == 1201
+    assert replay.variant_count == 1
     assert [item.run.episode.name for item in replay.runs] == [
         "gru_o2_rate_hold",
         "gru_o2_rate_blind",
@@ -337,3 +342,80 @@ def test_recovery_protocol_selects_only_on_disjoint_development_seeds(
     assert result["selected_candidate_index"] in {0, 1}
     assert result["test_result"]["variant_count"] == 1
     assert result["test_result"]["evaluation_config"]["seeds"] == (1401,)
+
+    robustness = run_recovery_robustness_development_test(
+        o2_checkpoint=checkpoint,
+        control_results=control_results,
+        uncertainty_calibration=calibration,
+        protocol=RecoveryDevelopmentTestConfig(
+            development_seeds=(1501,),
+            test_seeds=(1601,),
+            maximum_coast_candidates_s=(0.45, 0.65),
+            maximum_coast_bearing_std_candidates_rad=(math.radians(18.0),),
+        ),
+        scenarios=(scenario,),
+        randomization=recovery_domain_randomization(
+            episode_duration_s=0.2
+        ),
+    )
+
+    assert robustness["development_world_variant_count"] == 1
+    assert robustness["development_hold_summary"]
+    assert len(robustness["development_candidates"]) == 2
+    assert robustness["test_result"]["evaluation_config"]["seeds"] == (1601,)
+    assert robustness["fresh_test_gate"]["recoverability"]["passed"]
+    assert robustness["deployment_recommendation"] in {
+        "belief_recovery_eligible",
+        "native_hold",
+    }
+
+
+def test_expanded_recovery_suite_adds_threshold_and_directional_stress():
+    scenarios = expanded_recovery_scenarios()
+    by_name = {scenario.name: scenario for scenario in scenarios}
+
+    assert EXPANDED_RECOVERY_SUITE_VERSION.endswith("_v1")
+    assert len(scenarios) == 7
+    assert len(by_name) == len(scenarios)
+    assert {
+        "detector_micro_bursts",
+        "target_reversal_outage",
+        "negative_travel_limit_reentry",
+        "body_maneuver_outage",
+    } <= set(by_name)
+    assert len(
+        by_name["detector_micro_bursts"].config.camera.forced_dropout_intervals_s
+    ) == 4
+    negative_angle, _ = by_name[
+        "negative_travel_limit_reentry"
+    ].target_motion.state_at(3.0)
+    assert negative_angle < math.radians(-80.0)
+    reversal = by_name["target_reversal_outage"].target_motion
+    early_rate = reversal.state_at(2.2)[1]
+    late_rate = reversal.state_at(2.9)[1]
+    assert early_rate > 0.0
+    assert late_rate < 0.0
+
+
+def test_recovery_gate_rejects_cross_scenario_failure_redistribution():
+    hold = {"total_unrecovered_loss_events": 3}
+    candidate = {"total_unrecovered_loss_events": 2}
+    hold_scenarios = {
+        "body_maneuver": {"total_unrecovered_loss_events": 3},
+        "detector_outage": {"total_unrecovered_loss_events": 0},
+    }
+    candidate_scenarios = {
+        "body_maneuver": {"total_unrecovered_loss_events": 0},
+        "detector_outage": {"total_unrecovered_loss_events": 2},
+    }
+
+    gate = _recoverability_gate(
+        candidate_summary=candidate,
+        candidate_scenarios=candidate_scenarios,
+        hold_summary=hold,
+        hold_scenarios=hold_scenarios,
+    )
+
+    assert gate["total_unrecovered_event_delta_vs_hold"] == -1
+    assert gate["maximum_scenario_unrecovered_event_delta_vs_hold"] == 2
+    assert not gate["passed"]

@@ -540,7 +540,7 @@ def _recovery_markdown(replay: RecoveryReplay) -> str:
         lines.extend(
             (
                 "",
-                "## Full 24-variant aggregate",
+                f"## Full {replay.variant_count}-variant aggregate",
                 "",
                 "| Strategy | Mean error | P95 error | Lost view | Cost | "
                 "Unrecovered |",
@@ -1566,6 +1566,10 @@ def _parser() -> argparse.ArgumentParser:
             "detector_burst_recovery",
             "travel_limit_reentry",
             "physically_unreachable",
+            "detector_micro_bursts",
+            "target_reversal_outage",
+            "negative_travel_limit_reentry",
+            "body_maneuver_outage",
         ),
         default="detector_burst_recovery",
         help="recorded recovery scenario to replay",

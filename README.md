@@ -242,3 +242,21 @@ development-selected recovery threshold improves averages but adds two
 unrecovered fresh-test events. Mouse-only launchers are available at
 `scripts/open_gimbal_contextual_calibration_dashboard.sh` and
 `scripts/open_gimbal_fresh_recovery_dashboard.sh`.
+
+Run the expanded seven-scenario recovery protocol with a per-scenario
+recoverability gate against native hold:
+
+```bash
+aol-evaluate-gimbal-recovery-robustness \
+  --o2-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --control-results artifacts/gimbal_mixed_gru_closed_loop_comparison.json \
+  --uncertainty-calibration artifacts/gimbal_o2_uncertainty_calibration.json \
+  --output artifacts/gimbal_recovery_robustness_protocol.json \
+  --test-output artifacts/gimbal_recovery_robustness_fresh_test.json
+```
+
+The [expanded recovery report](docs/research_tracks/predictive_gimbal_servoing/recovery_robustness_experiment.md)
+shows that every current belief threshold fails development safety, chiefly
+because stale constant-rate projection follows the wrong direction during a
+target reversal. Native hold remains the default. Inspect the exact fresh-test
+failure with `scripts/open_gimbal_robust_recovery_dashboard.sh`.
