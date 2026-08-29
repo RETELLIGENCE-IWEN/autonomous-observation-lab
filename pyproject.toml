@@ -22,6 +22,7 @@ aol-visualize-gimbal = "autonomous_observation_lab.gimbal_servoing.visualization
 aol-generate-gimbal-dataset = "autonomous_observation_lab.gimbal_servoing.dataset:main"
 aol-train-gimbal-gru = "autonomous_observation_lab.gimbal_servoing.gru_training:main"
 aol-compare-gimbal-gru-profiles = "autonomous_observation_lab.gimbal_servoing.gru_profiles:main"
+aol-replicate-gimbal-gru-o2 = "autonomous_observation_lab.gimbal_servoing.gru_replication:main"
 aol-evaluate-gimbal-gru-control = "autonomous_observation_lab.gimbal_servoing.gru_control:main"
 aol-evaluate-gimbal-recovery = "autonomous_observation_lab.gimbal_servoing.recovery_evaluation:main"
 aol-evaluate-gimbal-recovery-protocol = "autonomous_observation_lab.gimbal_servoing.recovery_protocol:main"

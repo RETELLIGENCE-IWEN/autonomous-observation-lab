@@ -115,11 +115,14 @@ reduce recovery duration once a loss occurs. Event-weighted recovery time is
 
 ## Interpretation limits
 
-This is a single-training-seed, synthetic experiment over six authored motion
-families and 24 test plant realizations. Horizon selection uses a disjoint
-validation block, and per-episode test comparisons are paired, but multiple
-training seeds and recorded flight motion are still required before a robust
-control claim. Adapter gains are fixed rather than jointly tuned per controller.
+This experiment originally used one training seed over six authored motion
+families and 24 test plant realizations. The follow-up
+[multi-seed replication](gru_multi_seed_replication.md) repeats O2 training with
+three independent initializations and reproduces the core rate/position gains
+for all three. It also weakens the horizon-specific interpretation: position
+selection varies between `0.1 s` and `0.2 s`. Recorded flight motion and broader
+test distributions are still required before a robust deployment claim.
+Adapter gains are fixed rather than jointly tuned per controller.
 
 ## Reproduce
 

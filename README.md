@@ -133,6 +133,34 @@ The [closed-loop experiment](docs/research_tracks/predictive_gimbal_servoing/gru
 reports tracking error, loss of view, recovery, saturation, command effort, and
 the negative result from a naive search fallback.
 
+Replicate the O2 controller across independent model initializations while
+holding datasets, optimizer, horizon-selection protocol, and paired test worlds
+fixed:
+
+```bash
+aol-replicate-gimbal-gru-o2 \
+  --train-data artifacts/gimbal_mixed_train.npz \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --checkpoint-directory artifacts/gimbal_o2_replication_checkpoints \
+  --output artifacts/gimbal_o2_replication.json \
+  --training-seed 17 --training-seed 29 --training-seed 43 \
+  --epochs 50 --batch-size 24
+```
+
+Inspect per-seed rate/position tracking and loss-of-view metrics with:
+
+```bash
+aol-visualize-gimbal --demo replication
+```
+
+The [multi-seed report](docs/research_tracks/predictive_gimbal_servoing/gru_multi_seed_replication.md)
+shows that all three O2 initializations improve mean error, tail error,
+loss-of-view time, and control cost over analytical control in both command
+modes. Position horizon selection varies between 0.1 and 0.2 seconds, so that
+specific horizon is not yet a stable finding. For mouse-only access, launch
+`scripts/open_gimbal_replication_dashboard.sh`.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

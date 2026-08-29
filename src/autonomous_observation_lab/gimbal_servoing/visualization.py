@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 _APP_ID = "autonomous_observation_lab_gimbal_demo"
 _TIMELINE = "sim_time"
 _CALIBRATION_TIMELINE = "calibration_axis"
+_REPLICATION_TIMELINE = "training_seed_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -247,6 +248,42 @@ def _uncertainty_calibration_blueprint(rrb: Any) -> Any:
                 row_shares=[1.0, 1.0],
             ),
             column_shares=[1.15, 1.85],
+        ),
+        collapse_panels=True,
+    )
+
+
+def _gru_replication_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/replication/summary",
+                name="O2 multi-seed replication summary",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/replication/rate/mean_error_deg",
+                        name="Rate control: mean error by training seed",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/replication/rate/loss_of_view_percent",
+                        name="Rate control: loss of view by training seed",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/replication/position/mean_error_deg",
+                        name="Position control: mean error by training seed",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/replication/position/loss_of_view_percent",
+                        name="Position control: loss of view by training seed",
+                    ),
+                ),
+                row_shares=[1.0, 1.0],
+            ),
+            column_shares=[1.25, 1.75],
         ),
         collapse_panels=True,
     )
@@ -735,6 +772,165 @@ def _load_uncertainty_calibration_result(path: Path) -> dict[str, Any]:
     return result
 
 
+def _gru_replication_markdown(result: dict[str, Any]) -> str:
+    seeds = result["training_seed_results"]
+    summary = result["replication_summary"]
+    lines = [
+        "# O2 GRU multi-seed replication",
+        "",
+        f"{len(seeds)} independently initialized O2 models were trained on "
+        "the same frozen train split. Each model selected rate and position "
+        "horizons on validation, then ran once on the same paired test "
+        "variants. Training seed—not test episode—is the replication unit. "
+        "No best training seed was selected.",
+        "",
+        "## Rate control",
+        "",
+        "| Plot index | Training seed | Best epoch | Horizon | Mean error | "
+        "P95 error | Loss of view | Cost |",
+        "|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for index, seed_result in enumerate(seeds):
+        metrics = seed_result["closed_loop_summary"]["gru_o2_rate"]
+        horizon = seed_result["selected_horizons"]["rate"]["horizon_s"]
+        lines.append(
+            f"| {index} | {seed_result['training_seed']} | "
+            f"{seed_result['best_epoch']} | {1000.0 * horizon:.0f} ms | "
+            f"{metrics['mean_absolute_error_deg']:.2f}° | "
+            f"{metrics['p95_absolute_error_deg']:.2f}° | "
+            f"{100.0 * metrics['loss_of_view_fraction']:.2f}% | "
+            f"{metrics['mean_control_cost']:.3f} |"
+        )
+    lines.extend(
+        (
+            "",
+            "## Position control",
+            "",
+            "| Plot index | Training seed | Best epoch | Horizon | Mean error | "
+            "P95 error | Loss of view | Cost |",
+            "|---:|---:|---:|---:|---:|---:|---:|---:|",
+        )
+    )
+    for index, seed_result in enumerate(seeds):
+        metrics = seed_result["closed_loop_summary"]["gru_o2_position"]
+        horizon = seed_result["selected_horizons"]["position"]["horizon_s"]
+        lines.append(
+            f"| {index} | {seed_result['training_seed']} | "
+            f"{seed_result['best_epoch']} | {1000.0 * horizon:.0f} ms | "
+            f"{metrics['mean_absolute_error_deg']:.2f}° | "
+            f"{metrics['p95_absolute_error_deg']:.2f}° | "
+            f"{100.0 * metrics['loss_of_view_fraction']:.2f}% | "
+            f"{metrics['mean_control_cost']:.3f} |"
+        )
+
+    lines.extend(
+        (
+            "",
+            "## Aggregate replication result",
+            "",
+            "| Mode / metric | Analytical | O2 mean ± seed SD | "
+            "O2 range | Mean delta | Every seed better? |",
+            "|---|---:|---:|---:|---:|:---:|",
+        )
+    )
+    metric_formats = (
+        ("mean_absolute_error_deg", "mean error", 1.0, "°"),
+        ("p95_absolute_error_deg", "P95 error", 1.0, "°"),
+        ("loss_of_view_fraction", "loss of view", 100.0, "%"),
+        ("mean_control_cost", "control cost", 1.0, ""),
+    )
+    for mode in ("rate", "position"):
+        mode_summary = summary[mode]
+        for metric, label, scale, unit in metric_formats:
+            reference = scale * mode_summary["analytical_reference"][metric]
+            learned = mode_summary["learned_metric_distribution"][metric]
+            delta = mode_summary["delta_vs_analytical_distribution"][metric]
+            lines.append(
+                f"| {mode} {label} | {reference:.3f}{unit} | "
+                f"{scale * learned['mean']:.3f} ± "
+                f"{scale * learned['sample_std']:.3f}{unit} | "
+                f"{scale * learned['minimum']:.3f}–"
+                f"{scale * learned['maximum']:.3f}{unit} | "
+                f"{scale * delta['mean']:+.3f}{unit} | "
+                f"{'yes' if delta['all_training_seeds_improve'] else 'no'} |"
+            )
+
+    rate_horizons = summary["rate"][
+        "selected_horizon_s_by_training_seed"
+    ]
+    position_horizons = summary["position"][
+        "selected_horizon_s_by_training_seed"
+    ]
+    core_metrics = (
+        "mean_absolute_error_deg",
+        "p95_absolute_error_deg",
+        "loss_of_view_fraction",
+        "mean_control_cost",
+    )
+    core_replicated = all(
+        summary[mode]["delta_vs_analytical_distribution"][metric][
+            "all_training_seeds_improve"
+        ]
+        for mode in ("rate", "position")
+        for metric in core_metrics
+    )
+    if core_replicated:
+        core_interpretation = (
+            "The core claim replicates: every initialization improves mean "
+            "error, P95 error, loss-of-view time, and control cost over the "
+            "analytical controller in both command modes."
+        )
+    else:
+        core_interpretation = (
+            "The full core claim does not replicate across every "
+            "initialization; inspect the metric table before selecting a "
+            "controller."
+        )
+    rate_horizon_interpretation = (
+        f"Rate horizon selection is stable at "
+        f"{1000.0 * rate_horizons[0]:.0f} ms."
+        if summary["rate"]["selected_horizon_consistent"]
+        else "Rate horizon selection is initialization-sensitive "
+        f"({', '.join(f'{1000.0 * value:.0f} ms' for value in rate_horizons)})."
+    )
+    position_horizon_interpretation = (
+        f"Position horizon selection is stable at "
+        f"{1000.0 * position_horizons[0]:.0f} ms."
+        if summary["position"]["selected_horizon_consistent"]
+        else "Position horizon selection is initialization-sensitive "
+        f"({', '.join(f'{1000.0 * value:.0f} ms' for value in position_horizons)}), "
+        "so a particular predictive position horizon is not yet a stable "
+        "finding."
+    )
+    lines.extend(
+        (
+            "",
+            "## Interpretation",
+            "",
+            f"{core_interpretation} {rate_horizon_interpretation} "
+            f"{position_horizon_interpretation} Command smoothness and rate "
+            "saturation remain tradeoffs unless their rows also improve "
+            "across every seed.",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _load_gru_replication_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_gru_o2_replication_v1":
+        raise ValueError("unsupported GRU replication result")
+    seed_results = result.get("training_seed_results")
+    if not isinstance(seed_results, list) or not seed_results:
+        raise ValueError("GRU replication result has no training seeds")
+    summary = result.get("replication_summary")
+    if not isinstance(summary, dict) or not all(
+        isinstance(summary.get(mode), dict) for mode in ("rate", "position")
+    ):
+        raise ValueError("GRU replication result is missing mode summaries")
+    return result
+
+
 def _suite_metric_table(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -1209,6 +1405,65 @@ def write_uncertainty_calibration_dashboard(
                 )
 
 
+def write_gru_replication_dashboard(
+    result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show O2 closed-loop variation across training seeds."""
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _gru_replication_blueprint(rrb)
+    rr.init(f"{_APP_ID}_gru_o2_replication_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "replication/summary",
+        rr.TextDocument(
+            _gru_replication_markdown(result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    summary = result["replication_summary"]
+    for index, seed_result in enumerate(result["training_seed_results"]):
+        rr.set_time(_REPLICATION_TIMELINE, sequence=index)
+        for mode in ("rate", "position"):
+            learned = seed_result["closed_loop_summary"][f"gru_o2_{mode}"]
+            analytical = summary[mode]["analytical_reference"]
+            mean = summary[mode]["learned_metric_distribution"]
+            for path, metric, scale in (
+                ("mean_error_deg", "mean_absolute_error_deg", 1.0),
+                ("loss_of_view_percent", "loss_of_view_fraction", 100.0),
+            ):
+                root = f"replication/{mode}/{path}"
+                rr.log(
+                    f"{root}/analytical",
+                    rr.Scalars(scale * analytical[metric]),
+                )
+                rr.log(
+                    f"{root}/o2_seed",
+                    rr.Scalars(scale * learned[metric]),
+                )
+                rr.log(
+                    f"{root}/o2_seed_mean",
+                    rr.Scalars(scale * mean[metric]["mean"]),
+                )
+
+
 def write_benchmark_suite(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -1279,15 +1534,25 @@ def _parser() -> argparse.ArgumentParser:
             "benchmark-suite",
             "recovery",
             "calibration",
+            "replication",
         ),
         default="causality",
-        help="select a causality, controller, stress, recovery, or calibration dashboard",
+        help=(
+            "select a causality, controller, stress, recovery, calibration, "
+            "or training-seed replication dashboard"
+        ),
     )
     parser.add_argument(
         "--uncertainty-calibration",
         type=Path,
         default=Path("artifacts/gimbal_o2_uncertainty_calibration.json"),
         help="validation-fit uncertainty calibration result JSON",
+    )
+    parser.add_argument(
+        "--replication-results",
+        type=Path,
+        default=Path("artifacts/gimbal_o2_replication.json"),
+        help="O2 multi-training-seed replication result JSON",
     )
     parser.add_argument(
         "--recovery-results",
@@ -1334,7 +1599,14 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "calibration":
+    if args.demo == "replication":
+        result = _load_gru_replication_result(args.replication_results)
+        write_gru_replication_dashboard(
+            result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "calibration":
         result = _load_uncertainty_calibration_result(
             args.uncertainty_calibration
         )
