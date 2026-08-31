@@ -260,3 +260,21 @@ shows that every current belief threshold fails development safety, chiefly
 because stale constant-rate projection follows the wrong direction during a
 target reversal. Native hold remains the default. Inspect the exact fresh-test
 failure with `scripts/open_gimbal_robust_recovery_dashboard.sh`.
+
+Evaluate the optional edge-conditioned recovery gate, which uses only the last
+valid normalized bbox error and its outward image speed:
+
+```bash
+aol-evaluate-gimbal-edge-recovery \
+  --o2-checkpoint artifacts/gimbal_mixed_checkpoints/gimbal_gru_o2.pt \
+  --control-results artifacts/gimbal_mixed_gru_closed_loop_comparison.json \
+  --uncertainty-calibration artifacts/gimbal_o2_uncertainty_calibration.json \
+  --output artifacts/gimbal_edge_recovery_protocol.json \
+  --test-output artifacts/gimbal_edge_recovery_fresh_test.json
+```
+
+The [edge-conditioned report](docs/research_tracks/predictive_gimbal_servoing/edge_conditioned_recovery_experiment.md)
+shows that the gate repairs all eight extra development failures from stale
+belief search, but narrowly fails the new 46000-series acceptance gate. Native
+hold remains selected. Inspect the exact detector-burst failure with
+`scripts/open_gimbal_edge_recovery_dashboard.sh`.

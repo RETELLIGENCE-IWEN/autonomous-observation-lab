@@ -169,7 +169,7 @@ def _recovery_blueprint(rrb: Any, replay: RecoveryReplay) -> Any:
             ),
             rrb.TimeSeriesView(
                 origin=f"{root}/recovery/visibility",
-                name="Target / detector / frame update",
+                name="Target / detector / frame update / edge evidence",
             ),
             rrb.TimeSeriesView(
                 origin=f"{root}/recovery/state",
@@ -1158,6 +1158,11 @@ def _log_recovery_static(rr: Any, replay_run: RecoveryReplayRun) -> None:
         ("visibility/detection_valid", [255, 150, 40], "detector valid"),
         ("visibility/frame_updated", [130, 150, 255], "new detector frame"),
         (
+            "visibility/edge_search_supported",
+            [240, 220, 60],
+            "edge-conditioned search evidence",
+        ),
+        (
             "state/code",
             [230, 100, 255],
             "phase: TRACK 0 / COAST 1 / SEARCH 2 / REACQUIRE 3",
@@ -1188,10 +1193,18 @@ def _log_recovery_frame(
     root = run.episode.name
     observation = frame.observation
     state = _recovery_state_at(replay_run, frame_index)
+    edge_supported = (
+        replay_run.edge_evidence_trace[
+            min(frame_index, len(replay_run.edge_evidence_trace) - 1)
+        ][1]
+        if replay_run.edge_evidence_trace
+        else False
+    )
     for suffix, value in (
         ("visibility/target_in_view", frame.diagnostics.target_in_view),
         ("visibility/detection_valid", observation.detection_valid),
         ("visibility/frame_updated", observation.frame_updated),
+        ("visibility/edge_search_supported", edge_supported),
         ("state/code", _RECOVERY_STATE_CODE[state]),
     ):
         rr.log(f"{root}/recovery/{suffix}", rr.Scalars(float(value)))

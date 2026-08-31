@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+exec "${script_directory}/open_gimbal_dashboard.sh" recovery \
+    --recovery-results artifacts/gimbal_edge_recovery_fresh_test.json \
+    --recovery-scenario detector_burst_recovery \
+    --seed 46002

@@ -120,3 +120,8 @@ aol-visualize-gimbal --demo recovery \
 
 For mouse-only access, launch
 `scripts/open_gimbal_robust_recovery_dashboard.sh`.
+
+The follow-up [edge-conditioned recovery experiment](edge_conditioned_recovery_experiment.md)
+uses last-valid bbox edge and outward-motion evidence to suppress stale search.
+It repairs the development failures but narrowly fails a new 46000-series
+deployment gate, so native hold remains selected.

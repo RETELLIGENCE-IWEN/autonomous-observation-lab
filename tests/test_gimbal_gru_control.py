@@ -33,8 +33,10 @@ from autonomous_observation_lab.gimbal_servoing.recovery_evaluation import (
     replay_recovery_variant,
 )
 from autonomous_observation_lab.gimbal_servoing.recovery_protocol import (
+    EDGE_RECOVERY_SCHEMA_VERSION,
     RecoveryDevelopmentTestConfig,
     _recoverability_gate,
+    run_edge_recovery_development_test,
     run_recovery_development_test,
     run_recovery_robustness_development_test,
 )
@@ -242,6 +244,12 @@ def test_recovery_evaluation_reuses_validation_selected_o2_horizon(tmp_path):
         "gru_o2_rate_blind",
         "gru_o2_rate_belief",
     ]
+    assert not replay.runs[0].edge_evidence_trace
+    assert not replay.runs[1].edge_evidence_trace
+    assert len(replay.runs[2].edge_evidence_trace) == len(
+        replay.runs[2].state_trace
+    )
+    assert not any(supported for _, supported in replay.runs[2].edge_evidence_trace)
     reference_frames = replay.runs[0].run.episode.frames
     for replay_run in replay.runs[1:]:
         for expected, actual in zip(
@@ -368,6 +376,35 @@ def test_recovery_protocol_selects_only_on_disjoint_development_seeds(
         "belief_recovery_eligible",
         "native_hold",
     }
+
+    edge = run_edge_recovery_development_test(
+        o2_checkpoint=checkpoint,
+        control_results=control_results,
+        uncertainty_calibration=calibration,
+        protocol=RecoveryDevelopmentTestConfig(
+            development_seeds=(1701,),
+            test_seeds=(1801,),
+            maximum_coast_candidates_s=(0.35,),
+            maximum_coast_bearing_std_candidates_rad=(math.radians(10.0),),
+            edge_conditioned_search=True,
+            search_activation_edge_candidates=(0.5, 0.8),
+            search_activation_minimum_outward_rate_candidates_normalized_s=(
+                0.0,
+            ),
+        ),
+        scenarios=(scenario,),
+        randomization=recovery_domain_randomization(
+            episode_duration_s=0.2
+        ),
+    )
+
+    assert edge["experiment"] == EDGE_RECOVERY_SCHEMA_VERSION
+    assert len(edge["development_candidates"]) == 2
+    assert all(
+        candidate["belief_config"]["edge_conditioned_search"]
+        for candidate in edge["development_candidates"]
+    )
+    assert edge["test_result"]["evaluation_config"]["seeds"] == (1801,)
 
 
 def test_expanded_recovery_suite_adds_threshold_and_directional_stress():

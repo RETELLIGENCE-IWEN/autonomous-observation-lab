@@ -27,6 +27,7 @@ aol-evaluate-gimbal-gru-control = "autonomous_observation_lab.gimbal_servoing.gr
 aol-evaluate-gimbal-recovery = "autonomous_observation_lab.gimbal_servoing.recovery_evaluation:main"
 aol-evaluate-gimbal-recovery-protocol = "autonomous_observation_lab.gimbal_servoing.recovery_protocol:main"
 aol-evaluate-gimbal-recovery-robustness = "autonomous_observation_lab.gimbal_servoing.recovery_protocol:robustness_main"
+aol-evaluate-gimbal-edge-recovery = "autonomous_observation_lab.gimbal_servoing.recovery_protocol:edge_main"
 aol-calibrate-gimbal-uncertainty = "autonomous_observation_lab.gimbal_servoing.uncertainty_calibration:main"
 aol-calibrate-gimbal-contextual-uncertainty = "autonomous_observation_lab.gimbal_servoing.uncertainty_calibration:contextual_main"
 

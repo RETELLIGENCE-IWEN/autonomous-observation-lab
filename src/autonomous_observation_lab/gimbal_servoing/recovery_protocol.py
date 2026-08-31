@@ -46,6 +46,7 @@ RECOVERY_PROTOCOL_SCHEMA_VERSION = "gimbal_recovery_development_test_v1"
 RECOVERY_ROBUSTNESS_SCHEMA_VERSION = (
     "gimbal_recovery_robustness_development_test_v1"
 )
+EDGE_RECOVERY_SCHEMA_VERSION = "gimbal_edge_recovery_development_test_v1"
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,11 @@ class RecoveryDevelopmentTestConfig:
         math.radians(18.0),
         math.radians(24.0),
     )
+    edge_conditioned_search: bool = False
+    search_activation_edge_candidates: tuple[float, ...] = (0.65,)
+    search_activation_minimum_outward_rate_candidates_normalized_s: tuple[
+        float, ...
+    ] = (0.0,)
     device: str = "cpu"
 
     def __post_init__(self) -> None:
@@ -78,6 +84,38 @@ class RecoveryDevelopmentTestConfig:
                 raise ValueError(f"{name} must be non-empty and unique")
             if any(not math.isfinite(value) or value <= 0.0 for value in values):
                 raise ValueError(f"{name} must be finite and positive")
+        if not isinstance(self.edge_conditioned_search, bool):
+            raise ValueError("edge-conditioned search flag must be boolean")
+        edge_candidates = self.search_activation_edge_candidates
+        if not edge_candidates or len(edge_candidates) != len(
+            set(edge_candidates)
+        ):
+            raise ValueError(
+                "search activation edge candidates must be non-empty and unique"
+            )
+        if any(
+            not math.isfinite(value) or not 0.0 <= value <= 1.0
+            for value in edge_candidates
+        ):
+            raise ValueError("search activation edge candidates must be in [0, 1]")
+        outward_candidates = (
+            self.search_activation_minimum_outward_rate_candidates_normalized_s
+        )
+        if not outward_candidates or len(outward_candidates) != len(
+            set(outward_candidates)
+        ):
+            raise ValueError(
+                "search activation outward-rate candidates must be non-empty "
+                "and unique"
+            )
+        if any(
+            not math.isfinite(value) or value < 0.0
+            for value in outward_candidates
+        ):
+            raise ValueError(
+                "search activation outward-rate candidates must be finite "
+                "and non-negative"
+            )
 
 
 def _sha256(path: str | Path) -> str:
@@ -99,13 +137,34 @@ def _candidate_belief_configs(
         for maximum_std in (
             protocol.maximum_coast_bearing_std_candidates_rad
         ):
-            candidates.append(
-                replace(
-                    base,
-                    maximum_coast_s=maximum_coast_s,
-                    maximum_coast_bearing_std_rad=maximum_std,
+            edge_candidates = (
+                protocol.search_activation_edge_candidates
+                if protocol.edge_conditioned_search
+                else (base.search_activation_edge_fraction,)
+            )
+            outward_rate_candidates = (
+                protocol.search_activation_minimum_outward_rate_candidates_normalized_s
+                if protocol.edge_conditioned_search
+                else (
+                    base.search_activation_minimum_outward_rate_normalized_s,
                 )
             )
+            for edge_fraction in edge_candidates:
+                for outward_rate in outward_rate_candidates:
+                    candidates.append(
+                        replace(
+                            base,
+                            maximum_coast_s=maximum_coast_s,
+                            maximum_coast_bearing_std_rad=maximum_std,
+                            edge_conditioned_search=(
+                                protocol.edge_conditioned_search
+                            ),
+                            search_activation_edge_fraction=edge_fraction,
+                            search_activation_minimum_outward_rate_normalized_s=(
+                                outward_rate
+                            ),
+                        )
+                    )
     return tuple(candidates)
 
 
@@ -292,6 +351,26 @@ def recovery_robustness_protocol_config(
         maximum_coast_candidates_s=(0.35, 0.50, 0.65, 0.80),
         maximum_coast_bearing_std_candidates_rad=tuple(
             math.radians(value) for value in (10.0, 14.0, 18.0, 24.0)
+        ),
+        device=device,
+    )
+
+
+def edge_recovery_protocol_config(
+    *, device: str = "cpu"
+) -> RecoveryDevelopmentTestConfig:
+    """Return edge-gate candidates with a new untouched test seed block."""
+    return RecoveryDevelopmentTestConfig(
+        development_seeds=tuple(range(44000, 44008)),
+        test_seeds=tuple(range(46000, 46008)),
+        maximum_coast_candidates_s=(0.35,),
+        maximum_coast_bearing_std_candidates_rad=(math.radians(10.0),),
+        edge_conditioned_search=True,
+        search_activation_edge_candidates=(0.45, 0.60, 0.75, 0.90),
+        search_activation_minimum_outward_rate_candidates_normalized_s=(
+            0.0,
+            0.25,
+            0.50,
         ),
         device=device,
     )
@@ -518,31 +597,38 @@ def run_recovery_robustness_development_test(
     cost_delta = float(
         test_belief["mean_control_cost"] - test_hold["mean_control_cost"]
     )
+    mean_error_delta = float(
+        test_belief["mean_absolute_error_deg"]
+        - test_hold["mean_absolute_error_deg"]
+    )
+    p95_error_delta = float(
+        test_belief["p95_absolute_error_deg"]
+        - test_hold["p95_absolute_error_deg"]
+    )
+    loss_of_view_delta = float(
+        test_belief["loss_of_view_fraction"]
+        - test_hold["loss_of_view_fraction"]
+    )
     fresh_test_gate = {
         "rule": (
             "development-selected belief recovery must retain recoverability "
-            "and reduce mean control cost versus native hold on fresh test"
+            "and improve mean control cost without worsening mean error, p95 "
+            "error, or loss of view versus native hold on fresh test"
         ),
         "passed": (
             development_gate_passed
             and fresh_test_recoverability["passed"]
             and cost_delta < 0.0
+            and mean_error_delta <= 0.0
+            and p95_error_delta <= 0.0
+            and loss_of_view_delta <= 0.0
         ),
         "development_gate_passed": development_gate_passed,
         "recoverability": fresh_test_recoverability,
         "mean_control_cost_delta_vs_hold": cost_delta,
-        "mean_absolute_error_delta_deg_vs_hold": float(
-            test_belief["mean_absolute_error_deg"]
-            - test_hold["mean_absolute_error_deg"]
-        ),
-        "p95_absolute_error_delta_deg_vs_hold": float(
-            test_belief["p95_absolute_error_deg"]
-            - test_hold["p95_absolute_error_deg"]
-        ),
-        "loss_of_view_delta_vs_hold": float(
-            test_belief["loss_of_view_fraction"]
-            - test_hold["loss_of_view_fraction"]
-        ),
+        "mean_absolute_error_delta_deg_vs_hold": mean_error_delta,
+        "p95_absolute_error_delta_deg_vs_hold": p95_error_delta,
+        "loss_of_view_delta_vs_hold": loss_of_view_delta,
     }
     deployment_recommendation = (
         "belief_recovery_eligible"
@@ -590,6 +676,40 @@ def run_recovery_robustness_development_test(
         "test_result": test_result,
         "fresh_test_gate": fresh_test_gate,
         "deployment_recommendation": deployment_recommendation,
+    }
+
+
+def run_edge_recovery_development_test(
+    *,
+    o2_checkpoint: str | Path,
+    control_results: str | Path,
+    uncertainty_calibration: UncertaintyCalibration,
+    protocol: RecoveryDevelopmentTestConfig | None = None,
+    base_belief: BeliefRecoveryConfig | None = None,
+    scenarios: tuple[ClosedLoopScenario, ...] | None = None,
+    randomization: GimbalDomainRandomizationConfig | None = None,
+) -> dict[str, Any]:
+    """Tune an edge-conditioned search gate and evaluate fresh seeds once."""
+    protocol = protocol or edge_recovery_protocol_config()
+    if not protocol.edge_conditioned_search:
+        raise ValueError("edge recovery requires edge-conditioned candidates")
+    result = run_recovery_robustness_development_test(
+        o2_checkpoint=o2_checkpoint,
+        control_results=control_results,
+        uncertainty_calibration=uncertainty_calibration,
+        protocol=protocol,
+        base_belief=base_belief,
+        scenarios=scenarios,
+        randomization=randomization,
+    )
+    return {
+        **result,
+        "experiment": EDGE_RECOVERY_SCHEMA_VERSION,
+        "candidate_family": (
+            "edge-conditioned belief search: native hold is retained unless "
+            "the last valid normalized bbox error is near the configured "
+            "image edge and moving outward"
+        ),
     }
 
 
@@ -649,6 +769,41 @@ def _robustness_parse_args(
         type=float,
         action="append",
         dest="coast_std_deg",
+    )
+    parser.add_argument("--device", default="cpu")
+    return parser.parse_args(argv)
+
+
+def _edge_parse_args(
+    argv: Sequence[str] | None = None,
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Tune deployable edge-conditioned gimbal recovery, then evaluate "
+            "one untouched test block."
+        )
+    )
+    parser.add_argument("--o2-checkpoint", type=Path, required=True)
+    parser.add_argument("--control-results", type=Path, required=True)
+    parser.add_argument("--uncertainty-calibration", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--test-output", type=Path, required=True)
+    parser.add_argument("--development-seed-start", type=int, default=44000)
+    parser.add_argument("--test-seed-start", type=int, default=46000)
+    parser.add_argument("--episodes", type=int, default=8)
+    parser.add_argument("--coast-duration-s", type=float, default=0.35)
+    parser.add_argument("--coast-bearing-std-deg", type=float, default=10.0)
+    parser.add_argument(
+        "--edge-fraction",
+        type=float,
+        action="append",
+        dest="edge_fractions",
+    )
+    parser.add_argument(
+        "--minimum-outward-rate-normalized-s",
+        type=float,
+        action="append",
+        dest="outward_rates",
     )
     parser.add_argument("--device", default="cpu")
     return parser.parse_args(argv)
@@ -754,6 +909,79 @@ def robustness_main(argv: Sequence[str] | None = None) -> None:
         args.uncertainty_calibration
     )
     result = run_recovery_robustness_development_test(
+        o2_checkpoint=args.o2_checkpoint,
+        control_results=args.control_results,
+        uncertainty_calibration=calibration,
+        protocol=protocol,
+    )
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(result, indent=2) + "\n", encoding="utf-8"
+    )
+    args.test_output.parent.mkdir(parents=True, exist_ok=True)
+    args.test_output.write_text(
+        json.dumps(result["test_result"], indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(
+        json.dumps(
+            {
+                "selected_candidate_index": result[
+                    "selected_candidate_index"
+                ],
+                "selected_belief_config": result[
+                    "selected_belief_config"
+                ],
+                "development_gate_passed": result[
+                    "selected_candidate_development_gate_passed"
+                ],
+                "fresh_test_gate": result["fresh_test_gate"],
+                "deployment_recommendation": result[
+                    "deployment_recommendation"
+                ],
+            },
+            indent=2,
+        )
+    )
+
+
+def edge_main(argv: Sequence[str] | None = None) -> None:
+    args = _edge_parse_args(argv)
+    if args.episodes <= 0:
+        raise ValueError("episodes must be positive")
+    defaults = edge_recovery_protocol_config(device=args.device)
+    protocol = RecoveryDevelopmentTestConfig(
+        development_seeds=tuple(
+            range(
+                args.development_seed_start,
+                args.development_seed_start + args.episodes,
+            )
+        ),
+        test_seeds=tuple(
+            range(
+                args.test_seed_start,
+                args.test_seed_start + args.episodes,
+            )
+        ),
+        maximum_coast_candidates_s=(args.coast_duration_s,),
+        maximum_coast_bearing_std_candidates_rad=(
+            math.radians(args.coast_bearing_std_deg),
+        ),
+        edge_conditioned_search=True,
+        search_activation_edge_candidates=tuple(
+            args.edge_fractions
+            or defaults.search_activation_edge_candidates
+        ),
+        search_activation_minimum_outward_rate_candidates_normalized_s=tuple(
+            args.outward_rates
+            or defaults.search_activation_minimum_outward_rate_candidates_normalized_s
+        ),
+        device=args.device,
+    )
+    calibration = load_uncertainty_calibration(
+        args.uncertainty_calibration
+    )
+    result = run_edge_recovery_development_test(
         o2_checkpoint=args.o2_checkpoint,
         control_results=args.control_results,
         uncertainty_calibration=calibration,

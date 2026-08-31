@@ -33,6 +33,9 @@ class BeliefRecoveryConfig:
     search_boundary_margin_rad: float = math.radians(2.0)
     reacquire_confirmation_frames: int = 3
     reacquire_blend_s: float = 0.25
+    edge_conditioned_search: bool = False
+    search_activation_edge_fraction: float = 0.65
+    search_activation_minimum_outward_rate_normalized_s: float = 0.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -44,6 +47,7 @@ class BeliefRecoveryConfig:
             "search_feedback_gain_s_inv",
             "search_boundary_margin_rad",
             "reacquire_blend_s",
+            "search_activation_minimum_outward_rate_normalized_s",
         ):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0.0:
@@ -57,6 +61,13 @@ class BeliefRecoveryConfig:
             raise ValueError("search maximum rate must be in (0, 1]")
         if self.reacquire_confirmation_frames <= 0:
             raise ValueError("reacquire confirmation frames must be positive")
+        if not isinstance(self.edge_conditioned_search, bool):
+            raise ValueError("edge-conditioned search flag must be boolean")
+        if not (
+            math.isfinite(self.search_activation_edge_fraction)
+            and 0.0 <= self.search_activation_edge_fraction <= 1.0
+        ):
+            raise ValueError("search activation edge fraction must be in [0, 1]")
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,9 @@ class BeliefRecoveryController:
     action_trace: list[tuple[float, GimbalAction]] = field(
         init=False, default_factory=list
     )
+    edge_evidence_trace: list[tuple[float, bool]] = field(
+        init=False, default_factory=list
+    )
     _belief: TargetStateEstimate = field(init=False, repr=False)
     _current_estimate: TargetStateEstimate = field(init=False, repr=False)
     _last_measurement_time_s: float | None = field(
@@ -105,6 +119,15 @@ class BeliefRecoveryController:
     _reacquire_blend_start_s: float | None = field(
         init=False, default=None, repr=False
     )
+    _last_valid_image_error_normalized: float | None = field(
+        init=False, default=None, repr=False
+    )
+    _last_valid_image_error_time_s: float | None = field(
+        init=False, default=None, repr=False
+    )
+    _last_valid_image_error_rate_normalized_s: float = field(
+        init=False, default=0.0, repr=False
+    )
 
     def __post_init__(self) -> None:
         available_margin = min(
@@ -119,6 +142,25 @@ class BeliefRecoveryController:
     def last_estimate(self) -> TargetStateEstimate:
         return self._current_estimate
 
+    @property
+    def edge_search_evidence_supported(self) -> bool:
+        if not self.recovery.edge_conditioned_search:
+            return True
+        error = self._last_valid_image_error_normalized
+        if error is None:
+            return False
+        outward_rate = (
+            math.copysign(1.0, error)
+            * self._last_valid_image_error_rate_normalized_s
+            if abs(error) > 1e-9
+            else 0.0
+        )
+        return (
+            abs(error) >= self.recovery.search_activation_edge_fraction
+            and outward_rate
+            > self.recovery.search_activation_minimum_outward_rate_normalized_s
+        )
+
     def _zero_action(self) -> GimbalAction:
         if self.command_mode is GimbalCommandMode.RATE:
             return GimbalAction.rate(0.0)
@@ -130,6 +172,7 @@ class BeliefRecoveryController:
         self.transitions.clear()
         self.state_trace.clear()
         self.action_trace.clear()
+        self.edge_evidence_trace.clear()
         self._belief = TargetStateEstimate.missing(0.0)
         self._current_estimate = TargetStateEstimate.missing(0.0)
         self._last_measurement_time_s = None
@@ -139,6 +182,26 @@ class BeliefRecoveryController:
         self._reacquire_confirmation_count = 0
         self._reacquire_anchor_action = self._zero_action()
         self._reacquire_blend_start_s = None
+        self._last_valid_image_error_normalized = None
+        self._last_valid_image_error_time_s = None
+        self._last_valid_image_error_rate_normalized_s = 0.0
+
+    def _update_edge_evidence(
+        self,
+        observation: GimbalObservation,
+        measurement_time_s: float,
+    ) -> None:
+        error = observation.image_error_normalized.value
+        previous_error = self._last_valid_image_error_normalized
+        previous_time = self._last_valid_image_error_time_s
+        if previous_error is not None and previous_time is not None:
+            elapsed_s = measurement_time_s - previous_time
+            if elapsed_s > 1e-9:
+                self._last_valid_image_error_rate_normalized_s = (
+                    error - previous_error
+                ) / elapsed_s
+        self._last_valid_image_error_normalized = error
+        self._last_valid_image_error_time_s = measurement_time_s
 
     def _transition(
         self,
@@ -290,6 +353,10 @@ class BeliefRecoveryController:
         if fresh_detection:
             self._belief = raw_estimate
             self._last_fresh_arrival_time_s = observation.time_s
+            self._update_edge_evidence(
+                observation,
+                measurement_time.value,
+            )
         projected = self._project_belief(observation.time_s)
         search_projection = self._project_belief(
             observation.time_s,
@@ -326,18 +393,23 @@ class BeliefRecoveryController:
                 observation.time_s,
                 "measurement gap",
             )
-        if self.state is RecoveryState.COAST and (
+        coast_limit_reached = self.state is RecoveryState.COAST and (
             gap_s > self.recovery.maximum_coast_s
             or (
                 projected.valid
                 and projected.bearing_std_rad.value
                 > self.recovery.maximum_coast_bearing_std_rad
             )
-        ):
+        )
+        if coast_limit_reached and self.edge_search_evidence_supported:
             self._transition(
                 RecoveryState.SEARCH,
                 observation.time_s,
-                "coast limit",
+                (
+                    "coast limit with edge evidence"
+                    if self.recovery.edge_conditioned_search
+                    else "coast limit"
+                ),
             )
 
         if self.state is RecoveryState.TRACK:
@@ -345,7 +417,13 @@ class BeliefRecoveryController:
         elif self.state is RecoveryState.COAST:
             action = (
                 nominal_action
-                if raw_estimate.valid
+                if (
+                    raw_estimate.valid
+                    or (
+                        self.recovery.edge_conditioned_search
+                        and not self.edge_search_evidence_supported
+                    )
+                )
                 else self._belief_action(
                     observation, projected, searching=False
                 )
@@ -366,4 +444,11 @@ class BeliefRecoveryController:
         self._last_action = action
         self.state_trace.append((observation.time_s, self.state))
         self.action_trace.append((observation.time_s, action))
+        self.edge_evidence_trace.append(
+            (
+                observation.time_s,
+                self.recovery.edge_conditioned_search
+                and self.edge_search_evidence_supported,
+            )
+        )
         return action

@@ -101,6 +101,7 @@ class RecoveryReplayRun:
     run: ControllerRun
     state_trace: tuple[tuple[float, RecoveryState], ...]
     transitions: tuple[RecoveryTransition, ...]
+    edge_evidence_trace: tuple[tuple[float, bool], ...]
 
 
 @dataclass(frozen=True)
@@ -334,6 +335,18 @@ def _recovery_diagnostics(
         for (_, state), target_visible in zip(trace, visible, strict=True)
     )
     visible_steps = sum(visible)
+    edge_conditioned = controller.recovery.edge_conditioned_search
+    edge_evidence = [
+        supported for _, supported in controller.edge_evidence_trace
+    ]
+    coast_without_edge_steps = sum(
+        state is RecoveryState.COAST and not supported
+        for (_, state), supported in zip(
+            trace,
+            edge_evidence,
+            strict=True,
+        )
+    )
     action_by_time = {
         round(time_s, 9): action.command_normalized
         for time_s, action in controller.action_trace
@@ -366,6 +379,13 @@ def _recovery_diagnostics(
         ),
         "maximum_reacquire_command_jump_normalized": (
             max(reacquire_jumps) if reacquire_jumps else 0.0
+        ),
+        "edge_conditioned_search": edge_conditioned,
+        "edge_evidence_fraction": (
+            sum(edge_evidence) / count if edge_conditioned else 0.0
+        ),
+        "coast_without_edge_evidence_fraction": (
+            coast_without_edge_steps / count if edge_conditioned else 0.0
         ),
     }
 
@@ -426,6 +446,17 @@ def _aggregate_recovery(records: list[dict[str, Any]]) -> dict[str, Any]:
         "maximum_reacquire_command_jump_normalized": max(
             record["maximum_reacquire_command_jump_normalized"]
             for record in records
+        ),
+        "mean_edge_evidence_fraction": float(
+            np.mean([record["edge_evidence_fraction"] for record in records])
+        ),
+        "mean_coast_without_edge_evidence_fraction": float(
+            np.mean(
+                [
+                    record["coast_without_edge_evidence_fraction"]
+                    for record in records
+                ]
+            )
         ),
     }
 
@@ -748,6 +779,11 @@ def replay_recovery_variant(
                 ),
                 transitions=(
                     tuple(belief_controller.transitions)
+                    if belief_controller is not None
+                    else ()
+                ),
+                edge_evidence_trace=(
+                    tuple(belief_controller.edge_evidence_trace)
                     if belief_controller is not None
                     else ()
                 ),
