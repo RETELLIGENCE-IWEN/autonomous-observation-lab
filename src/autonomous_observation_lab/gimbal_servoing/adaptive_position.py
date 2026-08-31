@@ -221,6 +221,7 @@ def _adaptive_run(
         estimator=estimator,
         servo=config.servo,
         config=adapter,
+        selected_axis_fov_rad=config.camera.selected_axis_fov_rad,
         name=name,
     )
     return run_closed_loop_controller(
@@ -298,6 +299,9 @@ def _adapter_diagnostic_summary(runs: Sequence[ControllerRun]) -> dict[str, floa
             "rate_limited_fraction": 0.0,
             "acceleration_limited_fraction": 0.0,
             "jerk_limited_fraction": 0.0,
+            "mean_visibility_risk": 0.0,
+            "visibility_guard_active_fraction": 0.0,
+            "mean_horizon_boost_s": 0.0,
         }
 
     def mean(name: str) -> float:
@@ -312,6 +316,13 @@ def _adapter_diagnostic_summary(runs: Sequence[ControllerRun]) -> dict[str, floa
         "rate_limited_fraction": mean("rate_limited"),
         "acceleration_limited_fraction": mean("acceleration_limited"),
         "jerk_limited_fraction": mean("jerk_limited"),
+        "mean_visibility_risk": mean("visibility_risk"),
+        "visibility_guard_active_fraction": float(
+            np.mean(
+                [float(item["visibility_risk"]) > 0.0 for item in diagnostics]
+            )
+        ),
+        "mean_horizon_boost_s": mean("horizon_boost_s"),
     }
 
 

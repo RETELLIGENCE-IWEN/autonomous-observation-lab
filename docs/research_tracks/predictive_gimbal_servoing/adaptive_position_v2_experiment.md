@@ -176,3 +176,8 @@ created with:
 aol-visualize-gimbal --demo adaptive-position \
   --output artifacts/gimbal_adaptive_position_v2.rrd
 ```
+
+The follow-on [visibility-risk position V2.1 experiment](visibility_risk_position_v21_experiment.md)
+uses independent development and confirmation worlds. It repairs this
+terminal-event deficit and passes its frozen confirmation gate while remaining
+6.0% smoother than fixed horizon.

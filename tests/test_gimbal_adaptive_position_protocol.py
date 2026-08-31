@@ -1,5 +1,5 @@
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -18,8 +18,17 @@ from autonomous_observation_lab.gimbal_servoing.adaptive_position import (
     AdaptivePositionProtocolConfig,
     evaluate_adaptive_position_v2,
 )
+from autonomous_observation_lab.gimbal_servoing.adaptive_position_v21 import (
+    ADAPTIVE_POSITION_V21_SCHEMA_VERSION,
+    VisibilityRiskProtocolConfig,
+    adaptive_position_v2_config,
+    evaluate_visibility_risk_v21,
+)
 from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     nominal_scenario,
+)
+from autonomous_observation_lab.gimbal_servoing.controller_arena import (
+    build_visibility_risk_controller_arena,
 )
 from autonomous_observation_lab.gimbal_servoing.controllers import (
     AdaptivePositionControllerConfig,
@@ -123,3 +132,58 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
     assert result["representative_trace"]["world_seed"] == 801
     assert result["representative_trace"]["records"]
     json.dumps(result)
+
+    neutral = AdaptivePositionCandidate(
+        "neutral",
+        adaptive_position_v2_config(),
+    )
+    v21_result = evaluate_visibility_risk_v21(
+        validation_data=paths["validation"],
+        test_data=paths["test"],
+        checkpoints=checkpoints,
+        protocol=VisibilityRiskProtocolConfig(candidates=(neutral,)),
+        development_seeds=(901,),
+        confirmation_seeds=(902,),
+    )
+
+    assert v21_result["experiment"] == ADAPTIVE_POSITION_V21_SCHEMA_VERSION
+    assert v21_result["development"]["selected_candidate"] is None
+    assert not v21_result["confirmation"]["opened"]
+    json.dumps(v21_result)
+
+    arena_result = {
+        "experiment": ADAPTIVE_POSITION_V21_SCHEMA_VERSION,
+        "protocol": {"maximum_staleness_s": 0.5},
+        "training_seeds": [7, 11],
+        "checkpoints": {
+            str(seed): str(path) for seed, path in checkpoints.items()
+        },
+        "fixed_horizons": {
+            str(seed): {"horizon_index": 0, "horizon_s": 0.0}
+            for seed in checkpoints
+        },
+        "development": {
+            "selected_candidate": "neutral",
+            "candidates": [
+                {
+                    "name": "neutral",
+                    "controller_config": asdict(adaptive_position_v2_config()),
+                }
+            ],
+        },
+        "confirmation": {"opened": True, "world_seeds": [901]},
+        "representative_trace": {
+            "scenario_name": "nominal_combined",
+            "world_seed": 901,
+            "training_seed": 7,
+        },
+    }
+    arena = build_visibility_risk_controller_arena(arena_result)
+
+    assert arena.scenario_name == "nominal_combined"
+    assert [run.episode.name for run in arena.comparison.runs] == [
+        "arena_fixed_horizon",
+        "arena_adaptive_v2",
+        "arena_visibility_risk_v21",
+    ]
+    assert len({len(run.episode.frames) for run in arena.comparison.runs}) == 1

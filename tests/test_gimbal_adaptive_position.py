@@ -121,6 +121,13 @@ def test_adaptive_position_configuration_rejects_invalid_trust_and_limits():
         AdaptivePositionControllerConfig(setpoint_rate_limit_scale=0.0)
     with pytest.raises(ValueError, match="jerk_rise_time"):
         AdaptivePositionControllerConfig(setpoint_jerk_rise_time_s=0.0)
+    with pytest.raises(ValueError, match="full_fraction"):
+        AdaptivePositionControllerConfig(
+            visibility_risk_onset_fraction=0.8,
+            visibility_risk_full_fraction=0.8,
+        )
+    with pytest.raises(ValueError, match="at least one"):
+        AdaptivePositionControllerConfig(risk_jerk_limit_multiplier=0.5)
 
 
 def test_adaptive_position_rejects_duplicate_prediction_horizons():
@@ -154,6 +161,79 @@ def test_arrival_horizon_is_interpolated_without_extra_inference():
     assert math.degrees(controller.last_diagnostics.raw_target_angle_rad) == pytest.approx(
         15.0
     )
+
+
+def test_visibility_risk_adds_configured_horizon_boost():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1, 0.2, 0.3),
+        bearings_rad=tuple(math.radians(20.0) for _ in range(4)),
+        bearing_std_rad=(0.01, 0.01, 0.01, 0.01),
+    )
+    controller = AdaptiveTargetStatePositionController(
+        estimator=estimator,
+        servo=_servo(),
+        selected_axis_fov_rad=math.radians(60.0),
+        config=AdaptivePositionControllerConfig(
+            position_response_fraction=0.25,
+            visibility_risk_onset_fraction=0.50,
+            visibility_risk_full_fraction=0.75,
+            risk_horizon_boost_s=0.10,
+        ),
+    )
+
+    controller.act(_observation())
+
+    assert controller.last_diagnostics.predicted_fov_fraction == pytest.approx(
+        2.0 / 3.0
+    )
+    assert controller.last_diagnostics.visibility_risk == pytest.approx(2.0 / 3.0)
+    assert controller.last_diagnostics.horizon_boost_s == pytest.approx(1.0 / 15.0)
+    assert controller.last_diagnostics.requested_horizon_s == pytest.approx(
+        0.15 + 1.0 / 15.0
+    )
+
+
+def test_visibility_guard_requires_configured_camera_fov():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1),
+        bearings_rad=(0.0, 0.0),
+        bearing_std_rad=(0.1, 0.1),
+    )
+
+    with pytest.raises(ValueError, match="selected_axis_fov_rad"):
+        AdaptiveTargetStatePositionController(
+            estimator=estimator,
+            servo=_servo(),
+            config=AdaptivePositionControllerConfig(risk_horizon_boost_s=0.05),
+        )
+
+
+def test_visibility_guard_can_ignore_motion_returning_toward_center():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1),
+        bearings_rad=(math.radians(-20.0), math.radians(-20.0)),
+        bearing_std_rad=(0.01, 0.01),
+    )
+    controller = AdaptiveTargetStatePositionController(
+        estimator=estimator,
+        servo=_servo(),
+        selected_axis_fov_rad=math.radians(60.0),
+        config=AdaptivePositionControllerConfig(
+            position_response_fraction=0.0,
+            visibility_risk_onset_fraction=0.50,
+            visibility_risk_full_fraction=0.75,
+            risk_requires_outward_motion=True,
+            risk_horizon_boost_s=0.10,
+        ),
+    )
+
+    controller.act(_observation())
+
+    assert controller.last_diagnostics.predicted_fov_fraction == pytest.approx(
+        2.0 / 3.0
+    )
+    assert controller.last_diagnostics.visibility_risk == 0.0
+    assert controller.last_diagnostics.horizon_boost_s == 0.0
 
 
 def test_uncertainty_ratio_blends_forecast_back_to_current_state():

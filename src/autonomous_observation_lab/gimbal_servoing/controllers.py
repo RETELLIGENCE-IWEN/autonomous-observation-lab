@@ -212,7 +212,9 @@ class AdaptivePositionControllerConfig:
     limits. Values above one are valid because this shapes a requested
     setpoint, not physical motion; the independent inner servo still enforces
     the plant limits. Jerk is set by the time allowed to reach the setpoint
-    acceleration limit.
+    acceleration limit. Visibility risk is computed from the configured camera
+    FOV, predicted bearing error, and predicted uncertainty. Its horizon and
+    shaping multipliers are neutral by default.
     """
 
     actuator_arrival_time_scale: float = 1.0
@@ -224,6 +226,14 @@ class AdaptivePositionControllerConfig:
     setpoint_rate_limit_scale: float = 1.0
     setpoint_acceleration_limit_scale: float = 1.0
     setpoint_jerk_rise_time_s: float = 0.075
+    visibility_risk_onset_fraction: float = 0.65
+    visibility_risk_full_fraction: float = 0.90
+    visibility_uncertainty_sigma: float = 0.0
+    risk_requires_outward_motion: bool = False
+    risk_horizon_boost_s: float = 0.0
+    risk_rate_limit_multiplier: float = 1.0
+    risk_acceleration_limit_multiplier: float = 1.0
+    risk_jerk_limit_multiplier: float = 1.0
 
     def __post_init__(self) -> None:
         if (
@@ -265,6 +275,35 @@ class AdaptivePositionControllerConfig:
             raise ValueError(
                 "setpoint_jerk_rise_time_s must be finite and positive"
             )
+        if (
+            not math.isfinite(self.visibility_risk_onset_fraction)
+            or self.visibility_risk_onset_fraction < 0.0
+        ):
+            raise ValueError(
+                "visibility_risk_onset_fraction must be finite and non-negative"
+            )
+        if (
+            not math.isfinite(self.visibility_risk_full_fraction)
+            or self.visibility_risk_full_fraction
+            <= self.visibility_risk_onset_fraction
+        ):
+            raise ValueError(
+                "visibility_risk_full_fraction must exceed the onset fraction"
+            )
+        for name in ("visibility_uncertainty_sigma", "risk_horizon_boost_s"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if not isinstance(self.risk_requires_outward_motion, bool):
+            raise ValueError("risk_requires_outward_motion must be boolean")
+        for name in (
+            "risk_rate_limit_multiplier",
+            "risk_acceleration_limit_multiplier",
+            "risk_jerk_limit_multiplier",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 1.0:
+                raise ValueError(f"{name} must be finite and at least one")
 
 
 @dataclass(frozen=True)
@@ -281,6 +320,9 @@ class AdaptivePositionDiagnostics:
     rate_limited: bool
     acceleration_limited: bool
     jerk_limited: bool
+    visibility_risk: float
+    predicted_fov_fraction: float
+    horizon_boost_s: float
 
     def to_dict(self) -> dict[str, float | bool]:
         return asdict(self)
@@ -362,6 +404,7 @@ class AdaptiveTargetStatePositionController:
     estimator: MultiHorizonTargetStateEstimator
     servo: ServoConfig
     config: AdaptivePositionControllerConfig = AdaptivePositionControllerConfig()
+    selected_axis_fov_rad: float | None = None
     name: str = "adaptive_target_state_position"
     last_estimate: TargetStateEstimate = field(init=False, repr=False)
     last_diagnostics: AdaptivePositionDiagnostics = field(init=False, repr=False)
@@ -387,6 +430,21 @@ class AdaptiveTargetStatePositionController:
             )
         if any(not math.isfinite(value) or value < 0.0 for value in horizons):
             raise ValueError("prediction horizons must be finite and non-negative")
+        if self.selected_axis_fov_rad is not None and (
+            not math.isfinite(self.selected_axis_fov_rad)
+            or self.selected_axis_fov_rad <= 0.0
+        ):
+            raise ValueError("selected_axis_fov_rad must be finite and positive")
+        risk_changes_control = (
+            self.config.risk_horizon_boost_s > 0.0
+            or self.config.risk_rate_limit_multiplier > 1.0
+            or self.config.risk_acceleration_limit_multiplier > 1.0
+            or self.config.risk_jerk_limit_multiplier > 1.0
+        )
+        if risk_changes_control and self.selected_axis_fov_rad is None:
+            raise ValueError(
+                "selected_axis_fov_rad is required when visibility risk changes control"
+            )
         self.last_estimate = TargetStateEstimate.missing(0.0)
         self.last_diagnostics = self._missing_diagnostics()
 
@@ -405,6 +463,9 @@ class AdaptiveTargetStatePositionController:
             rate_limited=False,
             acceleration_limited=False,
             jerk_limited=False,
+            visibility_risk=0.0,
+            predicted_fov_fraction=0.0,
+            horizon_boost_s=0.0,
         )
 
     def reset(self) -> None:
@@ -453,6 +514,43 @@ class AdaptiveTargetStatePositionController:
                 1.0 - self.config.minimum_prediction_weight
             )
         return float(np.clip(weight, 0.0, 1.0)), ratio
+
+    def _visibility_risk(
+        self,
+        estimate: TargetStateEstimate,
+        observation: GimbalObservation,
+    ) -> tuple[float, float]:
+        if (
+            self.selected_axis_fov_rad is None
+            or not estimate.valid
+            or not observation.gimbal_angle_rad.valid
+        ):
+            return 0.0, 0.0
+        image_error_rad = angle_delta_rad(
+            estimate.body_relative_bearing_rad.value,
+            observation.gimbal_angle_rad.value,
+        )
+        angular_margin = abs(image_error_rad) + (
+            self.config.visibility_uncertainty_sigma
+            * estimate.bearing_std_rad.value
+        )
+        fov_fraction = angular_margin / (0.5 * self.selected_axis_fov_rad)
+        if self.config.risk_requires_outward_motion:
+            if not observation.gimbal_rate_rad_s.valid:
+                return 0.0, fov_fraction
+            image_error_rate_rad_s = (
+                estimate.body_relative_rate_rad_s.value
+                - observation.gimbal_rate_rad_s.value
+            )
+            if image_error_rad * image_error_rate_rad_s <= 0.0:
+                return 0.0, fov_fraction
+        risk = (
+            fov_fraction - self.config.visibility_risk_onset_fraction
+        ) / (
+            self.config.visibility_risk_full_fraction
+            - self.config.visibility_risk_onset_fraction
+        )
+        return float(np.clip(risk, 0.0, 1.0)), fov_fraction
 
     def _blend_forecast(
         self,
@@ -522,6 +620,7 @@ class AdaptiveTargetStatePositionController:
         self,
         target_angle_rad: float,
         observation: GimbalObservation,
+        visibility_risk: float = 0.0,
     ) -> tuple[float, bool, bool, bool]:
         target = float(
             np.clip(
@@ -541,14 +640,30 @@ class AdaptiveTargetStatePositionController:
             self._setpoint_rate_rad_s = 0.0
             self._setpoint_acceleration_rad_s2 = 0.0
             return self._setpoint_angle_rad, False, False, False
+        risk = float(np.clip(visibility_risk, 0.0, 1.0))
+        rate_multiplier = 1.0 + risk * (
+            self.config.risk_rate_limit_multiplier - 1.0
+        )
+        acceleration_multiplier = 1.0 + risk * (
+            self.config.risk_acceleration_limit_multiplier - 1.0
+        )
+        jerk_multiplier = 1.0 + risk * (
+            self.config.risk_jerk_limit_multiplier - 1.0
+        )
         max_rate = (
             self.config.setpoint_rate_limit_scale * self.servo.max_rate_rad_s
+            * rate_multiplier
         )
-        max_acceleration = (
+        base_max_acceleration = (
             self.config.setpoint_acceleration_limit_scale
             * self.servo.max_acceleration_rad_s2
         )
-        max_jerk = max_acceleration / self.config.setpoint_jerk_rise_time_s
+        max_acceleration = base_max_acceleration * acceleration_multiplier
+        max_jerk = (
+            base_max_acceleration
+            / self.config.setpoint_jerk_rise_time_s
+            * jerk_multiplier
+        )
         error = target - self._setpoint_angle_rad
         stopping_speed = math.sqrt(2.0 * max_acceleration * abs(error))
         desired_rate = math.copysign(
@@ -617,14 +732,45 @@ class AdaptiveTargetStatePositionController:
             )
             return GimbalAction.position(command)
 
-        requested_horizon_s = self._arrival_horizon_s()
-        forecast = _interpolate_target_estimate(
+        base_requested_horizon_s = self._arrival_horizon_s()
+        base_forecast = _interpolate_target_estimate(
             estimates,
             self.estimator.prediction_horizons_s,
-            requested_horizon_s,
+            base_requested_horizon_s,
             observation.time_s,
         )
         current = estimates[0]
+        base_prediction_weight, _base_uncertainty_ratio = self._prediction_weight(
+            current,
+            base_forecast,
+        )
+        base_estimate = self._blend_forecast(
+            current,
+            base_forecast,
+            base_requested_horizon_s,
+            base_prediction_weight,
+            observation.time_s,
+        )
+        visibility_risk, predicted_fov_fraction = self._visibility_risk(
+            base_estimate,
+            observation,
+        )
+        horizons = self.estimator.prediction_horizons_s
+        requested_horizon_s = float(
+            np.clip(
+                base_requested_horizon_s
+                + visibility_risk * self.config.risk_horizon_boost_s,
+                horizons[0],
+                horizons[-1],
+            )
+        )
+        horizon_boost_s = requested_horizon_s - base_requested_horizon_s
+        forecast = _interpolate_target_estimate(
+            estimates,
+            horizons,
+            requested_horizon_s,
+            observation.time_s,
+        )
         prediction_weight, uncertainty_ratio = self._prediction_weight(
             current,
             forecast,
@@ -644,7 +790,7 @@ class AdaptiveTargetStatePositionController:
             )
         )
         shaped_target, rate_limited, acceleration_limited, jerk_limited = (
-            self._shape_setpoint(raw_target, observation)
+            self._shape_setpoint(raw_target, observation, visibility_risk)
         )
         self.last_diagnostics = AdaptivePositionDiagnostics(
             valid=True,
@@ -663,6 +809,9 @@ class AdaptiveTargetStatePositionController:
             rate_limited=rate_limited,
             acceleration_limited=acceleration_limited,
             jerk_limited=jerk_limited,
+            visibility_risk=visibility_risk,
+            predicted_fov_fraction=predicted_fov_fraction,
+            horizon_boost_s=horizon_boost_s,
         )
         return GimbalAction.position(
             self.servo.normalized_from_position(shaped_target)

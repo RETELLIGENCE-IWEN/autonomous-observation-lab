@@ -21,6 +21,7 @@ from .estimators import TargetStateEstimate
 from .recovery import RecoveryState
 
 if TYPE_CHECKING:
+    from .controller_arena import ControllerArena
     from .recovery_evaluation import RecoveryReplay, RecoveryReplayRun
 
 
@@ -30,6 +31,7 @@ _CALIBRATION_TIMELINE = "calibration_axis"
 _REPLICATION_TIMELINE = "training_seed_index"
 _PERFORMANCE_TIMELINE = "comparison_index"
 _ADAPTIVE_TIMELINE = "adaptive_comparison_index"
+_VISIBILITY_RISK_TIMELINE = "visibility_risk_comparison_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -148,6 +150,71 @@ def _closed_loop_blueprint(
             ),
             *rows,
             row_shares=[0.75] + [1.0] * len(rows),
+        ),
+        collapse_panels=True,
+    )
+
+
+def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
+    controller_views = []
+    for run in arena.comparison.runs:
+        root = f"/{run.episode.name}"
+        controller_views.append(
+            rrb.Vertical(
+                rrb.Spatial3DView(
+                    origin=f"{root}/world",
+                    name=f"{run.episode.description}: 3D gimbal",
+                ),
+                rrb.Spatial2DView(
+                    origin=f"{root}/image",
+                    name="Camera frame and bounding boxes",
+                    visual_bounds=rrb.VisualBounds2D(
+                        x_range=[-1.15, 1.15],
+                        y_range=[-1.15, 1.15],
+                    ),
+                ),
+                row_shares=[1.15, 0.85],
+            )
+        )
+    return rrb.Blueprint(
+        rrb.Vertical(
+            rrb.TextDocumentView(
+                origin="/arena/summary",
+                name="Controller arena instructions and metrics",
+            ),
+            rrb.Horizontal(
+                *controller_views,
+                column_shares=[1.0] * len(controller_views),
+            ),
+            rrb.Horizontal(
+                rrb.TimeSeriesView(
+                    origin="/arena/signals/tracking_deg",
+                    name="Target and gimbal angles",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/arena/signals/error_deg",
+                    name="Absolute tracking error",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/arena/signals/command_deg",
+                    name="Requested position commands",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/arena/signals/in_view",
+                    name="Target visible: 1 yes, 0 no",
+                ),
+            ),
+            rrb.Horizontal(
+                rrb.TimeSeriesView(
+                    origin="/arena/v21/risk",
+                    name="V2.1 visibility risk and predicted FOV fraction",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/arena/v21/horizon_ms",
+                    name="V2.1 horizon boost and effective horizon",
+                ),
+            ),
+            row_shares=[0.55, 2.35, 1.0, 0.75],
         ),
         collapse_panels=True,
     )
@@ -427,6 +494,72 @@ def _adaptive_position_blueprint(rrb: Any) -> Any:
     )
 
 
+def _visibility_risk_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/visibility_risk/summary",
+                name="Visibility-risk position V2.1 confirmation",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/aggregate/p95_error_deg",
+                        name="Confirmation P95 error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/aggregate/command_variation",
+                        name="Confirmation command variation",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/aggregate/loss_of_view_percent",
+                        name="Confirmation loss of view",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/aggregate/unrecovered_events",
+                        name="Unrecovered events",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/scenario/p95_delta_deg",
+                        name="V2.1 − V2 P95 by scenario",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/scenario/variation_delta",
+                        name="V2.1 − V2 variation by scenario",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/scenario/loss_delta_percent",
+                        name="V2.1 − V2 lost-view points",
+                    ),
+                ),
+                rrb.TimeSeriesView(
+                    origin="/visibility_risk/trace/tracking_deg",
+                    name="Aggressive-motion target and V2/V2.1 gimbal angles",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/visibility_risk/trace/command_deg",
+                    name="V2, risk-preview, and raw V2.1 commands",
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/trace/risk",
+                        name="Visibility risk and predicted FOV fraction",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/visibility_risk/trace/horizon_s",
+                        name="Risk boost and effective horizon",
+                    ),
+                ),
+                row_shares=[0.8, 0.8, 1.1, 1.1, 0.9],
+            ),
+            column_shares=[1.15, 1.85],
+        ),
+        collapse_panels=True,
+    )
+
+
 def _log_static(rr: Any, episode: DemoEpisode) -> None:
     root = f"{episode.name}"
     rr.set_time(_TIMELINE, duration=0.0)
@@ -639,6 +772,53 @@ def _metrics_markdown(comparison: ClosedLoopComparison) -> str:
             f"{metrics.rate_rmse_deg_s:.2f}°/s | "
             f"{100.0 * metrics.two_sigma_bearing_coverage:.1f}% |"
         )
+    return "\n".join(lines)
+
+
+def _arena_controller_label(name: str) -> str:
+    return {
+        "arena_fixed_horizon": "Fixed horizon",
+        "arena_adaptive_v2": "Adaptive V2",
+        "arena_visibility_risk_v21": "Risk V2.1",
+    }.get(name, name)
+
+
+def _controller_arena_markdown(arena: ControllerArena) -> str:
+    lines = [
+        "# Three-controller visual arena",
+        "",
+        f"Scenario **{arena.scenario_name}**, world seed "
+        f"**{arena.world_seed}**, GRU training seed "
+        f"**{arena.training_seed}**. V2.1 candidate: "
+        f"**{arena.selected_v21_candidate}**.",
+        "",
+        "Press Play or drag the shared `sim_time` cursor. Every column uses "
+        "the same target motion, body rotation, detector randomness, camera, "
+        "servo, and initial state. Green boxes are ground truth; orange boxes "
+        "are delayed detector observations.",
+        "",
+        "| Controller | Mean error | P95 | Lost view | Variation/s | "
+        "Unrecovered |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for run in arena.comparison.runs:
+        metrics = run.metrics
+        lines.append(
+            f"| {_arena_controller_label(run.episode.name)} | "
+            f"{metrics.mean_absolute_error_deg:.2f}° | "
+            f"{metrics.p95_absolute_error_deg:.2f}° | "
+            f"{100.0 * metrics.loss_of_view_fraction:.2f}% | "
+            f"{metrics.command_variation_per_s:.3f} | "
+            f"{metrics.unrecovered_loss_events} |"
+        )
+    lines.extend(
+        (
+            "",
+            "Color key in the shared plots: **blue fixed horizon**, "
+            "**magenta adaptive V2**, **green risk V2.1**, and "
+            "**yellow target**.",
+        )
+    )
     return "\n".join(lines)
 
 
@@ -1193,6 +1373,122 @@ def _adaptive_position_markdown(result: dict[str, Any]) -> str:
             f"{trace['world_seed']} with GRU training seed "
             f"{trace['training_seed']}. They expose the raw target, shaped "
             "command, adaptive horizon, and uncertainty trust directly.",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _load_visibility_risk_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_adaptive_position_v21_protocol_v1":
+        raise ValueError("unsupported visibility-risk V2.1 result")
+    development = result.get("development")
+    confirmation = result.get("confirmation")
+    if not isinstance(development, dict) or not isinstance(confirmation, dict):
+        raise ValueError("visibility-risk result is missing protocol blocks")
+    if not confirmation.get("opened", False):
+        raise ValueError("visibility-risk confirmation block was not opened")
+    trace = result.get("representative_trace")
+    if not isinstance(trace, dict) or not isinstance(trace.get("records"), list):
+        raise ValueError("visibility-risk result has no representative trace")
+    return result
+
+
+def _visibility_risk_markdown(result: dict[str, Any]) -> str:
+    development = result["development"]
+    confirmation = result["confirmation"]
+    fixed = confirmation["fixed_summary"]
+    v2 = confirmation["v2_summary"]
+    v21 = confirmation["v21_summary"]
+    gate = confirmation["acceptance_gate"]
+    verdict = "PASS" if gate["passed"] else "REJECT"
+    lines = [
+        "# Visibility-risk position V2.1",
+        "",
+        f"**Untouched confirmation gate: {verdict}.** Recommendation: "
+        f"**{confirmation['recommendation'].replace('_', ' ')}**.",
+        "",
+        f"`{development['selected_candidate']}` was selected on world seeds "
+        f"{development['world_seeds'][0]}–{development['world_seeds'][-1]}. "
+        f"The frozen candidate was then evaluated once on seeds "
+        f"{confirmation['world_seeds'][0]}–{confirmation['world_seeds'][-1]} "
+        "across all three GRU initializations and six scenario families.",
+        "",
+        "## Confirmation aggregate",
+        "",
+        "| Metric | Fixed horizon | Adaptive V2 | Risk V2.1 |",
+        "|---|---:|---:|---:|",
+    ]
+    for key, label, scale, unit in (
+        ("mean_absolute_error_deg", "Mean error", 1.0, "°"),
+        ("p95_absolute_error_deg", "P95 error", 1.0, "°"),
+        ("loss_of_view_fraction", "Loss of view", 100.0, "%"),
+        ("command_variation_per_s", "Command variation/s", 1.0, ""),
+        ("mean_control_cost", "Control cost", 1.0, ""),
+        ("total_unrecovered_loss_events", "Unrecovered events", 1.0, ""),
+    ):
+        lines.append(
+            f"| {label} | {scale * fixed[key]:.3f}{unit} | "
+            f"{scale * v2[key]:.3f}{unit} | {scale * v21[key]:.3f}{unit} |"
+        )
+    vs_v2 = gate["vs_v2"]
+    vs_fixed = gate["vs_fixed"]
+    lines.extend(
+        (
+            "",
+            "## Gate audit",
+            "",
+            f"- V2.1 changes command variation by "
+            f"{-100.0 * vs_v2['command_variation_reduction_fraction']:+.1f}% "
+            "versus V2 and remains "
+            f"{100.0 * vs_fixed['command_variation_reduction_fraction']:.1f}% "
+            "below fixed horizon.",
+            f"- Unrecovered-event deltas: "
+            f"{vs_v2['unrecovered_event_delta']:+d} versus V2 and "
+            f"{vs_fixed['unrecovered_event_delta']:+d} versus fixed.",
+            f"- Training-seed checks: "
+            f"{sum(gate['per_training_seed_checks'].values())}/"
+            f"{len(gate['per_training_seed_checks'])} pass.",
+            f"- Scenario checks: {sum(gate['per_scenario_checks'].values())}/"
+            f"{len(gate['per_scenario_checks'])} pass.",
+            "",
+            "V2.1 recovers some of V2's deliberate smoothing only when the "
+            "predicted target approaches the camera boundary. Against V2 it "
+            "slightly improves mean error, P95, loss of view, and control cost; "
+            "against fixed horizon it preserves the declared smoothness margin.",
+            "",
+            "## Scenario deltas versus V2",
+            "",
+            "| Index | Scenario | P95 | Lost view | Command variation |",
+            "|---:|---|---:|---:|---:|",
+        )
+    )
+    for index, (name, scenario) in enumerate(
+        confirmation["by_scenario_vs_v2"].items()
+    ):
+        deltas = scenario["deltas"]
+        lines.append(
+            f"| {index} | {name.replace('_', ' ')} | "
+            f"{deltas['p95_absolute_error_deg']:+.3f}° | "
+            f"{100.0 * deltas['loss_of_view_fraction']:+.3f} pp | "
+            f"{deltas['command_variation_per_s']:+.3f}/s |"
+        )
+    diagnostics = confirmation["adapter_diagnostics"]
+    trace = result["representative_trace"]
+    lines.extend(
+        (
+            "",
+            "## Guard behavior",
+            "",
+            f"The guard is active on "
+            f"{100.0 * diagnostics['visibility_guard_active_fraction']:.1f}% "
+            f"of valid steps. Mean risk boost is "
+            f"{1000.0 * diagnostics['mean_horizon_boost_s']:.0f} ms and mean "
+            f"effective horizon is "
+            f"{1000.0 * diagnostics['mean_effective_horizon_s']:.0f} ms.",
+            "",
+            f"The trace replays `{trace['scenario_name']}` at world seed "
+            f"{trace['world_seed']} with GRU seed {trace['training_seed']}.",
         )
     )
     return "\n".join(lines)
@@ -1832,6 +2128,157 @@ def write_closed_loop_comparison(
             _log_closed_loop_frame(rr, run, frame, estimate)
 
 
+def write_controller_arena(
+    arena: ControllerArena,
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show synchronized 3D/2D fixed, V2, and V2.1 replays."""
+    if len(arena.comparison.runs) != 3:
+        raise ValueError("controller arena requires exactly three runs")
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _controller_arena_blueprint(rrb, arena)
+    rr.init(f"{_APP_ID}_controller_arena_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "arena/summary",
+        rr.TextDocument(
+            _controller_arena_markdown(arena),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    styles = (
+        ("arena_fixed_horizon", [50, 150, 255], "fixed horizon"),
+        ("arena_adaptive_v2", [215, 90, 255], "adaptive V2"),
+        ("arena_visibility_risk_v21", [70, 210, 130], "risk V2.1"),
+    )
+    rr.log(
+        "arena/signals/tracking_deg/target",
+        rr.SeriesLines(colors=[255, 200, 40], names="target bearing"),
+        static=True,
+    )
+    for name, color, label in styles:
+        for panel, suffix in (
+            ("tracking_deg", "gimbal"),
+            ("error_deg", "absolute_error"),
+            ("command_deg", "requested"),
+            ("in_view", "visible"),
+        ):
+            rr.log(
+                f"arena/signals/{panel}/{name}_{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+    for root, color, label in (
+        ("risk/visibility", [255, 100, 70], "visibility risk"),
+        ("risk/fov_fraction", [70, 190, 255], "predicted FOV fraction"),
+        ("horizon_ms/boost", [255, 130, 40], "risk boost"),
+        ("horizon_ms/effective", [70, 210, 130], "effective horizon"),
+    ):
+        rr.log(
+            f"arena/v21/{root}",
+            rr.SeriesLines(colors=color, names=label),
+            static=True,
+        )
+
+    for run in arena.comparison.runs:
+        _log_closed_loop_static(rr, run)
+    frames_by_run = tuple(
+        run.episode.frames for run in arena.comparison.runs
+    )
+    for frame_index, frames in enumerate(zip(*frames_by_run, strict=True)):
+        desired_body_relative_deg = None
+        for run, frame in zip(arena.comparison.runs, frames, strict=True):
+            estimate = (
+                run.estimates[frame_index]
+                if frame_index < len(run.estimates)
+                else None
+            )
+            _log_closed_loop_frame(rr, run, frame, estimate)
+            diagnostics = frame.diagnostics
+            desired_body_relative = math.atan2(
+                math.sin(
+                    diagnostics.target_bearing_rad
+                    - diagnostics.body_bearing_rad
+                ),
+                math.cos(
+                    diagnostics.target_bearing_rad
+                    - diagnostics.body_bearing_rad
+                ),
+            )
+            desired_body_relative_deg = math.degrees(desired_body_relative)
+            actual_deg = math.degrees(diagnostics.gimbal_angle_rad)
+            error_deg = abs(
+                math.degrees(
+                    math.atan2(
+                        math.sin(
+                            desired_body_relative
+                            - diagnostics.gimbal_angle_rad
+                        ),
+                        math.cos(
+                            desired_body_relative
+                            - diagnostics.gimbal_angle_rad
+                        ),
+                    )
+                )
+            )
+            requested_deg = math.degrees(
+                diagnostics.requested_position_rad or 0.0
+            )
+            name = run.episode.name
+            for path, value in (
+                (f"tracking_deg/{name}_gimbal", actual_deg),
+                (f"error_deg/{name}_absolute_error", error_deg),
+                (f"command_deg/{name}_requested", requested_deg),
+                (
+                    f"in_view/{name}_visible",
+                    float(diagnostics.target_in_view),
+                ),
+            ):
+                rr.log(f"arena/signals/{path}", rr.Scalars(value))
+        if desired_body_relative_deg is not None:
+            rr.log(
+                "arena/signals/tracking_deg/target",
+                rr.Scalars(desired_body_relative_deg),
+            )
+
+        v21_run = arena.comparison.runs[-1]
+        if frame_index < len(v21_run.adapter_diagnostics):
+            item = v21_run.adapter_diagnostics[frame_index]
+            for path, value in (
+                ("risk/visibility", item.get("visibility_risk", 0.0)),
+                (
+                    "risk/fov_fraction",
+                    item.get("predicted_fov_fraction", 0.0),
+                ),
+                (
+                    "horizon_ms/boost",
+                    1000.0 * float(item.get("horizon_boost_s", 0.0)),
+                ),
+                (
+                    "horizon_ms/effective",
+                    1000.0 * float(item.get("effective_horizon_s", 0.0)),
+                ),
+            ):
+                rr.log(f"arena/v21/{path}", rr.Scalars(value))
+
+
 def write_recovery_replay(
     replay: RecoveryReplay,
     *,
@@ -2175,6 +2622,169 @@ def write_adaptive_position_dashboard(
             )
 
 
+def write_visibility_risk_dashboard(
+    result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show the fixed/V2/visibility-risk V2.1 confirmation."""
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _visibility_risk_blueprint(rrb)
+    rr.init(f"{_APP_ID}_visibility_risk_position_v21")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "visibility_risk/summary",
+        rr.TextDocument(
+            _visibility_risk_markdown(result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    aggregate_styles = (
+        ("fixed", [50, 150, 255], "fixed horizon"),
+        ("v2", [215, 90, 255], "adaptive V2"),
+        ("v21", [70, 210, 130], "visibility-risk V2.1"),
+    )
+    for metric in (
+        "p95_error_deg",
+        "command_variation",
+        "loss_of_view_percent",
+        "unrecovered_events",
+    ):
+        for suffix, color, name in aggregate_styles:
+            rr.log(
+                f"visibility_risk/aggregate/{metric}/{suffix}",
+                rr.SeriesLines(colors=color, names=name),
+                static=True,
+            )
+    for metric in (
+        "p95_delta_deg",
+        "variation_delta",
+        "loss_delta_percent",
+    ):
+        rr.log(
+            f"visibility_risk/scenario/{metric}/zero",
+            rr.SeriesLines(colors=[130, 130, 140], names="no change"),
+            static=True,
+        )
+        rr.log(
+            f"visibility_risk/scenario/{metric}/v21_minus_v2",
+            rr.SeriesLines(colors=[70, 210, 130], names="V2.1 - V2"),
+            static=True,
+        )
+    trace_styles = {
+        "tracking_deg": (
+            ("target", [255, 200, 40], "target bearing"),
+            ("v2", [215, 90, 255], "adaptive V2 gimbal"),
+            ("v21", [70, 210, 130], "risk V2.1 gimbal"),
+        ),
+        "command_deg": (
+            ("v2", [215, 90, 255], "adaptive V2 command"),
+            ("v21", [70, 210, 130], "risk V2.1 command"),
+            ("raw_v21", [255, 130, 40], "raw V2.1 target"),
+        ),
+        "risk": (
+            ("visibility", [255, 100, 70], "visibility risk"),
+            ("fov_fraction", [70, 190, 255], "predicted FOV fraction"),
+        ),
+        "horizon_s": (
+            ("boost", [255, 130, 40], "risk horizon boost"),
+            ("effective", [70, 210, 130], "effective horizon"),
+        ),
+    }
+    for panel, styles in trace_styles.items():
+        for suffix, color, name in styles:
+            rr.log(
+                f"visibility_risk/trace/{panel}/{suffix}",
+                rr.SeriesLines(colors=color, names=name),
+                static=True,
+            )
+
+    confirmation = result["confirmation"]
+    rr.set_time(_VISIBILITY_RISK_TIMELINE, sequence=0)
+    for suffix, summary in (
+        ("fixed", confirmation["fixed_summary"]),
+        ("v2", confirmation["v2_summary"]),
+        ("v21", confirmation["v21_summary"]),
+    ):
+        for path, key, scale in (
+            ("p95_error_deg", "p95_absolute_error_deg", 1.0),
+            ("command_variation", "command_variation_per_s", 1.0),
+            ("loss_of_view_percent", "loss_of_view_fraction", 100.0),
+            ("unrecovered_events", "total_unrecovered_loss_events", 1.0),
+        ):
+            rr.log(
+                f"visibility_risk/aggregate/{path}/{suffix}",
+                rr.Scalars(scale * summary[key]),
+            )
+
+    for index, scenario in enumerate(
+        confirmation["by_scenario_vs_v2"].values()
+    ):
+        rr.set_time(_VISIBILITY_RISK_TIMELINE, sequence=index)
+        deltas = scenario["deltas"]
+        for path, value in (
+            ("p95_delta_deg", deltas["p95_absolute_error_deg"]),
+            ("variation_delta", deltas["command_variation_per_s"]),
+            ("loss_delta_percent", 100.0 * deltas["loss_of_view_fraction"]),
+        ):
+            root = f"visibility_risk/scenario/{path}"
+            rr.log(f"{root}/zero", rr.Scalars(0.0))
+            rr.log(f"{root}/v21_minus_v2", rr.Scalars(value))
+
+    for record in result["representative_trace"]["records"]:
+        rr.set_time(_TIMELINE, duration=record["time_s"])
+        for suffix, key in (
+            ("target", "target_body_bearing_deg"),
+            ("v2", "v2_gimbal_angle_deg"),
+            ("v21", "v21_gimbal_angle_deg"),
+        ):
+            rr.log(
+                f"visibility_risk/trace/tracking_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("v2", "v2_command_deg"),
+            ("v21", "v21_command_deg"),
+            ("raw_v21", "v21_raw_target_deg"),
+        ):
+            rr.log(
+                f"visibility_risk/trace/command_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("visibility", "visibility_risk"),
+            ("fov_fraction", "predicted_fov_fraction"),
+        ):
+            rr.log(
+                f"visibility_risk/trace/risk/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("boost", "horizon_boost_s"),
+            ("effective", "effective_horizon_s"),
+        ):
+            rr.log(
+                f"visibility_risk/trace/horizon_s/{suffix}",
+                rr.Scalars(record[key]),
+            )
+
+
 def write_performance_verification_dashboard(
     control_result: dict[str, Any],
     replication_result: dict[str, Any],
@@ -2403,12 +3013,14 @@ def _parser() -> argparse.ArgumentParser:
             "replication",
             "performance",
             "adaptive-position",
+            "visibility-risk",
+            "controller-arena",
         ),
         default="causality",
         help=(
             "select a causality, controller, stress, recovery, calibration, "
             "training-seed replication, performance-verification, or adaptive "
-            "position V2 dashboard"
+            "position V2, visibility-risk V2.1, or controller-arena dashboard"
         ),
     )
     parser.add_argument(
@@ -2416,6 +3028,34 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("artifacts/gimbal_adaptive_position_v2_fresh.json"),
         help="fresh adaptive-position V2 protocol result JSON",
+    )
+    parser.add_argument(
+        "--visibility-risk-results",
+        type=Path,
+        default=Path("artifacts/gimbal_adaptive_position_v21.json"),
+        help="visibility-risk V2.1 confirmation result JSON",
+    )
+    parser.add_argument(
+        "--arena-scenario",
+        choices=(
+            "nominal_combined",
+            "high_latency",
+            "dropout_noise",
+            "slow_servo",
+            "aggressive_motion",
+            "travel_limit_recovery",
+        ),
+        help="confirmation scenario for the three-controller visual arena",
+    )
+    parser.add_argument(
+        "--arena-world-seed",
+        type=int,
+        help="confirmation world seed for the controller arena",
+    )
+    parser.add_argument(
+        "--arena-training-seed",
+        type=int,
+        help="GRU initialization seed for the controller arena",
     )
     parser.add_argument(
         "--performance-results",
@@ -2486,7 +3126,30 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "adaptive-position":
+    if args.demo == "controller-arena":
+        from .controller_arena import build_visibility_risk_controller_arena
+
+        result = _load_visibility_risk_result(args.visibility_risk_results)
+        arena = build_visibility_risk_controller_arena(
+            result,
+            scenario_name=args.arena_scenario,
+            world_seed=args.arena_world_seed,
+            training_seed=args.arena_training_seed,
+            device=args.device,
+        )
+        write_controller_arena(
+            arena,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "visibility-risk":
+        result = _load_visibility_risk_result(args.visibility_risk_results)
+        write_visibility_risk_dashboard(
+            result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "adaptive-position":
         result = _load_adaptive_position_result(args.adaptive_position_results)
         write_adaptive_position_dashboard(
             result,

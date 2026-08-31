@@ -198,6 +198,45 @@ trace with `scripts/open_gimbal_adaptive_position_dashboard.sh`. The
 records the 13.6% command-variation reduction and the single additional
 unrecovered event that keeps fixed-horizon position as the accepted default.
 
+Run the follow-on visibility-risk V2.1 development/confirmation protocol with:
+
+```bash
+aol-evaluate-gimbal-visibility-risk-position \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --checkpoint 17=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_17.pt \
+  --checkpoint 29=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_29.pt \
+  --checkpoint 43=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_43.pt \
+  --output artifacts/gimbal_adaptive_position_v21.json
+```
+
+V2.1 adds prediction preview only when uncertainty-inflated target error
+approaches the configured camera boundary. It passes its untouched confirmation
+gate, matches fixed horizon's unrecovered-event count, and remains 6.0%
+smoother. Open the three-controller comparison with
+`scripts/open_gimbal_visibility_risk_dashboard.sh`; see the
+[V2.1 report](docs/research_tracks/predictive_gimbal_servoing/visibility_risk_position_v21_experiment.md)
+for the development/confirmation ledger and remaining absolute limitations.
+
+For a synchronized physical replay rather than aggregate plots, open:
+
+```bash
+scripts/open_gimbal_controller_arena.sh
+```
+
+The arena presents fixed horizon, adaptive V2, and visibility-risk V2.1 as
+three simultaneous 3D gimbal and 2D camera views. The shared timeline also
+shows commands, tracking errors, visibility, V2.1 risk, and horizon boost. It
+defaults to aggressive motion at confirmation world seed 82000 and GRU seed
+17. Any frozen confirmation combination can be selected, for example:
+
+```bash
+scripts/open_gimbal_controller_arena.sh \
+  --arena-scenario high_latency \
+  --arena-world-seed 82003 \
+  --arena-training-seed 43
+```
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:
