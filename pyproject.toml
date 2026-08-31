@@ -13,7 +13,8 @@ dependencies = ["numpy>=1.24"]
 dev = ["pytest>=8"]
 learning = ["torch>=2.4"]
 visualization = ["rerun-sdk>=0.36,<0.37"]
-all = ["pytest>=8", "rerun-sdk>=0.36,<0.37", "torch>=2.4"]
+reporting = ["matplotlib>=3.8"]
+all = ["matplotlib>=3.8", "pytest>=8", "rerun-sdk>=0.36,<0.37", "torch>=2.4"]
 
 [project.scripts]
 aol-evaluate = "autonomous_observation_lab.benchmark.evaluate:main"

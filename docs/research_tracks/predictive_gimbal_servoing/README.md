@@ -22,6 +22,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 
 - [Locked Concept](concept_lock.md)
 - [Research Brief](research_brief.md)
+- [Paper-Style Research Journey](predictive_gimbal_servoing_journey_paper.md)
 - [Benchmark Specification](benchmark_specification.md)
 - [Privileged Target-State Dataset](privileged_dataset.md)
 - [Causal GRU Smoke Experiment](gru_smoke_experiment.md)

@@ -12,6 +12,9 @@ This repository will host research notes, simulation environments, baselines, ex
 
 See the [research documentation](docs/README.md) for the current vision, foundations, research tracks, ideas, and prior work.
 
+The predictive-gimbal work to date is summarized as a paper-style retrospective
+with exact-data figures in [Dream-to-Center: A Research Journey Toward Predictive One-Axis Gimbal Servoing](docs/research_tracks/predictive_gimbal_servoing/predictive_gimbal_servoing_journey_paper.md).
+
 > Early-stage research repository. Ideas and interfaces may evolve substantially.
 
 ## Gimbal causality demo
