@@ -9,6 +9,9 @@ from .config import (
     TimingConfig,
 )
 from .controllers import (
+    AdaptivePositionControllerConfig,
+    AdaptivePositionDiagnostics,
+    AdaptiveTargetStatePositionController,
     BodyRateFeedforwardController,
     PredictiveRateController,
     ProportionalController,
@@ -61,6 +64,7 @@ from .env import GimbalServoEnv, wrap_angle_rad
 from .estimators import (
     ConstantVelocityEstimatorConfig,
     ConstantVelocityTargetEstimator,
+    MultiHorizonTargetStateEstimator,
     TargetStateEstimate,
     TargetStateEstimator,
 )
@@ -106,6 +110,9 @@ from .types import (
 
 __all__ = [
     "ACTION_NAMES",
+    "AdaptivePositionControllerConfig",
+    "AdaptivePositionDiagnostics",
+    "AdaptiveTargetStatePositionController",
     "BEHAVIOR_NAMES",
     "BeliefRecoveryConfig",
     "BeliefRecoveryController",
@@ -134,6 +141,7 @@ __all__ = [
     "MaskedScalar",
     "HardwareRandomizationConfig",
     "MotionRandomizationConfig",
+    "MultiHorizonTargetStateEstimator",
     "ObjectiveConfig",
     "ObservationProfile",
     "ORACLE_ACTION_NAMES",

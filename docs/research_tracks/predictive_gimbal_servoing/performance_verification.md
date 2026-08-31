@@ -86,3 +86,9 @@ Generate a portable recording instead of opening the viewer with:
 aol-visualize-gimbal --demo performance \
   --output artifacts/gimbal_performance_verification.rrd
 ```
+
+The follow-on [adaptive position V2 experiment](adaptive_position_v2_experiment.md)
+tests a multi-horizon, uncertainty-aware, jerk-limited position adapter against
+this fixed-horizon learned controller. It reduces command variation by 13.6%
+without aggregate tracking regression, but remains rejected after one
+additional unrecovered aggressive-motion event.

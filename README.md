@@ -177,6 +177,27 @@ replication. The accompanying [performance verification report](docs/research_tr
 separates the passed relative synthetic tracking gate from unresolved
 smoothness, recovery, hardware, and absolute product requirements.
 
+Evaluate the follow-on adaptive, multi-horizon O2 position adapter after
+validation selection with:
+
+```bash
+aol-evaluate-gimbal-adaptive-position \
+  --validation-data artifacts/gimbal_mixed_validation.npz \
+  --test-data artifacts/gimbal_mixed_test.npz \
+  --checkpoint 17=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_17.pt \
+  --checkpoint 29=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_29.pt \
+  --checkpoint 43=artifacts/gimbal_o2_replication_checkpoints/gimbal_gru_o2_seed_43.pt \
+  --fresh-test-seed 80000 --fresh-test-seed 80001 \
+  --fresh-test-seed 80002 --fresh-test-seed 80003 \
+  --output artifacts/gimbal_adaptive_position_v2_fresh.json
+```
+
+Open its fixed-horizon/V2 comparison, controller diagnostics, and representative
+trace with `scripts/open_gimbal_adaptive_position_dashboard.sh`. The
+[adaptive position V2 report](docs/research_tracks/predictive_gimbal_servoing/adaptive_position_v2_experiment.md)
+records the 13.6% command-variation reduction and the single additional
+unrecovered event that keeps fixed-horizon position as the accepted default.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

@@ -303,15 +303,32 @@ class GRUTargetStateEstimator:
         self._last_measurement_time_s: float | None = None
         self._last_valid_detection_arrival_s: float | None = None
         self.last_estimate = TargetStateEstimate.missing(0.0)
+        self.last_estimates = tuple(
+            TargetStateEstimate.missing(0.0)
+            for _ in self.model.config.prediction_horizons_s
+        )
+
+    @property
+    def prediction_horizons_s(self) -> tuple[float, ...]:
+        return self.model.config.prediction_horizons_s
 
     def reset(self) -> None:
         self._hidden = None
         self._last_measurement_time_s = None
         self._last_valid_detection_arrival_s = None
         self.last_estimate = TargetStateEstimate.missing(0.0)
+        self.last_estimates = tuple(
+            TargetStateEstimate.missing(0.0)
+            for _ in self.model.config.prediction_horizons_s
+        )
 
     @torch.no_grad()
-    def update(self, observation: GimbalObservation) -> TargetStateEstimate:
+    def update_all(
+        self,
+        observation: GimbalObservation,
+        *,
+        _calibration_horizon_index: int | None = None,
+    ) -> tuple[TargetStateEstimate, ...]:
         vector = encode_deployable_observation(
             observation,
             profile=self.inference.observation_profile,
@@ -333,46 +350,67 @@ class GRUTargetStateEstimator:
             > self.inference.maximum_staleness_s
         ):
             self.last_estimate = TargetStateEstimate.missing(observation.time_s)
-            return self.last_estimate
-
-        horizon_index = self.inference.horizon_index
-        horizon_s = self.model.config.prediction_horizons_s[horizon_index]
-        mean = output.mean[0, horizon_index].cpu().numpy()
-        std = output.std[0, horizon_index].cpu().numpy()
-        bearing_scale = self.inference.bearing_std_scale
-        rate_scale = self.inference.rate_std_scale
-        if self.inference.uncertainty_calibration is not None:
-            detection_gap_s = (
-                observation.time_s - self._last_valid_detection_arrival_s
-                if self._last_valid_detection_arrival_s is not None
-                else None
+            self.last_estimates = tuple(
+                TargetStateEstimate.missing(observation.time_s)
+                for _ in self.model.config.prediction_horizons_s
             )
-            contextual_scales = (
-                self.inference.uncertainty_calibration.scales_for_observation(
-                    horizon_index,
-                    observation,
-                    detection_gap_s,
+            return self.last_estimates
+
+        detection_gap_s = (
+            observation.time_s - self._last_valid_detection_arrival_s
+            if self._last_valid_detection_arrival_s is not None
+            else None
+        )
+        estimates = []
+        for horizon_index, horizon_s in enumerate(
+            self.model.config.prediction_horizons_s
+        ):
+            mean = output.mean[0, horizon_index].cpu().numpy()
+            std = output.std[0, horizon_index].cpu().numpy()
+            bearing_scale = self.inference.bearing_std_scale
+            rate_scale = self.inference.rate_std_scale
+            if self.inference.uncertainty_calibration is not None and (
+                _calibration_horizon_index is None
+                or horizon_index == _calibration_horizon_index
+            ):
+                contextual_scales = (
+                    self.inference.uncertainty_calibration.scales_for_observation(
+                        horizon_index,
+                        observation,
+                        detection_gap_s,
+                    )
+                )
+                bearing_scale *= contextual_scales[0]
+                rate_scale *= contextual_scales[1]
+            estimate_time_s = observation.time_s + horizon_s
+            estimates.append(
+                TargetStateEstimate(
+                    time_s=estimate_time_s,
+                    measurement_time_s=MaskedScalar(measurement_time_s, True),
+                    body_relative_bearing_rad=MaskedScalar(float(mean[0]), True),
+                    body_relative_rate_rad_s=MaskedScalar(float(mean[1]), True),
+                    bearing_std_rad=MaskedScalar(
+                        float(std[0]) * bearing_scale,
+                        True,
+                    ),
+                    rate_std_rad_s=MaskedScalar(
+                        float(std[1]) * rate_scale,
+                        True,
+                    ),
+                    prediction_horizon_s=MaskedScalar(
+                        estimate_time_s - measurement_time_s,
+                        True,
+                    ),
                 )
             )
-            bearing_scale *= contextual_scales[0]
-            rate_scale *= contextual_scales[1]
-        estimate_time_s = observation.time_s + horizon_s
-        self.last_estimate = TargetStateEstimate(
-            time_s=estimate_time_s,
-            measurement_time_s=MaskedScalar(measurement_time_s, True),
-            body_relative_bearing_rad=MaskedScalar(float(mean[0]), True),
-            body_relative_rate_rad_s=MaskedScalar(float(mean[1]), True),
-            bearing_std_rad=MaskedScalar(
-                float(std[0]) * bearing_scale,
-                True,
-            ),
-            rate_std_rad_s=MaskedScalar(
-                float(std[1]) * rate_scale,
-                True,
-            ),
-            prediction_horizon_s=MaskedScalar(
-                estimate_time_s - measurement_time_s, True
-            ),
+        self.last_estimates = tuple(estimates)
+        self.last_estimate = self.last_estimates[self.inference.horizon_index]
+        return self.last_estimates
+
+    def update(self, observation: GimbalObservation) -> TargetStateEstimate:
+        self.update_all(
+            observation,
+            _calibration_horizon_index=self.inference.horizon_index,
         )
         return self.last_estimate
 

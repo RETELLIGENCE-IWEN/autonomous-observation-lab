@@ -29,6 +29,7 @@ _TIMELINE = "sim_time"
 _CALIBRATION_TIMELINE = "calibration_axis"
 _REPLICATION_TIMELINE = "training_seed_index"
 _PERFORMANCE_TIMELINE = "comparison_index"
+_ADAPTIVE_TIMELINE = "adaptive_comparison_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -359,6 +360,68 @@ def _performance_verification_blueprint(rrb: Any) -> Any:
                 row_shares=[1.0, 1.0, 2.0, 2.0, 1.0],
             ),
             column_shares=[1.25, 1.75],
+        ),
+        collapse_panels=True,
+    )
+
+
+def _adaptive_position_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/adaptive_position/summary",
+                name="Adaptive position V2 safety-gate result",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/aggregate/p95_error_deg",
+                        name="Fresh aggregate P95 error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/aggregate/command_variation",
+                        name="Fresh aggregate command variation",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/aggregate/loss_of_view_percent",
+                        name="Fresh aggregate loss of view",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/scenario/p95_delta_deg",
+                        name="V2 − fixed P95 by scenario",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/scenario/variation_delta",
+                        name="V2 − fixed variation by scenario",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/scenario/loss_delta_percent",
+                        name="V2 − fixed lost-view points",
+                    ),
+                ),
+                rrb.TimeSeriesView(
+                    origin="/adaptive_position/trace/tracking_deg",
+                    name="Representative target and fixed/V2 gimbal angles",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/adaptive_position/trace/command_deg",
+                    name="Fixed, raw adaptive, and shaped position commands",
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/trace/horizon_s",
+                        name="Requested vs uncertainty-adjusted horizon",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/adaptive_position/trace/trust",
+                        name="Prediction weight and uncertainty ratio",
+                    ),
+                ),
+                row_shares=[0.8, 0.8, 1.1, 1.1, 0.9],
+            ),
+            column_shares=[1.15, 1.85],
         ),
         collapse_panels=True,
     )
@@ -1004,6 +1067,135 @@ def _load_gru_replication_result(path: Path) -> dict[str, Any]:
     ):
         raise ValueError("GRU replication result is missing mode summaries")
     return result
+
+
+def _load_adaptive_position_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_adaptive_position_v2_protocol_v1":
+        raise ValueError("unsupported adaptive-position V2 result")
+    validation = result.get("validation")
+    test = result.get("test")
+    if not isinstance(validation, dict) or not isinstance(test, dict):
+        raise ValueError("adaptive-position result is missing protocol splits")
+    if not test.get("opened", False):
+        raise ValueError("adaptive-position fresh test was not opened")
+    trace = result.get("representative_trace")
+    if not isinstance(trace, dict) or not isinstance(trace.get("records"), list):
+        raise ValueError("adaptive-position result has no representative trace")
+    return result
+
+
+def _adaptive_position_markdown(result: dict[str, Any]) -> str:
+    validation = result["validation"]
+    test = result["test"]
+    fixed = test["fixed_summary"]
+    candidate = test["v2_summary"]
+    gate = test["acceptance_gate"]
+    selected = validation["selected_candidate"]
+    training_seed_count = len(
+        result.get("training_seeds", gate["per_training_seed_core_checks"])
+    )
+    verdict = "PASS" if gate["passed"] else "REJECT"
+    recommendation = test["recommendation"].replace("_", " ")
+    lines = [
+        "# Adaptive predictive position V2",
+        "",
+        f"**Fresh safety gate: {verdict}.** Recommendation: **{recommendation}**.",
+        "",
+        f"Candidate `{selected}` was selected across {training_seed_count} GRU "
+        f"initializations on {validation['variant_count_per_training_seed']} "
+        "recorded validation worlds per seed. Only then was the disjoint fresh "
+        f"block opened: seeds {', '.join(str(seed) for seed in test['world_seeds'])}.",
+        "",
+        "## Fresh aggregate result",
+        "",
+        "| Metric | Fixed horizon | Adaptive V2 | V2 − fixed |",
+        "|---|---:|---:|---:|",
+    ]
+    specifications = (
+        ("mean_absolute_error_deg", "Mean error", 1.0, "°"),
+        ("p95_absolute_error_deg", "P95 error", 1.0, "°"),
+        ("loss_of_view_fraction", "Loss of view", 100.0, "%"),
+        ("command_variation_per_s", "Command variation/s", 1.0, ""),
+        ("mean_control_cost", "Control cost", 1.0, ""),
+    )
+    for metric, label, scale, unit in specifications:
+        fixed_value = scale * fixed[metric]
+        candidate_value = scale * candidate[metric]
+        lines.append(
+            f"| {label} | {fixed_value:.3f}{unit} | "
+            f"{candidate_value:.3f}{unit} | "
+            f"{candidate_value - fixed_value:+.3f}{unit} |"
+        )
+    lines.extend(
+        (
+            "",
+            "## Gate audit",
+            "",
+            f"- Command variation falls by "
+            f"{100.0 * gate['command_variation_reduction_fraction']:.1f}%.",
+            f"- Unrecovered-event delta: {gate['unrecovered_event_delta']:+d}.",
+            f"- Seed-level core checks: "
+            f"{sum(gate['per_training_seed_core_checks'].values())}/"
+            f"{len(gate['per_training_seed_core_checks'])} pass.",
+            f"- Scenario tail/visibility checks: "
+            f"{sum(gate['per_scenario_tail_visibility_checks'].values())}/"
+            f"{len(gate['per_scenario_tail_visibility_checks'])} pass.",
+            "",
+        )
+    )
+    failed = [
+        name
+        for name, passed in gate["aggregate_checks"].items()
+        if not passed
+    ]
+    if failed:
+        lines.extend(
+            (
+                "The aggregate gate fails only on: "
+                + ", ".join(name.replace("_", " ") for name in failed)
+                + ". The extra terminal loss occurs under aggressive motion, "
+                "so the fixed-horizon controller remains the accepted default. "
+                "No threshold was relaxed after observing the fresh block.",
+                "",
+            )
+        )
+    lines.extend(
+        (
+            "## Scenario deltas",
+            "",
+            "| Index | Scenario | P95 | Lost view | Command variation |",
+            "|---:|---|---:|---:|---:|",
+        )
+    )
+    for index, (name, scenario) in enumerate(test["by_scenario"].items()):
+        deltas = scenario["deltas"]
+        lines.append(
+            f"| {index} | {name.replace('_', ' ')} | "
+            f"{deltas['p95_absolute_error_deg']:+.3f}° | "
+            f"{100.0 * deltas['loss_of_view_fraction']:+.3f} pp | "
+            f"{deltas['command_variation_per_s']:+.3f}/s |"
+        )
+    lines.append("")
+    diagnostics = test["adapter_diagnostics"]
+    trace = result["representative_trace"]
+    lines.extend(
+        (
+            "## Adapter behavior",
+            "",
+            f"Mean requested horizon: "
+            f"{1000.0 * diagnostics['mean_requested_horizon_s']:.0f} ms; "
+            f"effective horizon: "
+            f"{1000.0 * diagnostics['mean_effective_horizon_s']:.0f} ms; "
+            f"prediction weight: {diagnostics['mean_prediction_weight']:.3f}.",
+            "",
+            f"The trace panels replay `{trace['scenario_name']}` at world seed "
+            f"{trace['world_seed']} with GRU training seed "
+            f"{trace['training_seed']}. They expose the raw target, shaped "
+            "command, adaptive horizon, and uncertainty trust directly.",
+        )
+    )
+    return "\n".join(lines)
 
 
 def _paired_performance_records(
@@ -1821,6 +2013,168 @@ def write_gru_replication_dashboard(
                 )
 
 
+def write_adaptive_position_dashboard(
+    result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show the fresh fixed-horizon/adaptive-position comparison."""
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _adaptive_position_blueprint(rrb)
+    rr.init(f"{_APP_ID}_adaptive_position_v2")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "adaptive_position/summary",
+        rr.TextDocument(
+            _adaptive_position_markdown(result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    line_styles = (
+        ("fixed", [50, 150, 255], "fixed horizon"),
+        ("v2", [215, 90, 255], "adaptive V2"),
+    )
+    for metric in (
+        "p95_error_deg",
+        "command_variation",
+        "loss_of_view_percent",
+    ):
+        for suffix, color, label in line_styles:
+            rr.log(
+                f"adaptive_position/aggregate/{metric}/{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+    for metric in (
+        "p95_delta_deg",
+        "variation_delta",
+        "loss_delta_percent",
+    ):
+        rr.log(
+            f"adaptive_position/scenario/{metric}/zero",
+            rr.SeriesLines(colors=[130, 130, 140], names="no change"),
+            static=True,
+        )
+        rr.log(
+            f"adaptive_position/scenario/{metric}/v2_minus_fixed",
+            rr.SeriesLines(
+                colors=[215, 90, 255],
+                names="adaptive V2 - fixed horizon",
+            ),
+            static=True,
+        )
+    trace_styles = {
+        "tracking_deg": (
+            ("target", [255, 200, 40], "target bearing"),
+            ("fixed", [50, 150, 255], "fixed-horizon gimbal"),
+            ("v2", [215, 90, 255], "adaptive-V2 gimbal"),
+        ),
+        "command_deg": (
+            ("fixed", [50, 150, 255], "fixed command"),
+            ("raw_v2", [255, 130, 40], "raw adaptive target"),
+            ("shaped_v2", [215, 90, 255], "shaped adaptive command"),
+        ),
+        "horizon_s": (
+            ("requested", [70, 190, 255], "actuator-arrival horizon"),
+            ("effective", [215, 90, 255], "uncertainty-adjusted horizon"),
+        ),
+        "trust": (
+            ("prediction_weight", [70, 210, 130], "prediction weight"),
+            ("uncertainty_ratio", [255, 150, 40], "forecast/current std ratio"),
+        ),
+    }
+    for panel, styles in trace_styles.items():
+        for suffix, color, label in styles:
+            rr.log(
+                f"adaptive_position/trace/{panel}/{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+
+    test = result["test"]
+    fixed = test["fixed_summary"]
+    candidate = test["v2_summary"]
+    rr.set_time(_ADAPTIVE_TIMELINE, sequence=0)
+    for suffix, summary in (("fixed", fixed), ("v2", candidate)):
+        rr.log(
+            f"adaptive_position/aggregate/p95_error_deg/{suffix}",
+            rr.Scalars(summary["p95_absolute_error_deg"]),
+        )
+        rr.log(
+            f"adaptive_position/aggregate/command_variation/{suffix}",
+            rr.Scalars(summary["command_variation_per_s"]),
+        )
+        rr.log(
+            f"adaptive_position/aggregate/loss_of_view_percent/{suffix}",
+            rr.Scalars(100.0 * summary["loss_of_view_fraction"]),
+        )
+
+    for index, scenario in enumerate(test["by_scenario"].values()):
+        rr.set_time(_ADAPTIVE_TIMELINE, sequence=index)
+        deltas = scenario["deltas"]
+        for path, value in (
+            ("p95_delta_deg", deltas["p95_absolute_error_deg"]),
+            ("variation_delta", deltas["command_variation_per_s"]),
+            ("loss_delta_percent", 100.0 * deltas["loss_of_view_fraction"]),
+        ):
+            root = f"adaptive_position/scenario/{path}"
+            rr.log(f"{root}/zero", rr.Scalars(0.0))
+            rr.log(f"{root}/v2_minus_fixed", rr.Scalars(value))
+
+    for record in result["representative_trace"]["records"]:
+        rr.set_time(_TIMELINE, duration=record["time_s"])
+        for suffix, key in (
+            ("target", "target_body_bearing_deg"),
+            ("fixed", "fixed_gimbal_angle_deg"),
+            ("v2", "v2_gimbal_angle_deg"),
+        ):
+            rr.log(
+                f"adaptive_position/trace/tracking_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("fixed", "fixed_command_deg"),
+            ("raw_v2", "v2_raw_target_deg"),
+            ("shaped_v2", "v2_shaped_command_deg"),
+        ):
+            rr.log(
+                f"adaptive_position/trace/command_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("requested", "requested_horizon_s"),
+            ("effective", "effective_horizon_s"),
+        ):
+            rr.log(
+                f"adaptive_position/trace/horizon_s/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("prediction_weight", "prediction_weight"),
+            ("uncertainty_ratio", "uncertainty_ratio"),
+        ):
+            rr.log(
+                f"adaptive_position/trace/trust/{suffix}",
+                rr.Scalars(record[key]),
+            )
+
+
 def write_performance_verification_dashboard(
     control_result: dict[str, Any],
     replication_result: dict[str, Any],
@@ -2048,12 +2402,20 @@ def _parser() -> argparse.ArgumentParser:
             "calibration",
             "replication",
             "performance",
+            "adaptive-position",
         ),
         default="causality",
         help=(
             "select a causality, controller, stress, recovery, calibration, "
-            "training-seed replication, or performance-verification dashboard"
+            "training-seed replication, performance-verification, or adaptive "
+            "position V2 dashboard"
         ),
+    )
+    parser.add_argument(
+        "--adaptive-position-results",
+        type=Path,
+        default=Path("artifacts/gimbal_adaptive_position_v2_fresh.json"),
+        help="fresh adaptive-position V2 protocol result JSON",
     )
     parser.add_argument(
         "--performance-results",
@@ -2124,7 +2486,14 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "performance":
+    if args.demo == "adaptive-position":
+        result = _load_adaptive_position_result(args.adaptive_position_results)
+        write_adaptive_position_dashboard(
+            result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "performance":
         control_result = _load_gru_control_result(args.performance_results)
         replication_result = _load_gru_replication_result(
             args.replication_results

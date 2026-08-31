@@ -62,6 +62,21 @@ class TargetStateEstimator(Protocol):
     def update(self, observation: GimbalObservation) -> TargetStateEstimate: ...
 
 
+class MultiHorizonTargetStateEstimator(Protocol):
+    """Estimator exposing simultaneous causal forecasts from one update."""
+
+    name: str
+    prediction_horizons_s: tuple[float, ...]
+    last_estimate: TargetStateEstimate
+    last_estimates: tuple[TargetStateEstimate, ...]
+
+    def reset(self) -> None: ...
+
+    def update_all(
+        self, observation: GimbalObservation
+    ) -> tuple[TargetStateEstimate, ...]: ...
+
+
 @dataclass(frozen=True)
 class ConstantVelocityEstimatorConfig:
     selected_axis_fov_rad: float

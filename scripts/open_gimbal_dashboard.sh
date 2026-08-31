@@ -10,7 +10,7 @@ if (( $# > 0 )); then
 fi
 
 case "${dashboard}" in
-    closed-loop|causality|benchmark-suite|recovery|calibration|replication|performance)
+    closed-loop|causality|benchmark-suite|recovery|calibration|replication|performance|adaptive-position)
         ;;
     *)
         dashboard="closed-loop"
