@@ -33,6 +33,7 @@ _PERFORMANCE_TIMELINE = "comparison_index"
 _ADAPTIVE_TIMELINE = "adaptive_comparison_index"
 _VISIBILITY_RISK_TIMELINE = "visibility_risk_comparison_index"
 _FAILURE_ATLAS_TIMELINE = "failure_atlas_index"
+_PREDICTIVE_POSITION_TIMELINE = "predictive_position_comparison_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -604,6 +605,90 @@ def _failure_atlas_blueprint(rrb: Any) -> Any:
                     name="Loss-event attribution by cause index",
                 ),
                 row_shares=[1.0, 1.0, 1.0, 0.8],
+            ),
+            column_shares=[1.15, 1.85],
+        ),
+        collapse_panels=True,
+    )
+
+
+def _predictive_position_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/predictive_position/summary",
+                name="Constrained predictive position V3/V3.1 verdict",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/predictive_position/aggregate/mean_error_deg",
+                        name="Confirmation mean error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/predictive_position/aggregate/p95_error_deg",
+                        name="Confirmation P95 error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/aggregate/"
+                            "avoidable_loss_percent"
+                        ),
+                        name="Mechanically avoidable loss",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/aggregate/command_variation"
+                        ),
+                        name="Position-command variation",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/scenario/mean_delta_deg"
+                        ),
+                        name="V3 − V2.1 mean error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/scenario/p95_delta_deg"
+                        ),
+                        name="V3 − V2.1 P95 error",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/scenario/"
+                            "avoidable_loss_delta_percent"
+                        ),
+                        name="V3 − V2.1 avoidable-loss points",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/predictive_position/scenario/variation_delta"
+                        ),
+                        name="V3 − V2.1 command variation",
+                    ),
+                ),
+                rrb.TimeSeriesView(
+                    origin="/predictive_position/trace/tracking_deg",
+                    name="Representative target and V2.1/V3 gimbal angles",
+                ),
+                rrb.TimeSeriesView(
+                    origin="/predictive_position/trace/command_deg",
+                    name="V2.1, V3, and fallback position commands",
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/predictive_position/trace/activation",
+                        name="Optimizer activation and score",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/predictive_position/trace/prediction",
+                        name="Predicted terminal error / camera half-FOV",
+                    ),
+                ),
+                row_shares=[0.8, 0.8, 1.1, 1.1, 0.9],
             ),
             column_shares=[1.15, 1.85],
         ),
@@ -1443,6 +1528,129 @@ def _load_visibility_risk_result(path: Path) -> dict[str, Any]:
     if not isinstance(trace, dict) or not isinstance(trace.get("records"), list):
         raise ValueError("visibility-risk result has no representative trace")
     return result
+
+
+def _load_predictive_position_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != (
+        "gimbal_constrained_predictive_position_v3_protocol_v1"
+    ):
+        raise ValueError("unsupported constrained predictive-position result")
+    confirmation = result.get("confirmation")
+    if not isinstance(confirmation, dict) or not confirmation.get("opened"):
+        raise ValueError("predictive-position confirmation was not opened")
+    trace = result.get("representative_trace")
+    if not isinstance(trace, dict) or not isinstance(trace.get("records"), list):
+        raise ValueError("predictive-position result has no representative trace")
+    return result
+
+
+def _load_predictive_position_v31_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != (
+        "gimbal_dual_risk_predictive_position_v31_protocol_v1"
+    ):
+        raise ValueError("unsupported dual-risk V3.1 result")
+    if not isinstance(result.get("development"), dict):
+        raise ValueError("dual-risk V3.1 result has no development block")
+    return result
+
+
+def _predictive_position_markdown(
+    result: dict[str, Any],
+    v31_result: dict[str, Any] | None,
+) -> str:
+    confirmation = result["confirmation"]
+    reference = confirmation["visibility_risk_v21"]["tracked_summary"]
+    candidate = confirmation["predictive_position_v3"]["tracked_summary"]
+    gate = confirmation["acceptance_gate"]
+    comparison = gate["comparison"]
+    lines = [
+        "# Constrained predictive position V3",
+        "",
+        f"**Untouched confirmation gate: "
+        f"{'PASS' if gate['passed'] else 'REJECT'}.** Recommendation: "
+        f"**{confirmation['recommendation'].replace('_', ' ')}**.",
+        "",
+        f"Candidate `{confirmation['selected_candidate']}` was selected on "
+        f"world seeds {result['development']['world_seeds'][0]}–"
+        f"{result['development']['world_seeds'][-1]}, then evaluated once on "
+        f"seeds {confirmation['world_seeds'][0]}–"
+        f"{confirmation['world_seeds'][-1]}. No threshold was relaxed after "
+        "confirmation.",
+        "",
+        "## Confirmation versus accepted V2.1",
+        "",
+        "| Metric | V2.1 | V3 | V3 − V2.1 |",
+        "|---|---:|---:|---:|",
+    ]
+    for key, label, scale, unit in (
+        ("mean_absolute_error_deg", "Mean error", 1.0, "°"),
+        ("p95_absolute_error_deg", "P95 error", 1.0, "°"),
+        ("loss_of_view_fraction", "Loss of view", 100.0, "%"),
+        ("avoidable_loss_fraction", "Avoidable loss", 100.0, "%"),
+        ("command_variation_per_s", "Command variation/s", 1.0, ""),
+        (
+            "actuator_acceleration_rms_normalized",
+            "Actuator acceleration RMS",
+            1.0,
+            "",
+        ),
+        ("unrecovered_loss_events", "Unrecovered events", 1.0, ""),
+    ):
+        left = scale * reference[key]
+        right = scale * candidate[key]
+        lines.append(
+            f"| {label} | {left:.3f}{unit} | {right:.3f}{unit} | "
+            f"{right - left:+.3f}{unit} |"
+        )
+    failed = [name for name, passed in gate["checks"].items() if not passed]
+    lines.extend(
+        (
+            "",
+            "## Gate audit",
+            "",
+            f"- Avoidable loss reduction: "
+            f"{100.0 * comparison['avoidable_loss_reduction_fraction']:.1f}%.",
+            f"- Command-variation reduction: "
+            f"{100.0 * comparison['command_variation_reduction_fraction']:.1f}%.",
+            f"- Failed aggregate checks: "
+            f"{', '.join(name.replace('_', ' ') for name in failed)}.",
+            f"- Optimizer active on "
+            f"{100.0 * confirmation['diagnostics']['optimizer_active_fraction']:.1f}% "
+            "of valid steps.",
+            "",
+            "V3 improves aggressive-motion visibility and smoothness, but "
+            "regresses ordinary tracking. It therefore remains a rejected "
+            "research controller; V2.1 stays the deployment candidate.",
+        )
+    )
+    if v31_result is not None:
+        development = v31_result["development"]
+        lines.extend(
+            (
+                "",
+                "## Corrective V3.1 development",
+                "",
+                "V3.1 required both predicted rate-capacity risk and "
+                "visibility risk before optimization. No candidate passed "
+                f"development ({development['eligible_candidate_count']}/"
+                f"{len(development['candidates'])}); the fresh 86k "
+                "confirmation block remains unopened.",
+                "",
+                "| Candidate | Avoidable-loss change | Variation reduction | Active |",
+                "|---|---:|---:|---:|",
+            )
+        )
+        for item in development["candidates"]:
+            comparison = item["gate"]["comparison"]
+            lines.append(
+                f"| {item['name']} | "
+                f"{-100.0 * comparison['avoidable_loss_reduction_fraction']:+.2f}% | "
+                f"{100.0 * comparison['command_variation_reduction_fraction']:.2f}% | "
+                f"{100.0 * item['diagnostics']['optimizer_active_fraction']:.2f}% |"
+            )
+    return "\n".join(lines)
 
 
 def _visibility_risk_markdown(result: dict[str, Any]) -> str:
@@ -2958,6 +3166,182 @@ def write_visibility_risk_dashboard(
             )
 
 
+def write_predictive_position_dashboard(
+    result: dict[str, Any],
+    v31_result: dict[str, Any] | None = None,
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show the V2.1/V3 confirmation and V3.1 development audit."""
+
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _predictive_position_blueprint(rrb)
+    rr.init(f"{_APP_ID}_predictive_position_v3")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "predictive_position/summary",
+        rr.TextDocument(
+            _predictive_position_markdown(result, v31_result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    styles = (
+        ("fixed", [50, 150, 255], "fixed horizon"),
+        ("v21", [70, 210, 130], "visibility-risk V2.1"),
+        ("v3", [255, 120, 70], "constrained V3 (rejected)"),
+    )
+    for metric in (
+        "mean_error_deg",
+        "p95_error_deg",
+        "avoidable_loss_percent",
+        "command_variation",
+    ):
+        for suffix, color, label in styles:
+            rr.log(
+                f"predictive_position/aggregate/{metric}/{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+    for metric in (
+        "mean_delta_deg",
+        "p95_delta_deg",
+        "avoidable_loss_delta_percent",
+        "variation_delta",
+    ):
+        root = f"predictive_position/scenario/{metric}"
+        rr.log(
+            f"{root}/zero",
+            rr.SeriesLines(colors=[130, 130, 140], names="no change"),
+            static=True,
+        )
+        rr.log(
+            f"{root}/v3_minus_v21",
+            rr.SeriesLines(
+                colors=[255, 120, 70],
+                names="constrained V3 - V2.1",
+            ),
+            static=True,
+        )
+    for panel, panel_styles in {
+        "tracking_deg": (
+            ("target", [255, 200, 40], "target bearing"),
+            ("v21", [70, 210, 130], "V2.1 gimbal"),
+            ("v3", [255, 120, 70], "V3 gimbal"),
+        ),
+        "command_deg": (
+            ("v21", [70, 210, 130], "V2.1 command"),
+            ("v3", [255, 120, 70], "V3 command"),
+            ("fallback", [100, 170, 255], "V3 fallback target"),
+        ),
+        "activation": (
+            ("score", [255, 120, 70], "activation score"),
+            ("active", [255, 220, 70], "optimizer active"),
+        ),
+        "prediction": (
+            ("terminal_error", [215, 90, 255], "terminal error / half-FOV"),
+        ),
+    }.items():
+        for suffix, color, label in panel_styles:
+            rr.log(
+                f"predictive_position/trace/{panel}/{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+
+    confirmation = result["confirmation"]
+    rr.set_time(_PREDICTIVE_POSITION_TIMELINE, sequence=0)
+    for suffix, block in (
+        ("fixed", confirmation["fixed_horizon"]),
+        ("v21", confirmation["visibility_risk_v21"]),
+        ("v3", confirmation["predictive_position_v3"]),
+    ):
+        summary = block["tracked_summary"]
+        for path, key, scale in (
+            ("mean_error_deg", "mean_absolute_error_deg", 1.0),
+            ("p95_error_deg", "p95_absolute_error_deg", 1.0),
+            ("avoidable_loss_percent", "avoidable_loss_fraction", 100.0),
+            ("command_variation", "command_variation_per_s", 1.0),
+        ):
+            rr.log(
+                f"predictive_position/aggregate/{path}/{suffix}",
+                rr.Scalars(scale * summary[key]),
+            )
+
+    for index, name in enumerate(confirmation["scenario_names"]):
+        rr.set_time(_PREDICTIVE_POSITION_TIMELINE, sequence=index)
+        reference = confirmation["visibility_risk_v21"]["by_scenario"][name][
+            "summary"
+        ]
+        candidate = confirmation["predictive_position_v3"]["by_scenario"][
+            name
+        ]["summary"]
+        for path, key, scale in (
+            ("mean_delta_deg", "mean_absolute_error_deg", 1.0),
+            ("p95_delta_deg", "p95_absolute_error_deg", 1.0),
+            (
+                "avoidable_loss_delta_percent",
+                "avoidable_loss_fraction",
+                100.0,
+            ),
+            ("variation_delta", "command_variation_per_s", 1.0),
+        ):
+            root = f"predictive_position/scenario/{path}"
+            rr.log(f"{root}/zero", rr.Scalars(0.0))
+            rr.log(
+                f"{root}/v3_minus_v21",
+                rr.Scalars(scale * (candidate[key] - reference[key])),
+            )
+
+    for record in result["representative_trace"]["records"]:
+        rr.set_time(_TIMELINE, duration=record["time_s"])
+        for suffix, key in (
+            ("target", "target_body_bearing_deg"),
+            ("v21", "v21_gimbal_angle_deg"),
+            ("v3", "v3_gimbal_angle_deg"),
+        ):
+            rr.log(
+                f"predictive_position/trace/tracking_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        for suffix, key in (
+            ("v21", "v21_command_deg"),
+            ("v3", "v3_command_deg"),
+            ("fallback", "v3_fallback_target_deg"),
+        ):
+            rr.log(
+                f"predictive_position/trace/command_deg/{suffix}",
+                rr.Scalars(record[key]),
+            )
+        rr.log(
+            "predictive_position/trace/activation/score",
+            rr.Scalars(record["activation_score"]),
+        )
+        rr.log(
+            "predictive_position/trace/activation/active",
+            rr.Scalars(float(record["optimizer_active"])),
+        )
+        rr.log(
+            "predictive_position/trace/prediction/terminal_error",
+            rr.Scalars(record["predicted_terminal_error_fov_fraction"]),
+        )
+
+
 def write_failure_atlas_dashboard(
     result: dict[str, Any],
     *,
@@ -3346,6 +3730,7 @@ def _parser() -> argparse.ArgumentParser:
             "performance",
             "adaptive-position",
             "visibility-risk",
+            "predictive-position",
             "failure-atlas",
             "controller-arena",
         ),
@@ -3353,7 +3738,8 @@ def _parser() -> argparse.ArgumentParser:
         help=(
             "select a causality, controller, stress, recovery, calibration, "
             "training-seed replication, performance-verification, or adaptive "
-            "position V2, visibility-risk V2.1, failure-atlas, or "
+            "position V2, visibility-risk V2.1, predictive-position V3, "
+            "failure-atlas, or "
             "controller-arena dashboard"
         ),
     )
@@ -3374,6 +3760,18 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("artifacts/gimbal_position_failure_atlas.json"),
         help="absolute performance-contract and failure-atlas result JSON",
+    )
+    parser.add_argument(
+        "--predictive-position-results",
+        type=Path,
+        default=Path("artifacts/gimbal_predictive_position_v3.json"),
+        help="constrained predictive-position V3 confirmation result JSON",
+    )
+    parser.add_argument(
+        "--predictive-position-v31-results",
+        type=Path,
+        default=Path("artifacts/gimbal_predictive_position_v31.json"),
+        help="optional dual-risk V3.1 development result JSON",
     )
     parser.add_argument(
         "--arena-scenario",
@@ -3486,6 +3884,23 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = _load_failure_atlas_result(args.failure_atlas_results)
         write_failure_atlas_dashboard(
             result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "predictive-position":
+        result = _load_predictive_position_result(
+            args.predictive_position_results
+        )
+        v31_result = (
+            _load_predictive_position_v31_result(
+                args.predictive_position_v31_results
+            )
+            if args.predictive_position_v31_results.exists()
+            else None
+        )
+        write_predictive_position_dashboard(
+            result,
+            v31_result,
             output=args.output,
             spawn=spawn,
         )

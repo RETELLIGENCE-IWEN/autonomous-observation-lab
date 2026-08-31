@@ -818,6 +818,932 @@ class AdaptiveTargetStatePositionController:
         )
 
 
+@dataclass(frozen=True)
+class PredictivePositionOptimizerConfig:
+    """Hardware-relative objective and search settings for position V3."""
+
+    candidate_grid_size: int = 31
+    servo_simulation_step_s: float = 0.005
+    maximum_optimization_horizon_s: float = 0.10
+    forecast_full_trust_std_ratio: float = 1.0
+    forecast_zero_trust_std_ratio: float = 4.0
+    minimum_forecast_weight: float = 0.50
+    tracking_weight: float = 1.0
+    terminal_tracking_weight: float = 3.0
+    rate_matching_weight: float = 0.35
+    visibility_weight: float = 8.0
+    visibility_onset_fov_fraction: float = 0.70
+    uncertainty_sigma: float = 0.5
+    command_change_weight: float = 0.03
+    command_rate_change_weight: float = 0.005
+    travel_margin_weight: float = 0.01
+    travel_margin_fraction: float = 0.92
+    activation_rate_onset_fraction: float = 0.65
+    activation_rate_full_fraction: float = 1.00
+    activation_visibility_onset_fraction: float = 0.70
+    activation_visibility_full_fraction: float = 0.95
+    activation_gate_mode: str = "maximum"
+    require_command_effect_within_horizon: bool = True
+    command_effect_response_fraction: float = 0.25
+    minimum_optimizer_position_gain_s_inv: float = 4.0
+    fallback_arrival_time_scale: float = 0.85
+    fallback_risk_horizon_boost_s: float = 0.125
+    fallback_visibility_onset_fraction: float = 0.55
+    fallback_visibility_full_fraction: float = 0.85
+    fallback_uncertainty_sigma: float = 1.0
+    setpoint_rate_limit_scale: float = 6.0
+    setpoint_acceleration_limit_scale: float = 12.0
+    setpoint_jerk_rise_time_s: float = 0.015
+
+    def __post_init__(self) -> None:
+        if self.candidate_grid_size < 3 or self.candidate_grid_size % 2 == 0:
+            raise ValueError("candidate_grid_size must be odd and at least three")
+        for name in (
+            "servo_simulation_step_s",
+            "maximum_optimization_horizon_s",
+            "forecast_full_trust_std_ratio",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
+        if (
+            not math.isfinite(self.forecast_zero_trust_std_ratio)
+            or self.forecast_zero_trust_std_ratio
+            <= self.forecast_full_trust_std_ratio
+        ):
+            raise ValueError(
+                "forecast_zero_trust_std_ratio must exceed full trust"
+            )
+        if not 0.0 <= self.minimum_forecast_weight <= 1.0:
+            raise ValueError("minimum_forecast_weight must be in [0, 1]")
+        for name in (
+            "tracking_weight",
+            "terminal_tracking_weight",
+            "rate_matching_weight",
+            "visibility_weight",
+            "uncertainty_sigma",
+            "command_change_weight",
+            "command_rate_change_weight",
+            "travel_margin_weight",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if not 0.0 <= self.visibility_onset_fov_fraction < 1.0:
+            raise ValueError(
+                "visibility_onset_fov_fraction must be in [0, 1)"
+            )
+        if not 0.0 < self.travel_margin_fraction <= 1.0:
+            raise ValueError("travel_margin_fraction must be in (0, 1]")
+        for onset_name, full_name in (
+            (
+                "activation_rate_onset_fraction",
+                "activation_rate_full_fraction",
+            ),
+            (
+                "activation_visibility_onset_fraction",
+                "activation_visibility_full_fraction",
+            ),
+            (
+                "fallback_visibility_onset_fraction",
+                "fallback_visibility_full_fraction",
+            ),
+        ):
+            onset = getattr(self, onset_name)
+            full = getattr(self, full_name)
+            if not math.isfinite(onset) or onset < 0.0:
+                raise ValueError(f"{onset_name} must be finite and non-negative")
+            if not math.isfinite(full) or full <= onset:
+                raise ValueError(f"{full_name} must exceed its onset")
+        if not isinstance(self.require_command_effect_within_horizon, bool):
+            raise ValueError(
+                "require_command_effect_within_horizon must be boolean"
+            )
+        if self.activation_gate_mode not in {"maximum", "minimum", "product"}:
+            raise ValueError(
+                "activation_gate_mode must be maximum, minimum, or product"
+            )
+        for name in (
+            "fallback_arrival_time_scale",
+            "fallback_risk_horizon_boost_s",
+            "fallback_uncertainty_sigma",
+            "command_effect_response_fraction",
+            "minimum_optimizer_position_gain_s_inv",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        for name in (
+            "setpoint_rate_limit_scale",
+            "setpoint_acceleration_limit_scale",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
+        if (
+            not math.isfinite(self.setpoint_jerk_rise_time_s)
+            or self.setpoint_jerk_rise_time_s <= 0.0
+        ):
+            raise ValueError(
+                "setpoint_jerk_rise_time_s must be finite and positive"
+            )
+
+
+@dataclass(frozen=True)
+class PredictivePositionOptimizerDiagnostics:
+    valid: bool
+    selected_command_angle_rad: float
+    raw_candidate_angle_rad: float
+    selected_objective: float
+    predicted_terminal_error_fov_fraction: float
+    predicted_peak_error_fov_fraction: float
+    predicted_terminal_rate_error_normalized: float
+    predicted_rate_utilization: float
+    predicted_acceleration_utilization: float
+    setpoint_rate_rad_s: float
+    setpoint_acceleration_rad_s2: float
+    rate_limited: bool
+    acceleration_limited: bool
+    jerk_limited: bool
+    evaluated_candidate_count: int
+    optimizer_active: bool
+    activation_score: float
+    activation_rate_score: float
+    activation_visibility_score: float
+    fallback_target_angle_rad: float
+    optimization_horizon_s: float
+
+    def to_dict(self) -> dict[str, float | bool]:
+        return asdict(self)
+
+
+@dataclass
+class ConstrainedPredictivePositionController:
+    """Short-horizon position optimizer over configurable servo dynamics.
+
+    Each candidate is first passed through a configurable setpoint trajectory
+    constraint, then evaluated by simulating the actual position-loop plant.
+    Issued command history is retained so configured command latency is
+    represented without exposing simulator-only state to the controller.
+    """
+
+    estimator: MultiHorizonTargetStateEstimator
+    servo: ServoConfig
+    selected_axis_fov_rad: float
+    config: PredictivePositionOptimizerConfig = (
+        PredictivePositionOptimizerConfig()
+    )
+    name: str = "constrained_predictive_position_v3"
+    last_estimate: TargetStateEstimate = field(init=False, repr=False)
+    last_diagnostics: PredictivePositionOptimizerDiagnostics = field(
+        init=False,
+        repr=False,
+    )
+    _initial_command_angle_rad: float | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _last_command_angle_rad: float | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _setpoint_rate_rad_s: float = field(init=False, default=0.0, repr=False)
+    _setpoint_acceleration_rad_s2: float = field(
+        init=False,
+        default=0.0,
+        repr=False,
+    )
+    _command_history: list[tuple[float, float]] = field(
+        init=False,
+        default_factory=list,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        horizons = self.estimator.prediction_horizons_s
+        if not horizons or horizons[0] != 0.0:
+            raise ValueError("V3 prediction horizons must start at zero")
+        if any(
+            right <= left for left, right in zip(horizons, horizons[1:])
+        ):
+            raise ValueError("V3 prediction horizons must be strictly increasing")
+        if not math.isfinite(self.selected_axis_fov_rad) or (
+            self.selected_axis_fov_rad <= 0.0
+        ):
+            raise ValueError("selected_axis_fov_rad must be finite and positive")
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+        self.last_diagnostics = self._missing_diagnostics()
+
+    def _missing_diagnostics(self) -> PredictivePositionOptimizerDiagnostics:
+        angle = self._last_command_angle_rad or 0.0
+        return PredictivePositionOptimizerDiagnostics(
+            valid=False,
+            selected_command_angle_rad=angle,
+            raw_candidate_angle_rad=angle,
+            selected_objective=0.0,
+            predicted_terminal_error_fov_fraction=0.0,
+            predicted_peak_error_fov_fraction=0.0,
+            predicted_terminal_rate_error_normalized=0.0,
+            predicted_rate_utilization=0.0,
+            predicted_acceleration_utilization=0.0,
+            setpoint_rate_rad_s=0.0,
+            setpoint_acceleration_rad_s2=0.0,
+            rate_limited=False,
+            acceleration_limited=False,
+            jerk_limited=False,
+            evaluated_candidate_count=0,
+            optimizer_active=False,
+            activation_score=0.0,
+            activation_rate_score=0.0,
+            activation_visibility_score=0.0,
+            fallback_target_angle_rad=angle,
+            optimization_horizon_s=0.0,
+        )
+
+    def reset(self) -> None:
+        self.estimator.reset()
+        self.last_estimate = TargetStateEstimate.missing(0.0)
+        self._initial_command_angle_rad = None
+        self._last_command_angle_rad = None
+        self._setpoint_rate_rad_s = 0.0
+        self._setpoint_acceleration_rad_s2 = 0.0
+        self._command_history.clear()
+        self.last_diagnostics = self._missing_diagnostics()
+
+    @staticmethod
+    def _move_toward(value: float, target: float, maximum_delta: float) -> float:
+        return value + float(
+            np.clip(target - value, -maximum_delta, maximum_delta)
+        )
+
+    def _shape_candidate(
+        self,
+        raw_target_angle_rad: float,
+        dt_s: float,
+    ) -> tuple[float, float, float, bool, bool, bool]:
+        assert self._last_command_angle_rad is not None
+        target = float(
+            np.clip(
+                raw_target_angle_rad,
+                self.servo.min_angle_rad,
+                self.servo.max_angle_rad,
+            )
+        )
+        if dt_s <= 0.0:
+            return (
+                self._last_command_angle_rad,
+                0.0,
+                0.0,
+                False,
+                False,
+                False,
+            )
+        max_rate = (
+            self.config.setpoint_rate_limit_scale * self.servo.max_rate_rad_s
+        )
+        max_acceleration = (
+            self.config.setpoint_acceleration_limit_scale
+            * self.servo.max_acceleration_rad_s2
+        )
+        max_jerk = max_acceleration / self.config.setpoint_jerk_rise_time_s
+        error = target - self._last_command_angle_rad
+        stopping_speed = math.sqrt(2.0 * max_acceleration * abs(error))
+        desired_rate = (
+            math.copysign(min(max_rate, stopping_speed), error)
+            if abs(error) > 1e-12
+            else 0.0
+        )
+        raw_acceleration = (desired_rate - self._setpoint_rate_rad_s) / dt_s
+        desired_acceleration = float(
+            np.clip(raw_acceleration, -max_acceleration, max_acceleration)
+        )
+        acceleration = self._move_toward(
+            self._setpoint_acceleration_rad_s2,
+            desired_acceleration,
+            max_jerk * dt_s,
+        )
+        rate = float(
+            np.clip(
+                self._setpoint_rate_rad_s + acceleration * dt_s,
+                -max_rate,
+                max_rate,
+            )
+        )
+        step = rate * dt_s
+        if step * error > 0.0 and abs(step) >= abs(error):
+            command = target
+            rate = 0.0
+            acceleration = 0.0
+        else:
+            command = float(
+                np.clip(
+                    self._last_command_angle_rad + step,
+                    self.servo.min_angle_rad,
+                    self.servo.max_angle_rad,
+                )
+            )
+        return (
+            command,
+            rate,
+            acceleration,
+            abs(desired_rate) >= max_rate - 1e-12,
+            abs(raw_acceleration) > max_acceleration + 1e-12,
+            abs(acceleration - desired_acceleration) > 1e-12,
+        )
+
+    def _applied_position_at(
+        self,
+        time_s: float,
+        candidate_issue: tuple[float, float],
+    ) -> float:
+        assert self._initial_command_angle_rad is not None
+        cutoff = time_s - self.servo.command_latency_s
+        selected = self._initial_command_angle_rad
+        for issue_time_s, command_angle_rad in (
+            *self._command_history,
+            candidate_issue,
+        ):
+            if issue_time_s <= cutoff + 1e-12:
+                selected = command_angle_rad
+            else:
+                break
+        physical = selected * self.servo.command_polarity
+        return float(
+            np.clip(
+                physical,
+                self.servo.min_angle_rad,
+                self.servo.max_angle_rad,
+            )
+        )
+
+    def _simulate_candidate(
+        self,
+        command_angle_rad: float,
+        observation: GimbalObservation,
+        estimates: tuple[TargetStateEstimate, ...],
+    ) -> tuple[float, dict[str, float]]:
+        assert observation.gimbal_angle_rad.valid
+        assert observation.gimbal_rate_rad_s.valid
+        half_fov = 0.5 * self.selected_axis_fov_rad
+        angle = observation.gimbal_angle_rad.value
+        rate = observation.gimbal_rate_rad_s.value
+        simulation_time_s = observation.time_s
+        issue = (observation.time_s, command_angle_rad)
+        predicted_angles = [angle]
+        predicted_rates = [rate]
+        peak_rate_utilization = abs(rate) / self.servo.max_rate_rad_s
+        peak_acceleration_utilization = 0.0
+        for estimate in estimates[1:]:
+            end_time_s = estimate.time_s
+            while simulation_time_s < end_time_s - 1e-12:
+                dt_s = min(
+                    self.config.servo_simulation_step_s,
+                    end_time_s - simulation_time_s,
+                )
+                applied = self._applied_position_at(simulation_time_s, issue)
+                position_error = applied - angle
+                if abs(position_error) <= self.servo.position_tolerance_rad:
+                    desired_rate = 0.0
+                else:
+                    desired_rate = self.servo.position_gain_s_inv * position_error
+                desired_rate = float(
+                    np.clip(
+                        desired_rate,
+                        -self.servo.max_rate_rad_s,
+                        self.servo.max_rate_rad_s,
+                    )
+                )
+                if self.servo.rate_time_constant_s > 0.0:
+                    raw_acceleration = (
+                        desired_rate - rate
+                    ) / self.servo.rate_time_constant_s
+                else:
+                    raw_acceleration = (desired_rate - rate) / dt_s
+                acceleration = float(
+                    np.clip(
+                        raw_acceleration,
+                        -self.servo.max_acceleration_rad_s2,
+                        self.servo.max_acceleration_rad_s2,
+                    )
+                )
+                rate = float(
+                    np.clip(
+                        rate + acceleration * dt_s,
+                        -self.servo.max_rate_rad_s,
+                        self.servo.max_rate_rad_s,
+                    )
+                )
+                angle = float(
+                    np.clip(
+                        angle + rate * dt_s,
+                        self.servo.min_angle_rad,
+                        self.servo.max_angle_rad,
+                    )
+                )
+                simulation_time_s += dt_s
+                peak_rate_utilization = max(
+                    peak_rate_utilization,
+                    abs(rate) / self.servo.max_rate_rad_s,
+                )
+                peak_acceleration_utilization = max(
+                    peak_acceleration_utilization,
+                    abs(acceleration) / self.servo.max_acceleration_rad_s2,
+                )
+            predicted_angles.append(angle)
+            predicted_rates.append(rate)
+
+        objective = 0.0
+        error_fractions = []
+        rate_error_fractions = []
+        last_index = len(estimates) - 1
+        for index, (estimate, predicted_angle, predicted_rate) in enumerate(
+            zip(estimates, predicted_angles, predicted_rates, strict=True)
+        ):
+            error = angle_delta_rad(
+                estimate.body_relative_bearing_rad.value,
+                predicted_angle,
+            )
+            error_fraction = abs(error) / half_fov
+            rate_error_fraction = abs(
+                estimate.body_relative_rate_rad_s.value - predicted_rate
+            ) / self.servo.max_rate_rad_s
+            error_fractions.append(error_fraction)
+            rate_error_fractions.append(rate_error_fraction)
+            if index == 0:
+                continue
+            terminal_multiplier = (
+                self.config.terminal_tracking_weight
+                if index == last_index
+                else 1.0
+            )
+            objective += (
+                self.config.tracking_weight
+                * terminal_multiplier
+                * error_fraction**2
+            )
+            objective += (
+                self.config.rate_matching_weight
+                * terminal_multiplier
+                * rate_error_fraction**2
+            )
+            robust_error_fraction = (
+                abs(error)
+                + self.config.uncertainty_sigma
+                * estimate.bearing_std_rad.value
+            ) / half_fov
+            visibility_excess = max(
+                0.0,
+                (
+                    robust_error_fraction
+                    - self.config.visibility_onset_fov_fraction
+                )
+                / (1.0 - self.config.visibility_onset_fov_fraction),
+            )
+            objective += self.config.visibility_weight * visibility_excess**2
+
+        previous_normalized = self.servo.normalized_from_position(
+            self._last_command_angle_rad or 0.0
+        )
+        candidate_normalized = self.servo.normalized_from_position(
+            command_angle_rad
+        )
+        command_delta = candidate_normalized - previous_normalized
+        objective += self.config.command_change_weight * command_delta**2
+        objective += (
+            self.config.command_rate_change_weight
+            * (
+                (
+                    command_angle_rad - (self._last_command_angle_rad or 0.0)
+                )
+                / max(
+                    self.servo.max_rate_rad_s
+                    * max(observation.control_dt_s, 1e-9),
+                    1e-9,
+                )
+            )
+            ** 2
+        )
+        travel_excess = max(
+            0.0,
+            abs(candidate_normalized) - self.config.travel_margin_fraction,
+        ) / max(1.0 - self.config.travel_margin_fraction, 1e-9)
+        objective += self.config.travel_margin_weight * travel_excess**2
+        return objective, {
+            "terminal_error_fov_fraction": error_fractions[-1],
+            "peak_error_fov_fraction": max(error_fractions),
+            "terminal_rate_error_normalized": rate_error_fractions[-1],
+            "rate_utilization": peak_rate_utilization,
+            "acceleration_utilization": peak_acceleration_utilization,
+        }
+
+    def _trusted_estimates(
+        self,
+        estimates: tuple[TargetStateEstimate, ...],
+        observation_time_s: float,
+    ) -> tuple[TargetStateEstimate, ...]:
+        current = estimates[0]
+        current_std = max(current.bearing_std_rad.value, 1e-9)
+        trusted = [current]
+        for estimate in estimates[1:]:
+            ratio = estimate.bearing_std_rad.value / current_std
+            if ratio <= self.config.forecast_full_trust_std_ratio:
+                weight = 1.0
+            elif ratio >= self.config.forecast_zero_trust_std_ratio:
+                weight = self.config.minimum_forecast_weight
+            else:
+                fraction = (
+                    ratio - self.config.forecast_full_trust_std_ratio
+                ) / (
+                    self.config.forecast_zero_trust_std_ratio
+                    - self.config.forecast_full_trust_std_ratio
+                )
+                weight = 1.0 - fraction * (
+                    1.0 - self.config.minimum_forecast_weight
+                )
+            bearing = wrap_angle_rad(
+                current.body_relative_bearing_rad.value
+                + weight
+                * angle_delta_rad(
+                    estimate.body_relative_bearing_rad.value,
+                    current.body_relative_bearing_rad.value,
+                )
+            )
+            trusted.append(
+                TargetStateEstimate(
+                    time_s=estimate.time_s,
+                    measurement_time_s=estimate.measurement_time_s,
+                    body_relative_bearing_rad=MaskedScalar(bearing, True),
+                    body_relative_rate_rad_s=MaskedScalar(
+                        current.body_relative_rate_rad_s.value
+                        + weight
+                        * (
+                            estimate.body_relative_rate_rad_s.value
+                            - current.body_relative_rate_rad_s.value
+                        ),
+                        True,
+                    ),
+                    bearing_std_rad=estimate.bearing_std_rad,
+                    rate_std_rad_s=estimate.rate_std_rad_s,
+                    prediction_horizon_s=MaskedScalar(
+                        estimate.time_s - observation_time_s,
+                        True,
+                    ),
+                )
+            )
+        return tuple(trusted)
+
+    @staticmethod
+    def _ramp(value: float, onset: float, full: float) -> float:
+        return float(np.clip((value - onset) / (full - onset), 0.0, 1.0))
+
+    def _fallback_target(
+        self,
+        estimates: tuple[TargetStateEstimate, ...],
+        observation: GimbalObservation,
+    ) -> tuple[float, float]:
+        horizons = self.estimator.prediction_horizons_s
+        base_horizon_s = float(
+            np.clip(
+                self.config.fallback_arrival_time_scale
+                * (
+                    self.servo.command_latency_s
+                    + self.servo.rate_time_constant_s
+                ),
+                horizons[0],
+                horizons[-1],
+            )
+        )
+        current = estimates[0]
+        base_forecast = _interpolate_target_estimate(
+            estimates,
+            horizons,
+            base_horizon_s,
+            observation.time_s,
+        )
+        base_ratio = (
+            base_forecast.bearing_std_rad.value
+            / max(current.bearing_std_rad.value, 1e-9)
+        )
+        if base_ratio <= self.config.forecast_full_trust_std_ratio:
+            base_weight = 1.0
+        elif base_ratio >= self.config.forecast_zero_trust_std_ratio:
+            base_weight = self.config.minimum_forecast_weight
+        else:
+            fraction = (
+                base_ratio - self.config.forecast_full_trust_std_ratio
+            ) / (
+                self.config.forecast_zero_trust_std_ratio
+                - self.config.forecast_full_trust_std_ratio
+            )
+            base_weight = 1.0 - fraction * (
+                1.0 - self.config.minimum_forecast_weight
+            )
+        base_bearing = wrap_angle_rad(
+            current.body_relative_bearing_rad.value
+            + base_weight
+            * angle_delta_rad(
+                base_forecast.body_relative_bearing_rad.value,
+                current.body_relative_bearing_rad.value,
+            )
+        )
+        base_std = current.bearing_std_rad.value + base_weight * (
+            base_forecast.bearing_std_rad.value
+            - current.bearing_std_rad.value
+        )
+        assert observation.gimbal_angle_rad.valid
+        half_fov = 0.5 * self.selected_axis_fov_rad
+        robust_error_fraction = (
+            abs(
+                angle_delta_rad(
+                    base_bearing,
+                    observation.gimbal_angle_rad.value,
+                )
+            )
+            + self.config.fallback_uncertainty_sigma
+            * base_std
+        ) / half_fov
+        risk = self._ramp(
+            robust_error_fraction,
+            self.config.fallback_visibility_onset_fraction,
+            self.config.fallback_visibility_full_fraction,
+        )
+        requested_horizon_s = float(
+            np.clip(
+                base_horizon_s
+                + risk * self.config.fallback_risk_horizon_boost_s,
+                horizons[0],
+                horizons[-1],
+            )
+        )
+        forecast = _interpolate_target_estimate(
+            estimates,
+            horizons,
+            requested_horizon_s,
+            observation.time_s,
+        )
+        ratio = (
+            forecast.bearing_std_rad.value
+            / max(current.bearing_std_rad.value, 1e-9)
+        )
+        if ratio <= self.config.forecast_full_trust_std_ratio:
+            weight = 1.0
+        elif ratio >= self.config.forecast_zero_trust_std_ratio:
+            weight = self.config.minimum_forecast_weight
+        else:
+            fraction = (
+                ratio - self.config.forecast_full_trust_std_ratio
+            ) / (
+                self.config.forecast_zero_trust_std_ratio
+                - self.config.forecast_full_trust_std_ratio
+            )
+            weight = 1.0 - fraction * (
+                1.0 - self.config.minimum_forecast_weight
+            )
+        bearing = wrap_angle_rad(
+            current.body_relative_bearing_rad.value
+            + weight
+            * angle_delta_rad(
+                forecast.body_relative_bearing_rad.value,
+                current.body_relative_bearing_rad.value,
+            )
+        )
+        return (
+            float(
+                np.clip(
+                    bearing,
+                    self.servo.min_angle_rad,
+                    self.servo.max_angle_rad,
+                )
+            ),
+            requested_horizon_s,
+        )
+
+    def _activation_scores(
+        self,
+        estimates: tuple[TargetStateEstimate, ...],
+        observation: GimbalObservation,
+    ) -> tuple[float, float, float]:
+        assert observation.gimbal_angle_rad.valid
+        half_fov = 0.5 * self.selected_axis_fov_rad
+        rate_fraction = max(
+            abs(estimate.body_relative_rate_rad_s.value)
+            / self.servo.max_rate_rad_s
+            for estimate in estimates
+        )
+        visibility_fraction = max(
+            (
+                abs(
+                    angle_delta_rad(
+                        estimate.body_relative_bearing_rad.value,
+                        observation.gimbal_angle_rad.value,
+                    )
+                )
+                + self.config.uncertainty_sigma
+                * estimate.bearing_std_rad.value
+            )
+            / half_fov
+            for estimate in estimates
+        )
+        rate_score = self._ramp(
+            rate_fraction,
+            self.config.activation_rate_onset_fraction,
+            self.config.activation_rate_full_fraction,
+        )
+        visibility_score = self._ramp(
+            visibility_fraction,
+            self.config.activation_visibility_onset_fraction,
+            self.config.activation_visibility_full_fraction,
+        )
+        if self.config.activation_gate_mode == "maximum":
+            score = max(rate_score, visibility_score)
+        elif self.config.activation_gate_mode == "minimum":
+            score = min(rate_score, visibility_score)
+        else:
+            score = rate_score * visibility_score
+        horizon_s = estimates[-1].time_s - observation.time_s
+        effect_delay_s = self.servo.command_latency_s + (
+            self.config.command_effect_response_fraction
+            * self.servo.rate_time_constant_s
+        )
+        if (
+            self.config.require_command_effect_within_horizon
+            and (
+                effect_delay_s >= horizon_s
+                or self.servo.position_gain_s_inv
+                < self.config.minimum_optimizer_position_gain_s_inv
+            )
+        ):
+            score = 0.0
+        return score, rate_score, visibility_score
+
+    def _raw_candidates(
+        self,
+        estimates: tuple[TargetStateEstimate, ...],
+        extra_anchors: tuple[float, ...] = (),
+    ) -> tuple[float, ...]:
+        grid = np.linspace(
+            self.servo.min_angle_rad,
+            self.servo.max_angle_rad,
+            self.config.candidate_grid_size,
+        )
+        anchors = [
+            self._last_command_angle_rad or 0.0,
+            *(estimate.body_relative_bearing_rad.value for estimate in estimates),
+            *extra_anchors,
+        ]
+        candidates = np.concatenate((grid, np.asarray(anchors)))
+        clipped = np.clip(
+            candidates,
+            self.servo.min_angle_rad,
+            self.servo.max_angle_rad,
+        )
+        return tuple(float(value) for value in np.unique(np.round(clipped, 12)))
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        if not observation.gimbal_angle_rad.valid:
+            raise ValueError("V3 requires servo angle in its observation profile")
+        if not observation.gimbal_rate_rad_s.valid:
+            raise ValueError("V3 requires servo rate in its observation profile")
+        if self._initial_command_angle_rad is None:
+            self._initial_command_angle_rad = observation.gimbal_angle_rad.value
+            self._last_command_angle_rad = observation.gimbal_angle_rad.value
+        all_estimates = self.estimator.update_all(observation)
+        if not all_estimates or not all(
+            estimate.valid for estimate in all_estimates
+        ):
+            self.last_estimate = TargetStateEstimate.missing(observation.time_s)
+            self._setpoint_rate_rad_s = 0.0
+            self._setpoint_acceleration_rad_s2 = 0.0
+            self.last_diagnostics = self._missing_diagnostics()
+            assert self._last_command_angle_rad is not None
+            command = self.servo.normalized_from_position(
+                self._last_command_angle_rad
+            )
+            self._command_history.append(
+                (observation.time_s, self._last_command_angle_rad)
+            )
+            return GimbalAction.position(command)
+
+        trusted_all_estimates = self._trusted_estimates(
+            all_estimates,
+            observation.time_s,
+        )
+        estimates = tuple(
+            estimate
+            for estimate in trusted_all_estimates
+            if estimate.time_s - observation.time_s
+            <= self.config.maximum_optimization_horizon_s + 1e-12
+        )
+        if len(estimates) < 2:
+            raise ValueError(
+                "maximum_optimization_horizon_s excludes every future forecast"
+            )
+        self.last_estimate = estimates[0]
+        fallback_target, _fallback_horizon_s = self._fallback_target(
+            all_estimates,
+            observation,
+        )
+        (
+            activation_score,
+            activation_rate_score,
+            activation_visibility_score,
+        ) = self._activation_scores(estimates, observation)
+        evaluated = []
+        if activation_score > 0.0:
+            candidates = self._raw_candidates(
+                estimates,
+                extra_anchors=(fallback_target,),
+            )
+            for candidate in candidates:
+                shaped_candidate = self._shape_candidate(
+                    candidate,
+                    observation.control_dt_s,
+                )
+                candidate_objective, candidate_prediction = (
+                    self._simulate_candidate(
+                        shaped_candidate[0],
+                        observation,
+                        estimates,
+                    )
+                )
+                evaluated.append(
+                    (
+                        candidate_objective,
+                        candidate,
+                        shaped_candidate,
+                        candidate_prediction,
+                    )
+                )
+            _, optimized_raw, _optimized_shape, _optimized_prediction = min(
+                evaluated,
+                key=lambda item: item[0],
+            )
+            raw_candidate = fallback_target + activation_score * (
+                optimized_raw - fallback_target
+            )
+        else:
+            raw_candidate = fallback_target
+        shaped = self._shape_candidate(
+            raw_candidate,
+            observation.control_dt_s,
+        )
+        objective, prediction = self._simulate_candidate(
+            shaped[0],
+            observation,
+            estimates,
+        )
+        (
+            command,
+            rate,
+            acceleration,
+            rate_limited,
+            acceleration_limited,
+            jerk_limited,
+        ) = shaped
+        self._last_command_angle_rad = command
+        self._setpoint_rate_rad_s = rate
+        self._setpoint_acceleration_rad_s2 = acceleration
+        self._command_history.append((observation.time_s, command))
+        self.last_diagnostics = PredictivePositionOptimizerDiagnostics(
+            valid=True,
+            selected_command_angle_rad=command,
+            raw_candidate_angle_rad=raw_candidate,
+            selected_objective=objective,
+            predicted_terminal_error_fov_fraction=prediction[
+                "terminal_error_fov_fraction"
+            ],
+            predicted_peak_error_fov_fraction=prediction[
+                "peak_error_fov_fraction"
+            ],
+            predicted_terminal_rate_error_normalized=prediction[
+                "terminal_rate_error_normalized"
+            ],
+            predicted_rate_utilization=prediction["rate_utilization"],
+            predicted_acceleration_utilization=prediction[
+                "acceleration_utilization"
+            ],
+            setpoint_rate_rad_s=rate,
+            setpoint_acceleration_rad_s2=acceleration,
+            rate_limited=rate_limited,
+            acceleration_limited=acceleration_limited,
+            jerk_limited=jerk_limited,
+            evaluated_candidate_count=max(1, len(evaluated)),
+            optimizer_active=activation_score > 0.0,
+            activation_score=activation_score,
+            activation_rate_score=activation_rate_score,
+            activation_visibility_score=activation_visibility_score,
+            fallback_target_angle_rad=fallback_target,
+            optimization_horizon_s=(
+                estimates[-1].time_s - observation.time_s
+            ),
+        )
+        return GimbalAction.position(
+            self.servo.normalized_from_position(command)
+        )
+
+
 @dataclass
 class SearchFallbackController:
     """Sweep the configured travel envelope while an estimate is unavailable."""

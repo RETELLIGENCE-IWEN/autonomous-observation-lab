@@ -256,6 +256,32 @@ the visual comparison with `scripts/open_gimbal_failure_atlas.sh`; see the
 [performance-contract and failure-atlas report](docs/research_tracks/predictive_gimbal_servoing/position_performance_contract_and_failure_atlas.md)
 for the event attribution and V3 decision.
 
+Run the servo-aware constrained predictive-position V3 protocol with:
+
+```bash
+aol-evaluate-gimbal-predictive-position-v3 \
+  --visibility-risk-results artifacts/gimbal_adaptive_position_v21.json \
+  --contract configs/gimbal_performance_contract.json \
+  --output artifacts/gimbal_predictive_position_v3.json
+```
+
+V3 simulates configurable command latency, inner position-loop response,
+rate/acceleration limits, travel, and polarity while scoring multi-horizon GRU
+forecasts. Its untouched 84000-series confirmation reduced mechanically
+avoidable loss by 15.1% and command variation by 10.1% versus V2.1, but
+regressed mean and P95 error, so it was rejected. A dual-risk V3.1 correction
+also failed development and left its 86000-series confirmation unopened.
+V2.1 therefore remains the accepted controller. Inspect the complete audit and
+representative action trace with one click:
+
+```bash
+scripts/open_gimbal_predictive_position_dashboard.sh
+```
+
+See the
+[V3/V3.1 experiment report](docs/research_tracks/predictive_gimbal_servoing/constrained_predictive_position_v3_experiment.md)
+for the frozen gates, scenario results, and next predictor-training decision.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

@@ -201,6 +201,8 @@ validation to measurement and transfer.
 | Compare observation profiles and baselines | O0/O1/O2 open-loop, paired closed-loop, rate/position and three seeds | complete |
 | Calibrate uncertainty | accepted global scaling; rejected contextual table | complete |
 | Establish safe recovery | multiple mechanisms evaluated; none deployment-eligible | open |
+| Add servo-aware constrained position optimization | V3 improves aggressive visibility/smoothness but fails tracking gate; V3.1 fails development | rejected |
+| Train a control-aware predictor | FOV/servo-weighted future-state and regret objective | next |
 | Transfer to the custom gimbal | telemetry and hardware parameters not yet recorded | next |
 
 ## 4. Experimental method
@@ -377,6 +379,24 @@ The extra failure occurs in a detector-burst variant where edge motion falsely
 resembles a physical exit. Retuning on the observed fresh block would be test
 leakage, so native hold remains the accepted fallback.
 
+### 5.6 Servo-aware constrained position control
+
+V3 rolled the GRU's multi-horizon forecasts through configured command
+latency, position-loop response, rate/acceleration limits, travel, and polarity
+for every candidate setpoint. A privileged-forecast diagnostic showed that the
+architecture can exploit accurate future state: aggressive-motion mean error
+fell to 4.35°, P95 to 11.99°, and loss of view to zero. The learned-forecast
+version was less reliable.
+
+On untouched 84000-series confirmation, V3 reduced mechanically avoidable
+loss by 15.1% and command variation by 10.1% versus accepted V2.1. It also
+increased mean error by 0.140° and P95 by 0.416°, failing the frozen
+no-regression gate. A V3.1 correction required joint rate-capacity and
+visibility risk; no candidate reduced avoidable loss on 85000-series
+development, so 86000-series confirmation remained sealed. These results move
+the next research step from activation tuning to a control-aware predictor
+training objective.
+
 ## 6. Discussion
 
 ### 6.1 Is the learned controller better than a heuristic?
@@ -458,6 +478,8 @@ stated before tuning the next controller:
 | Smoothness/saturation advantage | rate variation worse; mixed position/saturation | fail/partial |
 | Reliable uncertainty | better NLL and 2σ; worse multi-level MACE | partial |
 | Safe directed recovery | repeated fresh-test regressions | fail |
+| Servo-aware constrained optimization | lower avoidable loss/variation, higher mean/P95 on fresh confirmation | fail |
+| Joint-risk V3.1 correction | no development candidate eligible; confirmation unopened | fail |
 | Strong final baseline set | robust PID/MPC and recurrent model-free RL absent | incomplete |
 | Embedded inference budget | no target compute measurement | untested |
 | Recorded-flight and real-gimbal transfer | no platform data or identified hardware yet | untested |
@@ -533,15 +555,17 @@ Open the consolidated comparison without typing commands by launching
 aggregate tables, per-scenario curves, every paired test delta, and training
 seed stability. Recovery and uncertainty have separate exact-replay dashboards.
 
-Primary frozen artifacts:
+Primary frozen artifacts include:
 
 - `artifacts/gimbal_mixed_gru_closed_loop_comparison.json`;
 - `artifacts/gimbal_o2_replication.json`;
 - `artifacts/gimbal_o2_uncertainty_calibration.json`;
-- `artifacts/gimbal_recovery_robustness_protocol.json`; and
-- `artifacts/gimbal_edge_recovery_protocol.json`.
+- `artifacts/gimbal_recovery_robustness_protocol.json`;
+- `artifacts/gimbal_edge_recovery_protocol.json`;
+- `artifacts/gimbal_predictive_position_v3.json`; and
+- `artifacts/gimbal_predictive_position_v31.json`.
 
-The implementation currently passes 73 automated tests. Generated SVG figures
+The implementation currently passes 106 automated tests. Generated SVG figures
 are committed with this report, while the larger experiment artifacts remain
 local reproducibility products.
 
@@ -552,7 +576,8 @@ model run. It now contains a compact recurrent estimator whose tracking and
 visibility gains over a model-based analytical controller replicate across
 rate and position modes and across three training initializations. The
 benchmark also identifies the boundary of that success: unreachable geometry,
-command smoothness, off-screen observability, and safe recovery.
+command smoothness, off-screen observability, safe recovery, and forecast
+reliability under direct constrained optimization.
 
 The correct present verdict is neither “deployment ready” nor “just a
 heuristic.” It is a validated synthetic research prototype with a demonstrated

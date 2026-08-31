@@ -10,6 +10,8 @@ from autonomous_observation_lab.gimbal_servoing.config import (
 from autonomous_observation_lab.gimbal_servoing.controllers import (
     AdaptivePositionControllerConfig,
     AdaptiveTargetStatePositionController,
+    ConstrainedPredictivePositionController,
+    PredictivePositionOptimizerConfig,
     _interpolate_target_estimate,
 )
 from autonomous_observation_lab.gimbal_servoing.estimators import (
@@ -130,6 +132,19 @@ def test_adaptive_position_configuration_rejects_invalid_trust_and_limits():
         AdaptivePositionControllerConfig(risk_jerk_limit_multiplier=0.5)
 
 
+def test_predictive_optimizer_configuration_rejects_invalid_search_and_limits():
+    with pytest.raises(ValueError, match="odd and at least three"):
+        PredictivePositionOptimizerConfig(candidate_grid_size=10)
+    with pytest.raises(ValueError, match="simulation_step"):
+        PredictivePositionOptimizerConfig(servo_simulation_step_s=0.0)
+    with pytest.raises(ValueError, match="visibility_onset"):
+        PredictivePositionOptimizerConfig(
+            visibility_onset_fov_fraction=1.0
+        )
+    with pytest.raises(ValueError, match="activation_gate_mode"):
+        PredictivePositionOptimizerConfig(activation_gate_mode="invalid")
+
+
 def test_adaptive_position_rejects_duplicate_prediction_horizons():
     estimator = FakeMultiHorizonEstimator(
         prediction_horizons_s=(0.0, 0.1, 0.1),
@@ -161,6 +176,89 @@ def test_arrival_horizon_is_interpolated_without_extra_inference():
     assert math.degrees(controller.last_diagnostics.raw_target_angle_rad) == pytest.approx(
         15.0
     )
+
+
+def test_predictive_optimizer_uses_future_forecast_and_servo_constraints():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1, 0.2, 0.3),
+        bearings_rad=tuple(
+            math.radians(value) for value in (0.0, 10.0, 20.0, 30.0)
+        ),
+        bearing_std_rad=(0.01, 0.01, 0.01, 0.01),
+    )
+    controller = ConstrainedPredictivePositionController(
+        estimator=estimator,
+        servo=_servo(),
+        selected_axis_fov_rad=math.radians(60.0),
+        config=PredictivePositionOptimizerConfig(
+            candidate_grid_size=11,
+            command_change_weight=0.0,
+            command_rate_change_weight=0.0,
+            travel_margin_weight=0.0,
+            activation_rate_onset_fraction=0.0,
+            activation_rate_full_fraction=0.1,
+        ),
+    )
+
+    action = controller.act(_observation())
+
+    assert action.desired_position_normalized is not None
+    assert action.desired_position_normalized > 0.0
+    assert controller.last_diagnostics.valid
+    assert controller.last_diagnostics.raw_candidate_angle_rad > 0.0
+    assert controller.last_diagnostics.evaluated_candidate_count >= 11
+    assert 0.0 <= controller.last_diagnostics.predicted_rate_utilization <= 1.0
+    assert (
+        0.0
+        <= controller.last_diagnostics.predicted_acceleration_utilization
+        <= 1.0
+    )
+
+
+def test_predictive_optimizer_can_require_joint_rate_and_visibility_risk():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1),
+        bearings_rad=(0.0, 0.0),
+        bearing_std_rad=(0.01, 0.01),
+    )
+    controller = ConstrainedPredictivePositionController(
+        estimator=estimator,
+        servo=_servo(),
+        selected_axis_fov_rad=math.radians(60.0),
+        config=PredictivePositionOptimizerConfig(
+            activation_gate_mode="minimum",
+            activation_rate_onset_fraction=0.0,
+            activation_rate_full_fraction=0.1,
+            activation_visibility_onset_fraction=0.5,
+            activation_visibility_full_fraction=0.8,
+        ),
+    )
+
+    controller.act(_observation())
+
+    assert controller.last_diagnostics.activation_rate_score > 0.0
+    assert controller.last_diagnostics.activation_visibility_score == 0.0
+    assert controller.last_diagnostics.activation_score == 0.0
+    assert not controller.last_diagnostics.optimizer_active
+
+
+def test_predictive_optimizer_holds_last_position_without_valid_forecasts():
+    estimator = FakeMultiHorizonEstimator(
+        prediction_horizons_s=(0.0, 0.1),
+        bearings_rad=(0.0, 0.0),
+        bearing_std_rad=(0.1, 0.1),
+        valid=False,
+    )
+    controller = ConstrainedPredictivePositionController(
+        estimator=estimator,
+        servo=_servo(),
+        selected_axis_fov_rad=math.radians(60.0),
+    )
+
+    action = controller.act(_observation(gimbal_angle_rad=math.radians(12.0)))
+
+    assert action.command_normalized == pytest.approx(0.2)
+    assert not controller.last_diagnostics.valid
 
 
 def test_visibility_risk_adds_configured_horizon_boost():
