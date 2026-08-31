@@ -28,6 +28,7 @@ _APP_ID = "autonomous_observation_lab_gimbal_demo"
 _TIMELINE = "sim_time"
 _CALIBRATION_TIMELINE = "calibration_axis"
 _REPLICATION_TIMELINE = "training_seed_index"
+_PERFORMANCE_TIMELINE = "comparison_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -282,6 +283,80 @@ def _gru_replication_blueprint(rrb: Any) -> Any:
                     ),
                 ),
                 row_shares=[1.0, 1.0],
+            ),
+            column_shares=[1.25, 1.75],
+        ),
+        collapse_panels=True,
+    )
+
+
+def _performance_verification_blueprint(rrb: Any) -> Any:
+    def scenario_views(mode: str, label: str) -> Any:
+        root = f"/performance/scenario/{mode}"
+        return rrb.Horizontal(
+            rrb.TimeSeriesView(
+                origin=f"{root}/mean_error_deg",
+                name=f"{label}: mean error by scenario",
+            ),
+            rrb.TimeSeriesView(
+                origin=f"{root}/loss_of_view_percent",
+                name=f"{label}: loss of view by scenario",
+            ),
+        )
+
+    def paired_views(mode: str, label: str) -> Any:
+        root = f"/performance/paired/{mode}"
+        return rrb.Vertical(
+            rrb.Horizontal(
+                rrb.TimeSeriesView(
+                    origin=f"{root}/mean_error_delta_deg",
+                    name=f"{label}: paired mean-error delta",
+                ),
+                rrb.TimeSeriesView(
+                    origin=f"{root}/p95_error_delta_deg",
+                    name=f"{label}: paired P95-error delta",
+                ),
+            ),
+            rrb.Horizontal(
+                rrb.TimeSeriesView(
+                    origin=f"{root}/loss_of_view_delta_percent",
+                    name=f"{label}: paired lost-view delta (pp)",
+                ),
+                rrb.TimeSeriesView(
+                    origin=f"{root}/control_cost_delta",
+                    name=f"{label}: paired control-cost delta",
+                ),
+            ),
+            row_shares=[1.0, 1.0],
+        )
+
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/performance/summary",
+                name="Baseline vs learned verification",
+            ),
+            rrb.Vertical(
+                scenario_views("rate", "Rate command"),
+                scenario_views("position", "Position command"),
+                paired_views("rate", "Rate command; below zero is better"),
+                paired_views(
+                    "position",
+                    "Position command; below zero is better",
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/performance/stability/rate/mean_error_deg",
+                        name="Rate: mean error by training seed",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin=(
+                            "/performance/stability/position/mean_error_deg"
+                        ),
+                        name="Position: mean error by training seed",
+                    ),
+                ),
+                row_shares=[1.0, 1.0, 2.0, 2.0, 1.0],
             ),
             column_shares=[1.25, 1.75],
         ),
@@ -931,6 +1006,275 @@ def _load_gru_replication_result(path: Path) -> dict[str, Any]:
     return result
 
 
+def _paired_performance_records(
+    result: dict[str, Any], mode: str
+) -> list[dict[str, Any]]:
+    baseline_name = f"analytical_{mode}"
+    learned_name = f"gru_o2_{mode}"
+    records = result.get("runs")
+    if not isinstance(records, list):
+        raise ValueError("GRU control result is missing paired runs")
+
+    def indexed(controller: str) -> dict[tuple[int, int], dict[str, Any]]:
+        selected = [
+            record
+            for record in records
+            if isinstance(record, dict)
+            and record.get("controller") == controller
+        ]
+        values = {
+            (int(record["seed"]), int(record["scenario_index"])): record
+            for record in selected
+        }
+        if len(values) != len(selected):
+            raise ValueError(f"duplicate paired runs for {controller}")
+        return values
+
+    baseline = indexed(baseline_name)
+    learned = indexed(learned_name)
+    if not baseline or baseline.keys() != learned.keys():
+        raise ValueError(f"unpaired analytical/O2 {mode} runs")
+
+    paired = []
+    for seed, scenario_index in sorted(baseline):
+        reference = baseline[(seed, scenario_index)]
+        candidate = learned[(seed, scenario_index)]
+        if reference["scenario_name"] != candidate["scenario_name"]:
+            raise ValueError("paired run scenario names do not match")
+        reference_metrics = reference["tracking_metrics"]
+        candidate_metrics = candidate["tracking_metrics"]
+        paired.append(
+            {
+                "seed": seed,
+                "scenario_index": scenario_index,
+                "scenario_name": reference["scenario_name"],
+                "mean_error_delta_deg": (
+                    candidate_metrics["mean_absolute_error_deg"]
+                    - reference_metrics["mean_absolute_error_deg"]
+                ),
+                "p95_error_delta_deg": (
+                    candidate_metrics["p95_absolute_error_deg"]
+                    - reference_metrics["p95_absolute_error_deg"]
+                ),
+                "loss_of_view_delta_percent": 100.0
+                * (
+                    candidate_metrics["loss_of_view_fraction"]
+                    - reference_metrics["loss_of_view_fraction"]
+                ),
+                "control_cost_delta": (
+                    candidate["control_cost"] - reference["control_cost"]
+                ),
+            }
+        )
+    return paired
+
+
+def _load_gru_control_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_gru_closed_loop_comparison_v1":
+        raise ValueError("unsupported GRU control result")
+    for key in ("summary", "scenario_aggregates", "paired_comparisons"):
+        if not isinstance(result.get(key), dict):
+            raise ValueError(f"GRU control result is missing {key}")
+    for mode in ("rate", "position"):
+        for controller in (
+            f"proportional_{mode}",
+            f"analytical_{mode}",
+            f"gru_o2_{mode}",
+        ):
+            if controller not in result["summary"]:
+                raise ValueError(
+                    f"GRU control result is missing {controller}"
+                )
+        _paired_performance_records(result, mode)
+    return result
+
+
+def _performance_verification_markdown(
+    control_result: dict[str, Any],
+    replication_result: dict[str, Any],
+) -> str:
+    replication = replication_result["replication_summary"]
+    core_metrics = (
+        "mean_absolute_error_deg",
+        "p95_absolute_error_deg",
+        "loss_of_view_fraction",
+        "mean_control_cost",
+    )
+    core_replicated = all(
+        replication[mode]["delta_vs_analytical_distribution"][metric][
+            "all_training_seeds_improve"
+        ]
+        for mode in ("rate", "position")
+        for metric in core_metrics
+    )
+    lines = [
+        "# Baseline vs learned performance verification",
+        "",
+        "**Core synthetic gate: "
+        + ("PASS.**" if core_replicated else "FAIL.**")
+        + " The primary baseline is the analytical constant-velocity target "
+        "state controller. O2 is the disturbance-aware causal GRU with the "
+        "same configured rate or position adapter.",
+        "",
+        f"The scenario and paired plots use the frozen "
+        f"{control_result['test_variant_count']}-variant test artifact. "
+        f"Training stability uses "
+        f"{len(replication_result['training_seed_results'])} independent "
+        "GRU initializations. Lower is better in every plot; paired deltas "
+        "below zero favor O2.",
+        "",
+        "## Replicated primary result",
+        "",
+        "| Mode / metric | Analytical | O2 mean ± seed SD | Mean delta | "
+        "Every seed better? |",
+        "|---|---:|---:|---:|:---:|",
+    ]
+    metric_formats = (
+        ("mean_absolute_error_deg", "mean error", 1.0, "°", "°"),
+        ("p95_absolute_error_deg", "P95 error", 1.0, "°", "°"),
+        ("loss_of_view_fraction", "loss of view", 100.0, "%", " pp"),
+        ("mean_control_cost", "control cost", 1.0, "", ""),
+    )
+    for mode in ("rate", "position"):
+        mode_summary = replication[mode]
+        for metric, label, scale, unit, delta_unit in metric_formats:
+            reference = scale * mode_summary["analytical_reference"][metric]
+            learned = mode_summary["learned_metric_distribution"][metric]
+            delta = mode_summary["delta_vs_analytical_distribution"][metric]
+            lines.append(
+                f"| {mode} {label} | {reference:.2f}{unit} | "
+                f"{scale * learned['mean']:.2f} ± "
+                f"{scale * learned['sample_std']:.2f}{unit} | "
+                f"{scale * delta['mean']:+.2f}{delta_unit} | "
+                f"{'yes' if delta['all_training_seeds_improve'] else 'no'} |"
+            )
+
+    lines.extend(
+        (
+            "",
+            "## Frozen test aggregate, including secondary proportional baseline",
+            "",
+            "| Mode | Controller | Mean error | P95 | Lost view | Cost | "
+            "Command variation/s |",
+            "|---|---|---:|---:|---:|---:|---:|",
+        )
+    )
+    for mode in ("rate", "position"):
+        for controller, label in (
+            (f"proportional_{mode}", "proportional"),
+            (f"analytical_{mode}", "analytical"),
+            (f"gru_o2_{mode}", "O2 GRU"),
+        ):
+            summary = control_result["summary"][controller]
+            lines.append(
+                f"| {mode} | {label} | "
+                f"{summary['mean_absolute_error_deg']:.2f}° | "
+                f"{summary['p95_absolute_error_deg']:.2f}° | "
+                f"{100.0 * summary['loss_of_view_fraction']:.2f}% | "
+                f"{summary['mean_control_cost']:.3f} | "
+                f"{summary['command_variation_per_s']:.3f} |"
+            )
+
+    for mode in ("rate", "position"):
+        lines.extend(
+            (
+                "",
+                f"## {mode.capitalize()} scenario deltas: O2 − analytical",
+                "",
+                "| Plot index | Scenario | Mean error | P95 | Lost view | "
+                "Cost |",
+                "|---:|---|---:|---:|---:|---:|",
+            )
+        )
+        baseline_name = f"analytical_{mode}"
+        learned_name = f"gru_o2_{mode}"
+        for index, (scenario, records) in enumerate(
+            control_result["scenario_aggregates"].items()
+        ):
+            baseline = records[baseline_name]
+            learned = records[learned_name]
+            baseline_metrics = baseline["mean_metrics"]
+            learned_metrics = learned["mean_metrics"]
+            lines.append(
+                f"| {index} | `{scenario}` | "
+                f"{learned_metrics['mean_absolute_error_deg'] - baseline_metrics['mean_absolute_error_deg']:+.2f}° | "
+                f"{learned_metrics['p95_absolute_error_deg'] - baseline_metrics['p95_absolute_error_deg']:+.2f}° | "
+                f"{100.0 * (learned_metrics['loss_of_view_fraction'] - baseline_metrics['loss_of_view_fraction']):+.2f} pp | "
+                f"{learned['mean_control_cost'] - baseline['mean_control_cost']:+.3f} |"
+            )
+
+    rate_pairs = _paired_performance_records(control_result, "rate")
+    seed_ranges = []
+    for seed in dict.fromkeys(record["seed"] for record in rate_pairs):
+        indices = [
+            index
+            for index, record in enumerate(rate_pairs)
+            if record["seed"] == seed
+        ]
+        seed_ranges.append(f"{indices[0]}–{indices[-1]} = seed {seed}")
+    lines.extend(
+        (
+            "",
+            "Paired plot index map: "
+            + "; ".join(seed_ranges)
+            + ". Within each seed, scenario order matches the scenario-table "
+            "plot index.",
+            "",
+            "## Weakness audit",
+            "",
+        )
+    )
+    for mode in ("rate", "position"):
+        paired = _paired_performance_records(control_result, mode)
+        regressions = sorted(
+            (
+                record
+                for record in paired
+                if record["control_cost_delta"] > 0.0
+            ),
+            key=lambda record: record["control_cost_delta"],
+            reverse=True,
+        )
+        if regressions:
+            worst = regressions[0]
+            lines.append(
+                f"- Worst {mode} cost regression is "
+                f"`{worst['scenario_name']}` seed {worst['seed']}: "
+                f"{worst['control_cost_delta']:+.3f} cost and "
+                f"{worst['mean_error_delta_deg']:+.2f}° mean error."
+            )
+    rate_reference = control_result["summary"]["analytical_rate"]
+    rate_learned = control_result["summary"]["gru_o2_rate"]
+    position_reference = control_result["summary"]["analytical_position"]
+    position_learned = control_result["summary"]["gru_o2_position"]
+    lines.extend(
+        (
+            f"- O2 commands are less smooth in this frozen run: variation "
+            f"changes by "
+            f"{rate_learned['command_variation_per_s'] - rate_reference['command_variation_per_s']:+.3f}/s "
+            f"for rate and "
+            f"{position_learned['command_variation_per_s'] - position_reference['command_variation_per_s']:+.3f}/s "
+            "for position.",
+            f"- Loss recovery is slower despite fewer losses: event-weighted "
+            f"recovery is {rate_reference['event_weighted_mean_recovery_time_s']:.2f} → "
+            f"{rate_learned['event_weighted_mean_recovery_time_s']:.2f} s "
+            f"for rate and "
+            f"{position_reference['event_weighted_mean_recovery_time_s']:.2f} → "
+            f"{position_learned['event_weighted_mean_recovery_time_s']:.2f} s "
+            "for position.",
+            "- Travel-limit recovery remains a physical ceiling; learned and "
+            "analytical control are effectively tied there.",
+            "- Directed loss-of-view search failed its separate fresh safety "
+            "gate. Native hold remains the accepted fallback.",
+            "- This passes the synthetic comparison target, not the deployment "
+            "target. Recorded flight motion, identified camera/servo values, "
+            "and embedded inference timing are still unverified.",
+        )
+    )
+    return "\n".join(lines)
+
+
 def _suite_metric_table(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -1477,6 +1821,161 @@ def write_gru_replication_dashboard(
                 )
 
 
+def write_performance_verification_dashboard(
+    control_result: dict[str, Any],
+    replication_result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show paired baseline/O2 gains, regressions, and stability."""
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _performance_verification_blueprint(rrb)
+    rr.init(f"{_APP_ID}_performance_verification_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "performance/summary",
+        rr.TextDocument(
+            _performance_verification_markdown(
+                control_result,
+                replication_result,
+            ),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    for mode in ("rate", "position"):
+        for metric in ("mean_error_deg", "loss_of_view_percent"):
+            root = f"performance/scenario/{mode}/{metric}"
+            rr.log(
+                f"{root}/analytical",
+                rr.SeriesLines(
+                    colors=[50, 150, 255],
+                    names="analytical baseline",
+                ),
+                static=True,
+            )
+            rr.log(
+                f"{root}/o2_gru",
+                rr.SeriesLines(
+                    colors=[215, 90, 255],
+                    names="O2 GRU",
+                ),
+                static=True,
+            )
+        for metric in (
+            "mean_error_delta_deg",
+            "p95_error_delta_deg",
+            "loss_of_view_delta_percent",
+            "control_cost_delta",
+        ):
+            root = f"performance/paired/{mode}/{metric}"
+            rr.log(
+                f"{root}/zero",
+                rr.SeriesLines(colors=[130, 130, 140], names="no change"),
+                static=True,
+            )
+            rr.log(
+                f"{root}/o2_minus_analytical",
+                rr.SeriesLines(
+                    colors=[215, 90, 255],
+                    names="O2 - analytical",
+                ),
+                static=True,
+            )
+        root = f"performance/stability/{mode}/mean_error_deg"
+        for suffix, color, name in (
+            ("analytical", [50, 150, 255], "analytical baseline"),
+            ("o2_seed", [215, 90, 255], "O2 training seed"),
+            ("o2_mean", [255, 200, 40], "O2 seed mean"),
+        ):
+            rr.log(
+                f"{root}/{suffix}",
+                rr.SeriesLines(colors=color, names=name),
+                static=True,
+            )
+
+    scenario_items = list(control_result["scenario_aggregates"].items())
+    for scenario_index, (_scenario, records) in enumerate(scenario_items):
+        rr.set_time(
+            _PERFORMANCE_TIMELINE,
+            sequence=scenario_index,
+        )
+        for mode in ("rate", "position"):
+            for suffix, controller in (
+                ("analytical", f"analytical_{mode}"),
+                ("o2_gru", f"gru_o2_{mode}"),
+            ):
+                metrics = records[controller]["mean_metrics"]
+                root = f"performance/scenario/{mode}"
+                rr.log(
+                    f"{root}/mean_error_deg/{suffix}",
+                    rr.Scalars(metrics["mean_absolute_error_deg"]),
+                )
+                rr.log(
+                    f"{root}/loss_of_view_percent/{suffix}",
+                    rr.Scalars(100.0 * metrics["loss_of_view_fraction"]),
+                )
+
+    for mode in ("rate", "position"):
+        for variant_index, record in enumerate(
+            _paired_performance_records(control_result, mode)
+        ):
+            rr.set_time(
+                _PERFORMANCE_TIMELINE,
+                sequence=variant_index,
+            )
+            root = f"performance/paired/{mode}"
+            for metric in (
+                "mean_error_delta_deg",
+                "p95_error_delta_deg",
+                "loss_of_view_delta_percent",
+                "control_cost_delta",
+            ):
+                rr.log(f"{root}/{metric}/zero", rr.Scalars(0.0))
+                rr.log(
+                    f"{root}/{metric}/o2_minus_analytical",
+                    rr.Scalars(record[metric]),
+                )
+
+    replication = replication_result["replication_summary"]
+    for seed_index, seed_result in enumerate(
+        replication_result["training_seed_results"]
+    ):
+        rr.set_time(_PERFORMANCE_TIMELINE, sequence=seed_index)
+        for mode in ("rate", "position"):
+            root = f"performance/stability/{mode}/mean_error_deg"
+            analytical = replication[mode]["analytical_reference"]
+            learned = seed_result["closed_loop_summary"][f"gru_o2_{mode}"]
+            learned_mean = replication[mode]["learned_metric_distribution"]
+            rr.log(
+                f"{root}/analytical",
+                rr.Scalars(analytical["mean_absolute_error_deg"]),
+            )
+            rr.log(
+                f"{root}/o2_seed",
+                rr.Scalars(learned["mean_absolute_error_deg"]),
+            )
+            rr.log(
+                f"{root}/o2_mean",
+                rr.Scalars(learned_mean["mean_absolute_error_deg"]["mean"]),
+            )
+
+
 def write_benchmark_suite(
     suite: ClosedLoopBenchmarkSuite,
     *,
@@ -1548,12 +2047,21 @@ def _parser() -> argparse.ArgumentParser:
             "recovery",
             "calibration",
             "replication",
+            "performance",
         ),
         default="causality",
         help=(
             "select a causality, controller, stress, recovery, calibration, "
-            "or training-seed replication dashboard"
+            "training-seed replication, or performance-verification dashboard"
         ),
+    )
+    parser.add_argument(
+        "--performance-results",
+        type=Path,
+        default=Path(
+            "artifacts/gimbal_mixed_gru_closed_loop_comparison.json"
+        ),
+        help="paired analytical/O2 closed-loop comparison result JSON",
     )
     parser.add_argument(
         "--uncertainty-calibration",
@@ -1616,7 +2124,18 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "replication":
+    if args.demo == "performance":
+        control_result = _load_gru_control_result(args.performance_results)
+        replication_result = _load_gru_replication_result(
+            args.replication_results
+        )
+        write_performance_verification_dashboard(
+            control_result,
+            replication_result,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "replication":
         result = _load_gru_replication_result(args.replication_results)
         write_gru_replication_dashboard(
             result,

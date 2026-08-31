@@ -161,6 +161,18 @@ modes. Position horizon selection varies between 0.1 and 0.2 seconds, so that
 specific horizon is not yet a stable finding. For mouse-only access, launch
 `scripts/open_gimbal_replication_dashboard.sh`.
 
+Open the consolidated baseline-versus-learned verification dashboard with:
+
+```bash
+scripts/open_gimbal_performance_dashboard.sh
+```
+
+It combines the frozen 24-variant paired comparison, per-scenario analytical
+and O2 results, every paired episode delta, and the three-training-seed
+replication. The accompanying [performance verification report](docs/research_tracks/predictive_gimbal_servoing/performance_verification.md)
+separates the passed relative synthetic tracking gate from unresolved
+smoothness, recovery, hardware, and absolute product requirements.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

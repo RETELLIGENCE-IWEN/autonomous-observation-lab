@@ -28,6 +28,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Randomized Observation-Profile Experiment](observation_profile_experiment.md)
 - [GRU Closed-Loop Control Experiment](gru_closed_loop_experiment.md)
 - [O2 GRU Multi-Seed Replication](gru_multi_seed_replication.md)
+- [Baseline vs Learned Performance Verification](performance_verification.md)
 - [Belief-Guided Recovery Experiment](belief_recovery_experiment.md)
 - [O2 GRU Uncertainty Calibration Experiment](uncertainty_calibration_experiment.md)
 - [Contextual Calibration and Recovery Development/Test Protocol](contextual_calibration_and_recovery_protocol.md)
