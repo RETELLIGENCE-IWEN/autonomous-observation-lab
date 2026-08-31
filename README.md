@@ -237,6 +237,25 @@ scripts/open_gimbal_controller_arena.sh \
   --arena-training-seed 43
 ```
 
+The relative V2.1 gate is not an absolute performance claim. Build the
+hardware-relative performance contract and full loss-event atlas with:
+
+```bash
+aol-analyze-gimbal-position-performance \
+  --contract configs/gimbal_performance_contract.json \
+  --output artifacts/gimbal_position_failure_atlas.json
+```
+
+The default contract expresses angular error as a fraction of each configured
+camera half-FOV and plant activity as a fraction of each configured servo
+limit. All thresholds and tracked scenarios can be replaced in JSON. The
+frozen confirmation atlas shows that fixed horizon, V2, and V2.1 each pass
+only 4/10 provisional absolute checks; V2.1 has 3.94% total and 2.67%
+mechanically avoidable loss across the five primary tracking families. Open
+the visual comparison with `scripts/open_gimbal_failure_atlas.sh`; see the
+[performance-contract and failure-atlas report](docs/research_tracks/predictive_gimbal_servoing/position_performance_contract_and_failure_atlas.md)
+for the event attribution and V3 decision.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

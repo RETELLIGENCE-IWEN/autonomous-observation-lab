@@ -1,0 +1,20 @@
+{
+  "name": "provisional_research_stretch_v1",
+  "tracked_scenarios": [
+    "nominal_combined",
+    "high_latency",
+    "dropout_noise",
+    "slow_servo",
+    "aggressive_motion"
+  ],
+  "maximum_mean_absolute_error_fov_fraction": 0.25,
+  "maximum_p95_absolute_error_fov_fraction": 0.6,
+  "maximum_loss_of_view_fraction": 0.01,
+  "maximum_avoidable_loss_fraction": 0.005,
+  "maximum_unrecovered_loss_events": 0,
+  "maximum_recovery_time_s": 0.75,
+  "maximum_command_variation_per_s": 1.25,
+  "maximum_actuator_acceleration_rms_normalized": 0.65,
+  "maximum_rate_saturation_fraction": 0.01,
+  "maximum_angle_saturation_fraction": 0.005
+}

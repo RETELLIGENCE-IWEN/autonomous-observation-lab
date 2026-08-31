@@ -32,6 +32,7 @@ _REPLICATION_TIMELINE = "training_seed_index"
 _PERFORMANCE_TIMELINE = "comparison_index"
 _ADAPTIVE_TIMELINE = "adaptive_comparison_index"
 _VISIBILITY_RISK_TIMELINE = "visibility_risk_comparison_index"
+_FAILURE_ATLAS_TIMELINE = "failure_atlas_index"
 _RECOVERY_STATE_CODE = {
     RecoveryState.TRACK: 0.0,
     RecoveryState.COAST: 1.0,
@@ -553,6 +554,56 @@ def _visibility_risk_blueprint(rrb: Any) -> Any:
                     ),
                 ),
                 row_shares=[0.8, 0.8, 1.1, 1.1, 0.9],
+            ),
+            column_shares=[1.15, 1.85],
+        ),
+        collapse_panels=True,
+    )
+
+
+def _failure_atlas_blueprint(rrb: Any) -> Any:
+    return rrb.Blueprint(
+        rrb.Horizontal(
+            rrb.TextDocumentView(
+                origin="/failure_atlas/summary",
+                name="Absolute contract, failure causes, and V3 priorities",
+            ),
+            rrb.Vertical(
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/mean_error_fov_percent",
+                        name="Mean error (% camera half-FOV)",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/p95_error_fov_percent",
+                        name="P95 error (% camera half-FOV)",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/loss_percent",
+                        name="Total loss of view",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/avoidable_loss_percent",
+                        name="Loss while mechanically reachable",
+                    ),
+                ),
+                rrb.Horizontal(
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/command_variation",
+                        name="Position-command variation per second",
+                    ),
+                    rrb.TimeSeriesView(
+                        origin="/failure_atlas/scenario/contract_checks",
+                        name="Absolute checks passed (of 10)",
+                    ),
+                ),
+                rrb.TimeSeriesView(
+                    origin="/failure_atlas/causes/events",
+                    name="Loss-event attribution by cause index",
+                ),
+                row_shares=[1.0, 1.0, 1.0, 0.8],
             ),
             column_shares=[1.15, 1.85],
         ),
@@ -1489,6 +1540,128 @@ def _visibility_risk_markdown(result: dict[str, Any]) -> str:
             "",
             f"The trace replays `{trace['scenario_name']}` at world seed "
             f"{trace['world_seed']} with GRU seed {trace['training_seed']}.",
+        )
+    )
+    return "\n".join(lines)
+
+
+def _load_failure_atlas_result(path: Path) -> dict[str, Any]:
+    result = json.loads(path.read_text(encoding="utf-8"))
+    if result.get("experiment") != "gimbal_position_failure_atlas_v1":
+        raise ValueError("unsupported position failure-atlas result")
+    controllers = result.get("controllers")
+    if not isinstance(controllers, dict) or set(controllers) != {
+        "fixed_horizon",
+        "adaptive_v2",
+        "visibility_risk_v21",
+    }:
+        raise ValueError("failure atlas must contain all three controllers")
+    if not isinstance(result.get("v3_priorities"), list):
+        raise ValueError("failure atlas has no V3 priorities")
+    return result
+
+
+def _failure_atlas_markdown(result: dict[str, Any]) -> str:
+    controllers = result["controllers"]
+    contract = result["contract"]
+    v21 = controllers["visibility_risk_v21"]
+    verdict = v21["contract"]
+    lines = [
+        "# Position-controller failure atlas",
+        "",
+        f"**V2.1 absolute contract: {'PASS' if verdict['passed'] else 'FAIL'} "
+        f"({verdict['passed_check_count']}/{verdict['check_count']} checks).**",
+        "",
+        f"Contract: `{contract['name']}`. Error is normalized by each "
+        "randomized camera's half-FOV; plant activity is normalized by each "
+        "randomized servo's limits. These are provisional research targets, "
+        "not hardware acceptance claims.",
+        "",
+        "## Reachable-scenario aggregate",
+        "",
+        "| Controller | Mean / half-FOV | P95 / half-FOV | Lost view | "
+        "Avoidable loss | Variation/s | Unrecovered | Checks |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    labels = {
+        "fixed_horizon": "Fixed learned horizon",
+        "adaptive_v2": "Adaptive V2",
+        "visibility_risk_v21": "Risk V2.1",
+    }
+    for name in labels:
+        item = controllers[name]
+        summary = item["tracked_summary"]
+        gate = item["contract"]
+        lines.append(
+            f"| {labels[name]} | "
+            f"{100.0 * summary['mean_absolute_error_fov_fraction']:.1f}% | "
+            f"{100.0 * summary['p95_absolute_error_fov_fraction']:.1f}% | "
+            f"{100.0 * summary['loss_of_view_fraction']:.2f}% | "
+            f"{100.0 * summary['avoidable_loss_fraction']:.2f}% | "
+            f"{summary['command_variation_per_s']:.3f} | "
+            f"{summary['unrecovered_loss_events']} | "
+            f"{gate['passed_check_count']}/{gate['check_count']} |"
+        )
+    lines.extend(
+        (
+            "",
+            "The `travel_limit_recovery` family remains in the atlas but is "
+            "excluded from the reachable tracking contract. Its loss is split "
+            "into physical-envelope time and avoidable controller time.",
+            "",
+            "## V2.1 by scenario",
+            "",
+            "| Index | Scenario | Mean / half-FOV | P95 / half-FOV | "
+            "Lost | Avoidable | Contract |",
+            "|---:|---|---:|---:|---:|---:|---:|",
+        )
+    )
+    for index, (name, item) in enumerate(v21["by_scenario"].items()):
+        summary = item["summary"]
+        if item["contract_applicable"]:
+            gate = item["contract"]
+            gate_text = (
+                "PASS"
+                if gate["passed"]
+                else f"{gate['passed_check_count']}/{gate['check_count']}"
+            )
+        else:
+            gate_text = "physical-limit audit"
+        lines.append(
+            f"| {index} | {name.replace('_', ' ')} | "
+            f"{100.0 * summary['mean_absolute_error_fov_fraction']:.1f}% | "
+            f"{100.0 * summary['p95_absolute_error_fov_fraction']:.1f}% | "
+            f"{100.0 * summary['loss_of_view_fraction']:.2f}% | "
+            f"{100.0 * summary['avoidable_loss_fraction']:.2f}% | "
+            f"{gate_text} |"
+        )
+    causes = v21["tracked_summary"]["loss_event_causes"]
+    lines.extend(
+        (
+            "",
+            "## Reachable loss-event attribution",
+            "",
+            "| Cause index | Cause | Events |",
+            "|---:|---|---:|",
+        )
+    )
+    for index, (cause, count) in enumerate(causes.items()):
+        lines.append(f"| {index} | {cause.replace('_', ' ')} | {count} |")
+    if not causes:
+        lines.append("| 0 | no loss events | 0 |")
+    lines.extend(("", "## V3 priorities", ""))
+    for priority in result["v3_priorities"]:
+        lines.append(
+            f"{priority['rank']}. **{priority['title']}** — "
+            f"{priority['event_count']} attributed events. "
+            f"{priority['recommended_change']}"
+        )
+    lines.extend(
+        (
+            "",
+            "An event that reaches the episode boundary is marked terminally "
+            "censored: the controller did not recover within the observed "
+            "episode, but recovery after the cutoff is unknown.",
         )
     )
     return "\n".join(lines)
@@ -2785,6 +2958,165 @@ def write_visibility_risk_dashboard(
             )
 
 
+def write_failure_atlas_dashboard(
+    result: dict[str, Any],
+    *,
+    output: Path | None = None,
+    spawn: bool = False,
+) -> None:
+    """Write or show the absolute contract and loss-attribution dashboard."""
+
+    if (output is None) == (not spawn):
+        raise ValueError("choose exactly one of output or spawn")
+    try:
+        import rerun as rr
+        import rerun.blueprint as rrb
+    except ImportError as error:
+        raise RuntimeError(
+            "Rerun is optional; install with `pip install -e '.[visualization]'`"
+        ) from error
+
+    blueprint = _failure_atlas_blueprint(rrb)
+    rr.init(f"{_APP_ID}_position_failure_atlas_v1")
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        rr.save(output, default_blueprint=blueprint)
+    else:
+        rr.spawn(default_blueprint=blueprint)
+    rr.log(
+        "failure_atlas/summary",
+        rr.TextDocument(
+            _failure_atlas_markdown(result),
+            media_type=rr.MediaType.MARKDOWN,
+        ),
+        static=True,
+    )
+
+    styles = (
+        ("fixed_horizon", [50, 150, 255], "fixed learned horizon"),
+        ("adaptive_v2", [215, 90, 255], "adaptive V2"),
+        ("visibility_risk_v21", [70, 210, 130], "risk V2.1"),
+    )
+    panels = (
+        "mean_error_fov_percent",
+        "p95_error_fov_percent",
+        "loss_percent",
+        "avoidable_loss_percent",
+        "command_variation",
+        "contract_checks",
+    )
+    for suffix, color, label in styles:
+        for panel in panels:
+            rr.log(
+                f"failure_atlas/scenario/{panel}/{suffix}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+        rr.log(
+            f"failure_atlas/causes/events/{suffix}",
+            rr.SeriesLines(colors=color, names=label),
+            static=True,
+        )
+    contract_styles = (
+        ("mean_error_fov_percent", [150, 150, 150], "contract limit"),
+        ("p95_error_fov_percent", [150, 150, 150], "contract limit"),
+        ("loss_percent", [150, 150, 150], "contract limit"),
+        ("avoidable_loss_percent", [150, 150, 150], "contract limit"),
+        ("command_variation", [150, 150, 150], "contract limit"),
+        ("contract_checks", [150, 150, 150], "all checks"),
+    )
+    for panel, color, label in contract_styles:
+        rr.log(
+            f"failure_atlas/scenario/{panel}/contract_limit",
+            rr.SeriesLines(colors=color, names=label),
+            static=True,
+        )
+
+    contract = result["contract"]
+    scenario_names = result["scenario_names"]
+    for index, scenario_name in enumerate(scenario_names):
+        rr.set_time(_FAILURE_ATLAS_TIMELINE, sequence=index)
+        for suffix, _color, _label in styles:
+            item = result["controllers"][suffix]["by_scenario"][scenario_name]
+            summary = item["summary"]
+            gate = item["contract"]
+            for panel, value in (
+                (
+                    "mean_error_fov_percent",
+                    100.0 * summary["mean_absolute_error_fov_fraction"],
+                ),
+                (
+                    "p95_error_fov_percent",
+                    100.0 * summary["p95_absolute_error_fov_fraction"],
+                ),
+                ("loss_percent", 100.0 * summary["loss_of_view_fraction"]),
+                (
+                    "avoidable_loss_percent",
+                    100.0 * summary["avoidable_loss_fraction"],
+                ),
+                ("command_variation", summary["command_variation_per_s"]),
+                (
+                    "contract_checks",
+                    gate["passed_check_count"] if gate is not None else 0.0,
+                ),
+            ):
+                rr.log(
+                    f"failure_atlas/scenario/{panel}/{suffix}",
+                    rr.Scalars(value),
+                )
+        applicable = scenario_name in contract["tracked_scenarios"]
+        for panel, value in (
+            (
+                "mean_error_fov_percent",
+                100.0
+                * contract["maximum_mean_absolute_error_fov_fraction"],
+            ),
+            (
+                "p95_error_fov_percent",
+                100.0
+                * contract["maximum_p95_absolute_error_fov_fraction"],
+            ),
+            (
+                "loss_percent",
+                100.0 * contract["maximum_loss_of_view_fraction"],
+            ),
+            (
+                "avoidable_loss_percent",
+                100.0 * contract["maximum_avoidable_loss_fraction"],
+            ),
+            (
+                "command_variation",
+                contract["maximum_command_variation_per_s"],
+            ),
+            ("contract_checks", 10.0),
+        ):
+            if applicable:
+                rr.log(
+                    f"failure_atlas/scenario/{panel}/contract_limit",
+                    rr.Scalars(value),
+                )
+
+    cause_names = sorted(
+        {
+            cause
+            for controller in result["controllers"].values()
+            for cause in controller["tracked_summary"][
+                "loss_event_causes"
+            ]
+        }
+    )
+    for index, cause in enumerate(cause_names):
+        rr.set_time(_FAILURE_ATLAS_TIMELINE, sequence=index)
+        for suffix, _color, _label in styles:
+            count = result["controllers"][suffix]["tracked_summary"][
+                "loss_event_causes"
+            ].get(cause, 0)
+            rr.log(
+                f"failure_atlas/causes/events/{suffix}",
+                rr.Scalars(count),
+            )
+
+
 def write_performance_verification_dashboard(
     control_result: dict[str, Any],
     replication_result: dict[str, Any],
@@ -3014,13 +3346,15 @@ def _parser() -> argparse.ArgumentParser:
             "performance",
             "adaptive-position",
             "visibility-risk",
+            "failure-atlas",
             "controller-arena",
         ),
         default="causality",
         help=(
             "select a causality, controller, stress, recovery, calibration, "
             "training-seed replication, performance-verification, or adaptive "
-            "position V2, visibility-risk V2.1, or controller-arena dashboard"
+            "position V2, visibility-risk V2.1, failure-atlas, or "
+            "controller-arena dashboard"
         ),
     )
     parser.add_argument(
@@ -3034,6 +3368,12 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("artifacts/gimbal_adaptive_position_v21.json"),
         help="visibility-risk V2.1 confirmation result JSON",
+    )
+    parser.add_argument(
+        "--failure-atlas-results",
+        type=Path,
+        default=Path("artifacts/gimbal_position_failure_atlas.json"),
+        help="absolute performance-contract and failure-atlas result JSON",
     )
     parser.add_argument(
         "--arena-scenario",
@@ -3139,6 +3479,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         write_controller_arena(
             arena,
+            output=args.output,
+            spawn=spawn,
+        )
+    elif args.demo == "failure-atlas":
+        result = _load_failure_atlas_result(args.failure_atlas_results)
+        write_failure_atlas_dashboard(
+            result,
             output=args.output,
             spawn=spawn,
         )
