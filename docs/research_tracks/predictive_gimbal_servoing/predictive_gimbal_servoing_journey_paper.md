@@ -522,6 +522,12 @@ Install the optional reporting dependency when needed:
 python3 -m pip install -e '.[reporting]'
 ```
 
+Build the print-ready PDF locally with Chrome or Chromium:
+
+```bash
+python3 scripts/build_gimbal_journey_pdf.py
+```
+
 Open the consolidated comparison without typing commands by launching
 `scripts/open_gimbal_performance_dashboard.sh`. The dashboard contains the
 aggregate tables, per-scenario curves, every paired test delta, and training
