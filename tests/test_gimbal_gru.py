@@ -32,11 +32,13 @@ from autonomous_observation_lab.gimbal_servoing.dataset import (
 from autonomous_observation_lab.gimbal_servoing.gru import (
     CausalTargetStateGRU,
     CausalTargetStateGRUEnsemble,
+    CausalTargetStateGRUWithPositionResidual,
     GRUAdaptivePositionLossContext,
     GRUControlLossContext,
     GRUInferenceConfig,
     GRULossConfig,
     GRUPositionPlantRolloutConfig,
+    GRUPositionResidualConfig,
     GRUTargetStateEstimator,
     GRUTargetStateModelConfig,
     GRUTargetStateOutput,
@@ -45,7 +47,9 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
     differentiable_position_servo_rollout,
     gru_parameter_count,
     load_gru_checkpoint,
+    load_gru_position_residual_checkpoint,
     save_gru_checkpoint,
+    save_gru_position_residual_checkpoint,
     target_state_nll,
 )
 from autonomous_observation_lab.gimbal_servoing.gru_training import (
@@ -129,6 +133,55 @@ def test_gru_is_causal_and_streaming_matches_batched_forward():
     torch.testing.assert_close(reference.mean, torch.stack(step_means, dim=1))
     torch.testing.assert_close(reference.std, torch.stack(step_stds, dim=1))
     assert torch.all(reference.std > 0.0)
+
+
+def test_position_residual_head_preserves_state_and_round_trips(tmp_path):
+    torch.manual_seed(5)
+    base = small_model().eval()
+    model = CausalTargetStateGRUWithPositionResidual(
+        base,
+        GRUPositionResidualConfig(
+            hidden_dim=7,
+            maximum_half_fov_fraction=0.2,
+        ),
+    ).eval()
+    features = torch.randn(2, 6, len(FEATURE_NAMES))
+    reference = base(features)
+    initial = model(features)
+
+    torch.testing.assert_close(initial.mean, reference.mean)
+    torch.testing.assert_close(initial.std, reference.std)
+    torch.testing.assert_close(
+        initial.position_target_residual_fov_fraction,
+        torch.zeros(2, 6),
+    )
+    final = model.residual_head[-1]
+    assert isinstance(final, torch.nn.Linear)
+    final.bias.data.fill_(10.0)
+    shifted = model(features)
+    assert torch.all(
+        shifted.position_target_residual_fov_fraction <= 0.2
+    )
+    assert torch.all(
+        shifted.position_target_residual_fov_fraction > 0.19
+    )
+    assert not any(
+        parameter.requires_grad for parameter in model.base_model.parameters()
+    )
+
+    checkpoint = save_gru_position_residual_checkpoint(
+        tmp_path / "position_residual.pt",
+        model,
+        {"purpose": "test"},
+    )
+    restored, metadata = load_gru_position_residual_checkpoint(checkpoint)
+    replay = restored(features)
+    torch.testing.assert_close(
+        replay.position_target_residual_fov_fraction,
+        shifted.position_target_residual_fov_fraction,
+    )
+    torch.testing.assert_close(replay.mean, shifted.mean)
+    assert metadata == {"purpose": "test"}
 
 
 def test_gru_ensemble_matches_identical_members_and_streaming_forward():

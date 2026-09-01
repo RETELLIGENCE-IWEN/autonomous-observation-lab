@@ -46,6 +46,7 @@ aol-develop-gimbal-counterfactual-plant = "autonomous_observation_lab.gimbal_ser
 aol-replicate-gimbal-counterfactual-plant = "autonomous_observation_lab.gimbal_servoing.counterfactual_plant_replication:main"
 aol-diagnose-gimbal-counterfactual-seed = "autonomous_observation_lab.gimbal_servoing.counterfactual_plant_seed_diagnostic:main"
 aol-develop-gimbal-counterfactual-reference-anchor = "autonomous_observation_lab.gimbal_servoing.counterfactual_plant_reference_anchor:main"
+aol-develop-gimbal-counterfactual-residual-policy = "autonomous_observation_lab.gimbal_servoing.counterfactual_residual_policy:main"
 aol-evaluate-gimbal-control-aware-closed-loop = "autonomous_observation_lab.gimbal_servoing.control_aware_closed_loop:main"
 aol-analyze-gimbal-position-performance = "autonomous_observation_lab.gimbal_servoing.performance_atlas:main"
 aol-evaluate-gimbal-recovery = "autonomous_observation_lab.gimbal_servoing.recovery_evaluation:main"

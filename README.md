@@ -339,6 +339,7 @@ aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
 aol-diagnose-gimbal-counterfactual-seed
 aol-develop-gimbal-counterfactual-reference-anchor
+aol-develop-gimbal-counterfactual-residual-policy
 ```
 
 The [V8--V8.7 experiment report](docs/research_tracks/predictive_gimbal_servoing/counterfactual_plant_v8_experiment.md)
@@ -359,7 +360,13 @@ the global tracking gate; conflict projection observes opposing gradients in
 49--72% of minibatches and reaches -0.46% global/-0.45% critical tracking, just
 short of both -0.5% requirements while regressing smoothness. V8.8 is therefore
 also unpromoted. The next structural experiment freezes state estimation and
-learns a bounded causal control residual.
+learns a bounded causal control residual. V8.9 implements that separation with
+only 1,185 trainable parameters and keeps all state metrics exactly unchanged.
+Its direct-tracking arm reaches a 0.47% global gain but only 0.24% critical gain
+and substantially worsens command smoothness while approaching its configured
+residual bound. The evidence now points to the one-command 300 ms training
+rollout; the next phase is a smooth multi-command differentiable rollout rather
+than further scalar loss tuning.
 
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable

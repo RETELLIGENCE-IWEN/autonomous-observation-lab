@@ -25,6 +25,9 @@ from .types import GimbalObservation, MaskedScalar
 
 
 GRU_CHECKPOINT_SCHEMA_VERSION = "gimbal_gru_v1"
+GRU_POSITION_RESIDUAL_CHECKPOINT_SCHEMA_VERSION = (
+    "gimbal_gru_position_residual_v1"
+)
 
 
 class UncertaintyScaleProvider(Protocol):
@@ -102,6 +105,7 @@ class GRUTargetStateOutput:
     std: torch.Tensor
     hidden: torch.Tensor
     interval_rate_rad_s: torch.Tensor | None = None
+    position_target_residual_fov_fraction: torch.Tensor | None = None
 
 
 class CausalTargetStateGRU(nn.Module):
@@ -244,6 +248,117 @@ class CausalTargetStateGRU(nn.Module):
             interval_rate_rad_s=(
                 output.interval_rate_rad_s[:, 0]
                 if output.interval_rate_rad_s is not None
+                else None
+            ),
+            position_target_residual_fov_fraction=(
+                output.position_target_residual_fov_fraction[:, 0]
+                if output.position_target_residual_fov_fraction is not None
+                else None
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class GRUPositionResidualConfig:
+    """Small causal correction head for the adaptive position target.
+
+    The correction is dimensionless and converted to radians using the
+    serialized camera field of view inside the adapter. This keeps its bound
+    independent of a particular camera or servo.
+    """
+
+    hidden_dim: int = 32
+    maximum_half_fov_fraction: float = 0.25
+
+    def __post_init__(self) -> None:
+        if self.hidden_dim <= 0:
+            raise ValueError("residual hidden dimension must be positive")
+        if not math.isfinite(self.maximum_half_fov_fraction) or not (
+            0.0 < self.maximum_half_fov_fraction <= 1.0
+        ):
+            raise ValueError(
+                "maximum residual half-FOV fraction must be in (0, 1]"
+            )
+
+
+class CausalTargetStateGRUWithPositionResidual(nn.Module):
+    """Frozen target-state GRU plus a bounded causal position-target head."""
+
+    def __init__(
+        self,
+        base_model: CausalTargetStateGRU,
+        residual_config: GRUPositionResidualConfig | None = None,
+    ):
+        super().__init__()
+        self.base_model = base_model
+        self.config = base_model.config
+        self.residual_config = residual_config or GRUPositionResidualConfig()
+        for parameter in self.base_model.parameters():
+            parameter.requires_grad_(False)
+        input_dim = self.config.input_dim + 2 * len(
+            self.config.prediction_horizons_s
+        )
+        self.residual_head = nn.Sequential(
+            nn.Linear(input_dim, self.residual_config.hidden_dim),
+            nn.SiLU(),
+            nn.Linear(self.residual_config.hidden_dim, 1),
+        )
+        final = self.residual_head[-1]
+        assert isinstance(final, nn.Linear)
+        nn.init.zeros_(final.weight)
+        nn.init.zeros_(final.bias)
+        self.base_model.eval()
+
+    def train(self, mode: bool = True):
+        super().train(mode)
+        self.base_model.eval()
+        return self
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> GRUTargetStateOutput:
+        with torch.no_grad():
+            base = self.base_model(features, hidden)
+        head_features = torch.cat(
+            (
+                features,
+                base.mean.detach().flatten(start_dim=-2),
+            ),
+            dim=-1,
+        )
+        residual = self.residual_config.maximum_half_fov_fraction * torch.tanh(
+            self.residual_head(head_features).squeeze(-1)
+        )
+        return GRUTargetStateOutput(
+            mean=base.mean,
+            std=base.std,
+            hidden=base.hidden,
+            interval_rate_rad_s=base.interval_rate_rad_s,
+            position_target_residual_fov_fraction=residual,
+        )
+
+    def forward_step(
+        self,
+        feature: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> GRUTargetStateOutput:
+        if feature.ndim != 2:
+            raise ValueError("feature must have shape [batch, input_dim]")
+        output = self.forward(feature[:, None, :], hidden)
+        return GRUTargetStateOutput(
+            mean=output.mean[:, 0],
+            std=output.std[:, 0],
+            hidden=output.hidden,
+            interval_rate_rad_s=(
+                output.interval_rate_rad_s[:, 0]
+                if output.interval_rate_rad_s is not None
+                else None
+            ),
+            position_target_residual_fov_fraction=(
+                output.position_target_residual_fov_fraction[:, 0]
+                if output.position_target_residual_fov_fraction is not None
                 else None
             ),
         )
@@ -695,6 +810,19 @@ def adaptive_position_surrogate_actions(
     raw_target = current_bearing + prediction_weight * (
         angular_residual_rad(forecast_bearing, current_bearing)
     )
+    if output.position_target_residual_fov_fraction is not None:
+        if (
+            output.position_target_residual_fov_fraction.shape
+            != expected_shape
+        ):
+            raise ValueError(
+                "position-target residual shape is invalid"
+            )
+        raw_target = raw_target + (
+            output.position_target_residual_fov_fraction
+            * 0.5
+            * context.selected_axis_fov_rad
+        )
     raw_target = angular_residual_rad(
         raw_target,
         torch.zeros_like(raw_target),
@@ -1652,6 +1780,53 @@ def load_gru_checkpoint(
     )
     config = GRUTargetStateModelConfig(**raw_config)
     model = CausalTargetStateGRU(config).to(device)
+    model.load_state_dict(payload["state_dict"])
+    model.eval()
+    return model, dict(payload["metadata"])
+
+
+def save_gru_position_residual_checkpoint(
+    path: str | Path,
+    model: CausalTargetStateGRUWithPositionResidual,
+    metadata: dict[str, Any],
+) -> Path:
+    checkpoint_path = Path(path)
+    if checkpoint_path.suffix != ".pt":
+        raise ValueError("GRU residual checkpoint path must have a .pt suffix")
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(
+        {
+            "schema_version": GRU_POSITION_RESIDUAL_CHECKPOINT_SCHEMA_VERSION,
+            "model_config": asdict(model.config),
+            "residual_config": asdict(model.residual_config),
+            "state_dict": model.state_dict(),
+            "metadata": metadata,
+        },
+        checkpoint_path,
+    )
+    return checkpoint_path
+
+
+def load_gru_position_residual_checkpoint(
+    path: str | Path,
+    *,
+    device: str | torch.device = "cpu",
+) -> tuple[CausalTargetStateGRUWithPositionResidual, dict[str, Any]]:
+    payload = torch.load(path, map_location=device, weights_only=True)
+    if payload.get("schema_version") != (
+        GRU_POSITION_RESIDUAL_CHECKPOINT_SCHEMA_VERSION
+    ):
+        raise ValueError("unsupported GRU residual checkpoint schema")
+    raw_config = dict(payload["model_config"])
+    raw_config["prediction_horizons_s"] = tuple(
+        raw_config["prediction_horizons_s"]
+    )
+    base_model = CausalTargetStateGRU(GRUTargetStateModelConfig(**raw_config))
+    residual_config = GRUPositionResidualConfig(**payload["residual_config"])
+    model = CausalTargetStateGRUWithPositionResidual(
+        base_model,
+        residual_config,
+    ).to(device)
     model.load_state_dict(payload["state_dict"])
     model.eval()
     return model, dict(payload["metadata"])

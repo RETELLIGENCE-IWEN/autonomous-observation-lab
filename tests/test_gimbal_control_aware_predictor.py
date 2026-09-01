@@ -78,6 +78,10 @@ from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_seed_diagno
     CounterfactualPlantSeedDiagnosticConfig,
     evaluate_counterfactual_plant_seed_diagnostic,
 )
+from autonomous_observation_lab.gimbal_servoing.counterfactual_residual_policy import (
+    CounterfactualResidualPolicyConfig,
+    evaluate_counterfactual_residual_policy,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -653,6 +657,35 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
     assert anchored["datasets"]["fresh_test"] == {"opened": False}
     assert anchored["anchor_scope"]["ordinary_label_count"] > 0
     assert len(anchored["epochs"]) == 1
+
+    residual = evaluate_counterfactual_residual_policy(
+        train_path=train_path,
+        validation_path=validation_path,
+        base_checkpoint=base_checkpoint,
+        checkpoint_directory=tmp_path / "residual_policy_outputs",
+        config=CounterfactualResidualPolicyConfig(
+            epochs=1,
+            batch_size=1,
+            rollout_horizon_index=1,
+            training_integration_period_s=0.01,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.01
+            ),
+        ),
+    )
+    assert residual["datasets"]["fresh_test"] == {"opened": False}
+    assert residual["architecture"]["base_parameters_frozen"]
+    assert residual["architecture"]["trainable_residual_parameters"] > 0
+    assert len(residual["epochs"]) == 1
+    assert residual["epochs"][0]["evaluation"]["selection_view"][
+        "standard_bearing_rmse_deg"
+    ] == pytest.approx(
+        residual["reference"]["selection_view"][
+            "standard_bearing_rmse_deg"
+        ]
+    )
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):

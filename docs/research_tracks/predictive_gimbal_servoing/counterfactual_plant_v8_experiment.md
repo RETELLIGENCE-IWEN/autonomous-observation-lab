@@ -256,6 +256,45 @@ This checkpoint misses both tracking thresholds by less than 0.05 percentage
 points and regresses smoothness. The result is scientifically useful but does
 not pass the frozen gate; thresholds were not relaxed after observing it.
 
+## V8.9 frozen-state residual policy
+
+V8.9 removes the shared-representation failure mode. The complete 36,240
+parameter V7 state predictor is frozen, and a zero-initialized 1,185-parameter
+causal MLP learns only a bounded correction to the adaptive controller's
+position target. The correction is expressed as a configurable fraction of
+each episode's serialized camera half-FOV, then passes through the existing
+hardware-aware target clamp, rate, acceleration, and jerk limits. Its default
+absolute bound is 0.25 half-FOV. At initialization, state and action behavior
+exactly match V7; state outputs remain identical throughout training.
+
+```mermaid
+flowchart LR
+    A[Deployable observation history] --> B[Frozen V7 midpoint GRU]
+    B --> C[Bearing, rate, uncertainty]
+    A --> D[Bounded residual head]
+    C --> D
+    C --> E[V2.1 adaptive target]
+    D --> F[Half-FOV-scaled target correction]
+    E --> G[Hardware-aware setpoint filter]
+    F --> G
+    G --> H[Exact differentiable servo]
+```
+
+Three predeclared variants were evaluated on the seed-29 development block:
+
+| Variant | Best global tracking | Best critical tracking | State change | Main failure |
+|---|---:|---:|---:|---|
+| V8.9 regret residual | **-0.37%** | **-0.32%** | exactly 0 | action +3.4%, smoothness +6.9% near the useful epoch |
+| V8.9.1 action + stronger smoothness | **-0.24%** | **-0.32%** | exactly 0 | command shaping improves, tracking falls |
+| V8.9.2 direct tracking, balanced labels | **-0.47%** | **-0.24%** | exactly 0 | action +6.1%, smoothness +16.2% near best tracking |
+
+The residual reaches 0.243--0.247 of its 0.25 half-FOV bound in the later
+epochs of all variants. V8.9 therefore validates the architectural separation
+of estimation and control but does not pass the controller gate. The direct
+variant nearly crosses global tracking while losing critical tracking and
+smoothness, showing that a single held correction cannot express the required
+time sequence.
+
 ## Interpretation
 
 V8.7 provides development evidence for the three barrier hypotheses that
@@ -285,17 +324,17 @@ This is not a promoted controller. The three-seed replication failed.
 - All selection used development data. No fresh test, deployment run, or
   sim-to-real claim was opened.
 
-The seed-29 diagnostic, functional anchor, residual scalarization, and
-conflict-projected update are complete. They show that optimization noise is
-not the limiting factor and that preserving ordinary predictions improves the
-trade-off, but the shared state representation still couples control gains to
-state/action/smoothness regressions. The justified next step is to freeze the
-validated state predictor and train a small bounded causal control-residual
-head through the same exact plant objective. This separates control adaptation
-from state estimation while keeping the residual hardware-normalized and
-deployable. Any selected residual head must be evaluated across independent
-initializations; the current result does not qualify for closed-loop promotion
-or a fresh test block.
+The seed-29 diagnostic, functional anchor, residual scalarization,
+conflict-projected update, and frozen-state residual policy are complete.
+Optimization noise and shared state interference are no longer credible
+explanations for the remaining limit. The present rollout holds one causal
+command for 300 ms; it cannot teach the residual head how a smooth sequence of
+future commands should react to target and gimbal evolution. The justified
+next step is a multi-command differentiable rollout with recurrent policy
+state and counterfactual observations, or an equivalent constrained
+closed-loop policy-optimization protocol. It must retain serialized hardware,
+state-output invariance, smoothness/visibility guards, and independent-seed
+evaluation. No V8.x result qualifies for promotion or a fresh test block.
 
 Reproduce the development screen with:
 
@@ -304,6 +343,7 @@ aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
 aol-diagnose-gimbal-counterfactual-seed
 aol-develop-gimbal-counterfactual-reference-anchor
+aol-develop-gimbal-counterfactual-residual-policy
 ```
 
 Generated datasets, result JSON, and checkpoints remain under ignored
