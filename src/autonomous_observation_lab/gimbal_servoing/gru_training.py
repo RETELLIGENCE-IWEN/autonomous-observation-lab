@@ -129,6 +129,7 @@ class GRUTrainingResult:
     best_epoch: int
     initial_validation: GRUEvaluationMetrics
     best_validation: GRUEvaluationMetrics
+    epoch_state_dicts: tuple[dict[str, torch.Tensor], ...] = ()
 
 
 class GimbalTorchSequenceDataset(Dataset):
@@ -1141,6 +1142,7 @@ def train_gru(
     validation_label_weights: np.ndarray | None = None,
     training_episode_weights: np.ndarray | None = None,
     initial_state_dict: dict[str, torch.Tensor] | None = None,
+    retain_epoch_states: bool = False,
 ) -> GRUTrainingResult:
     training_config = training_config or GRUTrainingConfig()
     loss_config = loss_config or GRULossConfig()
@@ -1246,6 +1248,7 @@ def train_gru(
     best_epoch = 0
     best_state = copy.deepcopy(model.state_dict())
     history = []
+    epoch_state_dicts = []
 
     for epoch in range(1, training_config.epochs + 1):
         model.train()
@@ -1322,6 +1325,13 @@ def train_gru(
             best_loss = validation_metrics.loss
             best_epoch = epoch
             best_state = copy.deepcopy(model.state_dict())
+        if retain_epoch_states:
+            epoch_state_dicts.append(
+                {
+                    name: value.detach().cpu().clone()
+                    for name, value in model.state_dict().items()
+                }
+            )
 
     model.load_state_dict(best_state)
     best_validation = evaluate_gru(
@@ -1339,6 +1349,7 @@ def train_gru(
         best_epoch=best_epoch,
         initial_validation=initial_validation,
         best_validation=best_validation,
+        epoch_state_dicts=tuple(epoch_state_dicts),
     )
 
 

@@ -337,6 +337,7 @@ That outcome-aware follow-up is implemented as V8--V8.7:
 ```bash
 aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
+aol-diagnose-gimbal-counterfactual-seed
 ```
 
 The [V8--V8.7 experiment report](docs/research_tracks/predictive_gimbal_servoing/counterfactual_plant_v8_experiment.md)
@@ -348,6 +349,11 @@ saturation by 5.89% while passing every frozen guard. In frozen three-seed
 replication, seeds 17 and 43 pass but seed 29 regresses global prediction,
 adapter action, tracking, and visibility. The mean global tracking gain is
 0.44%, below the 0.5% gate, so V8.7 is not promoted and the test remains sealed.
+An epoch-, learning-rate-, and sampler-seed diagnostic finds no passing seed-29
+checkpoint and shows a repeatable trade from ordinary-state behavior into
+critical-state performance. The next experiment therefore targets this
+gradient conflict with a conservative reference anchor rather than more
+epochs.
 
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable

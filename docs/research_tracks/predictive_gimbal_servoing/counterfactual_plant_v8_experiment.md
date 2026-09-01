@@ -167,6 +167,41 @@ per-seed state, adapter, and global-tracking safety checks. Seed 43, which was
 the problematic V7 initialization, now passes every V8.7 guard. The instability
 has therefore moved rather than disappeared.
 
+## Seed-29 trajectory diagnostic
+
+The failed initialization was subsequently diagnosed without changing the
+frozen V8.7 loss or opening the fresh test. Every epoch was retained and
+re-evaluated with the exact serialized plant. A preliminary rate screen at
+`1e-4` and `5e-5`, using optimization seed 29, produced no passing epoch. The
+global regression was already present after epoch one, ruling out a late
+fine-tuning overshoot.
+
+The seed used by the replacement sampler and minibatch order was then
+decoupled from the seed-29 base checkpoint. Optimization seeds 17 and 43 were
+each run for six epochs at `1e-4`. Again, none of the twelve checkpoints passed.
+The best global compromise was optimization-seed 17, epoch 3:
+
+| Metric | Relative change from seed-29 V7 |
+|---|---:|
+| Average bearing RMSE | +1.21% |
+| 100 ms bearing RMSE | +1.04% |
+| Average rate RMSE | +1.13% |
+| Adapter-action RMSE | +2.76% |
+| Exact 300 ms tracking RMSE | **-0.25%** |
+| Critical exact tracking RMSE | **-0.54%** |
+| Counterfactual-regret RMSE | **-1.16%** |
+| Critical regret RMSE | **-5.92%** |
+| Visibility-violation RMSE | +0.40% |
+| Command-difference RMSE | +0.13% |
+| Plant-saturation RMSE | +0.04% |
+
+Across optimization seeds and epochs, critical tracking usually improves while
+ordinary bearing, adapter action, global visibility, and global regret regress.
+This is a repeatable gradient conflict between concentrating on
+controller-critical examples and retaining the starting model's ordinary-state
+behavior. It is not explained by training duration, learning rate, epoch
+selection, or data-order randomness.
+
 ## Interpretation
 
 V8.7 provides development evidence for the three barrier hypotheses that
@@ -196,18 +231,21 @@ This is not a promoted controller. The three-seed replication failed.
 - All selection used development data. No fresh test, deployment run, or
   sim-to-real claim was opened.
 
-The justified next step is a seed-29 diagnostic, not another broad objective
-search. The immediate experiment should retain the frozen V8.7 loss and inspect
-the epoch-wise Pareto trajectory or a lower learning-rate/shorter fine-tune to
-determine whether checkpoint selection overshoots the global optimum. Any
-refinement must be re-replicated from all three base checkpoints; the current
-result does not qualify for closed-loop promotion or a fresh test block.
+The seed-29 diagnostic is complete and rules out simple optimization overshoot.
+The justified next step is a conservative functional update: anchor the
+fine-tuned predictor to its V7 reference on ordinary states while retaining the
+V8.7 counterfactual objective on controller-critical states. This directly
+addresses the observed gradient conflict without changing the deployment
+architecture or using privileged inputs at inference. Any selected anchor must
+be re-replicated from all three base checkpoints; the current result does not
+qualify for closed-loop promotion or a fresh test block.
 
 Reproduce the development screen with:
 
 ```bash
 aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
+aol-diagnose-gimbal-counterfactual-seed
 ```
 
 Generated datasets, result JSON, and checkpoints remain under ignored
