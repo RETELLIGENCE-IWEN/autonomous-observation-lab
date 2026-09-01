@@ -336,6 +336,7 @@ That outcome-aware follow-up is implemented as V8--V8.7:
 
 ```bash
 aol-develop-gimbal-counterfactual-plant
+aol-replicate-gimbal-counterfactual-plant
 ```
 
 The [V8--V8.7 experiment report](docs/research_tracks/predictive_gimbal_servoing/counterfactual_plant_v8_experiment.md)
@@ -343,8 +344,10 @@ documents exact differentiable servo parity, the failed 100 ms/absolute-cost/
 response-matching formulations, and the selected one-sided counterfactual
 regret objective. The final seed-17 development candidate improves exact 300 ms
 tracking by 0.63%, critical tracking by 0.77%, command smoothness by 6.10%, and
-saturation by 5.89% while passing every frozen guard. Its average-rate margin
-is narrow, so the test remains sealed pending seed-matched V8.7 replication.
+saturation by 5.89% while passing every frozen guard. In frozen three-seed
+replication, seeds 17 and 43 pass but seed 29 regresses global prediction,
+adapter action, tracking, and visibility. The mean global tracking gain is
+0.44%, below the 0.5% gate, so V8.7 is not promoted and the test remains sealed.
 
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable

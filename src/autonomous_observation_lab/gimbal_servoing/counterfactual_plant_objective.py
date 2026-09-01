@@ -132,6 +132,19 @@ def default_counterfactual_plant_candidates() -> tuple[
     )
 
 
+def selected_counterfactual_plant_v87_candidate() -> (
+    CounterfactualPlantCandidate
+):
+    """Return the frozen moderate-regret candidate selected in V8.7."""
+
+    return next(
+        candidate
+        for candidate in default_counterfactual_plant_candidates()
+        if candidate.name
+        == "moderate_regret_balanced_critical_curriculum"
+    )
+
+
 @dataclass(frozen=True)
 class CounterfactualPlantObjectiveConfig:
     training_seed: int = 17

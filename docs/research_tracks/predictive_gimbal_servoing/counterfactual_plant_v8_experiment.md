@@ -128,6 +128,45 @@ result is promising but fragile. The conservative-regret arm misses that same
 guard at +2.018%, confirming that replication is necessary rather than
 optional.
 
+## Seed-matched replication
+
+The selected V8.7 objective was then frozen and applied independently to the
+seed-17, seed-29, and seed-43 V7 hard-midpoint checkpoints. Each fine-tuned
+model was compared with its own starting checkpoint. No hyperparameter was
+selected from the replication result, and the fresh test remained closed.
+
+| Three-seed mean | Reference | V8.7 | Relative change |
+|---|---:|---:|---:|
+| Average bearing RMSE | 13.310 deg | 13.385 deg | +0.57% |
+| Average rate RMSE | 26.295 deg/s | 26.609 deg/s | +1.19% |
+| 100 ms bearing RMSE | 12.833 deg | 12.919 deg | +0.67% |
+| Critical 100 ms bearing RMSE | 10.471 deg | 10.312 deg | **-1.52%** |
+| Critical 100 ms rate RMSE | 36.678 deg/s | 35.864 deg/s | **-2.22%** |
+| Adapter-action RMSE | 0.1956 | 0.1966 | +0.47% |
+| Critical adapter-action RMSE | 0.3132 | 0.3007 | **-4.00%** |
+| Exact 300 ms tracking RMSE | 0.6888 | 0.6857 | **-0.44%** |
+| Critical exact tracking RMSE | 0.6666 | 0.6611 | **-0.82%** |
+| Counterfactual-regret RMSE | 0.2059 | 0.2000 | **-2.85%** |
+| Critical regret RMSE | 0.1912 | 0.1745 | **-8.76%** |
+| Visibility-violation RMSE | 0.3278 | 0.3287 | +0.28% |
+| Command-difference RMSE | 0.04344 | 0.04207 | **-3.15%** |
+| Plant-saturation RMSE | 0.9576 | 0.9306 | **-2.82%** |
+
+The mean gate fails: global exact tracking improves 0.44%, below the frozen
+0.5% requirement, and visibility regresses 0.28%. Two seeds pass individually:
+
+| Seed | Global tracking | Critical tracking | Smoothness | Saturation | Development gate |
+|---:|---:|---:|---:|---:|---|
+| 17 | -0.63% | -0.77% | -6.10% | -5.89% | Pass |
+| 29 | **+0.13%** | -0.61% | -1.55% | -1.56% | **Fail** |
+| 43 | -0.82% | -1.08% | -1.62% | -0.87% | Pass |
+
+Seed 29 also regresses average bearing by 3.27%, 100 ms bearing by 3.48%,
+adapter action by 5.42%, regret by 3.92%, and visibility by 1.53%. It fails the
+per-seed state, adapter, and global-tracking safety checks. Seed 43, which was
+the problematic V7 initialization, now passes every V8.7 guard. The instability
+has therefore moved rather than disappeared.
+
 ## Interpretation
 
 V8.7 provides development evidence for the three barrier hypotheses that
@@ -148,25 +187,27 @@ that this smoothness was not purchased by simply reducing command authority.
 
 ## Limitations and next gate
 
-This is not yet a promoted controller.
+This is not a promoted controller. The three-seed replication failed.
 
-- It is one fine-tuning seed initialized from one V7 checkpoint.
 - The rollout holds one causal command; it is not a fully differentiable
   recurrent image-feedback simulation.
-- The average-rate safety margin is narrow.
+- Two initializations improve broadly, but seed 29 shifts performance from the
+  ordinary distribution into controller-critical states.
 - All selection used development data. No fresh test, deployment run, or
   sim-to-real claim was opened.
 
-The justified next step is seed-matched V8.7 replication from the seed-17,
-seed-29, and seed-43 hard-midpoint checkpoints. Replication must retain the
-state, adapter, exact tracking, visibility, smoothness, saturation, and
-per-seed safety gates. Only a replicated pass should proceed to closed-loop
-scenario evaluation or a fresh test block.
+The justified next step is a seed-29 diagnostic, not another broad objective
+search. The immediate experiment should retain the frozen V8.7 loss and inspect
+the epoch-wise Pareto trajectory or a lower learning-rate/shorter fine-tune to
+determine whether checkpoint selection overshoots the global optimum. Any
+refinement must be re-replicated from all three base checkpoints; the current
+result does not qualify for closed-loop promotion or a fresh test block.
 
 Reproduce the development screen with:
 
 ```bash
 aol-develop-gimbal-counterfactual-plant
+aol-replicate-gimbal-counterfactual-plant
 ```
 
 Generated datasets, result JSON, and checkpoints remain under ignored

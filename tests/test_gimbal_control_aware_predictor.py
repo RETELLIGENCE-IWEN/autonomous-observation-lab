@@ -66,6 +66,10 @@ from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_objective i
     CounterfactualPlantObjectiveConfig,
     evaluate_counterfactual_plant_objective,
 )
+from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_replication import (
+    CounterfactualPlantReplicationConfig,
+    evaluate_counterfactual_plant_replication,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -457,6 +461,91 @@ def test_counterfactual_plant_objective_stays_in_development(tmp_path):
     assert candidate["counterfactual_outcome_validation"][
         "position_plant_tracking_rmse_normalized"
     ] is not None
+
+
+def test_counterfactual_plant_replication_is_seed_matched(tmp_path):
+    base = nominal_scenario()
+    scenario = replace(
+        base,
+        name="counterfactual_replication_smoke",
+        config=replace(
+            base.config,
+            timing=replace(base.config.timing, episode_duration_s=0.2),
+            camera=replace(
+                base.config.camera,
+                detection_latency_s=0.0,
+                detection_latency_jitter_s=0.0,
+                miss_probability=0.0,
+            ),
+        ),
+    )
+
+    def dataset(split, seed):
+        return generate_gimbal_dataset(
+            GimbalDatasetGenerationConfig(
+                split=split,
+                seeds=(seed,),
+                scenario_names=(scenario.name,),
+                behavior_names=("privileged_oracle_position",),
+                observation_profiles=(
+                    ObservationProfile.DISTURBANCE_AWARE,
+                ),
+                prediction_horizons_s=(0.0, 0.1, 0.2, 0.3),
+                include_oracle_ceilings=False,
+            ),
+            scenarios=(scenario,),
+        )
+
+    train_path, _ = save_gimbal_dataset(
+        tmp_path / "counterfactual_replication_train",
+        dataset("train", 711),
+    )
+    validation_path, _ = save_gimbal_dataset(
+        tmp_path / "counterfactual_replication_validation",
+        dataset("validation", 811),
+    )
+    base_model = CausalTargetStateGRU(
+        GRUTargetStateModelConfig(
+            input_dim=len(FEATURE_NAMES),
+            prediction_horizons_s=(0.0, 0.1, 0.2, 0.3),
+            hidden_dim=8,
+            embedding_dim=8,
+            mean_parameterization="integrated_midpoint",
+        )
+    )
+    base_directory = tmp_path / "replication_bases"
+    save_gru_checkpoint(
+        base_directory / "gimbal_v7_midpoint_state_reference_seed_17.pt",
+        base_model,
+        {"training_seed": 17},
+    )
+
+    result = evaluate_counterfactual_plant_replication(
+        train_path=train_path,
+        validation_path=validation_path,
+        base_checkpoint_directory=base_directory,
+        checkpoint_directory=tmp_path / "replication_outputs",
+        config=CounterfactualPlantReplicationConfig(
+            training_seeds=(17,),
+            epochs=1,
+            batch_size=1,
+            rollout_horizon_index=1,
+            training_integration_period_s=0.01,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            minimum_passing_seed_count=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.0
+            ),
+        ),
+    )
+
+    assert result["datasets"]["fresh_test"] == {"opened": False}
+    assert len(result["seed_records"]) == 1
+    record = result["seed_records"][0]
+    assert record["training_seed"] == 17
+    assert record["best_epoch"] == 1
+    assert Path(record["checkpoint"]).exists()
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):
