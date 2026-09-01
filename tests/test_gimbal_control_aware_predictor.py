@@ -1,4 +1,5 @@
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -6,6 +7,14 @@ pytest.importorskip("torch")
 
 from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     nominal_scenario,
+)
+from autonomous_observation_lab.gimbal_servoing.adaptive_curriculum_objective import (
+    AdaptiveCurriculumObjectiveConfig,
+    default_adaptive_curriculum_candidates,
+    evaluate_adaptive_curriculum_objective,
+)
+from autonomous_observation_lab.gimbal_servoing.adaptive_curriculum_refinement import (
+    adaptive_curriculum_refinement_candidates,
 )
 from autonomous_observation_lab.gimbal_servoing.config import ObservationProfile
 from autonomous_observation_lab.gimbal_servoing.control_aware_predictor import (
@@ -111,6 +120,35 @@ def test_control_aware_candidates_isolate_required_ablation_factors():
         candidate.mean_parameterization == "integrated_rate"
         for candidate in integrated[1:]
     )
+    adaptive = default_adaptive_curriculum_candidates()
+    assert adaptive[0].adaptive_position_action_weight == 0.0
+    assert not adaptive[0].use_critical_episode_curriculum
+    assert any(
+        candidate.adaptive_position_action_weight > 0.0
+        and not candidate.use_critical_episode_curriculum
+        for candidate in adaptive
+    )
+    refinement = adaptive_curriculum_refinement_candidates()
+    assert [candidate.dynamic_consistency_weight for candidate in refinement] == [
+        25.0,
+        25.0,
+        50.0,
+        100.0,
+        50.0,
+    ]
+    assert refinement[-1].adaptive_position_action_weight < (
+        refinement[2].adaptive_position_action_weight
+    )
+    assert any(
+        candidate.adaptive_position_action_weight == 0.0
+        and candidate.use_critical_episode_curriculum
+        for candidate in adaptive
+    )
+    assert any(
+        candidate.adaptive_position_action_weight > 0.0
+        and candidate.use_critical_episode_curriculum
+        for candidate in adaptive
+    )
     midpoint = midpoint_dynamics_candidates()
     assert all(
         candidate.mean_parameterization == "integrated_midpoint"
@@ -184,6 +222,64 @@ def test_control_aware_development_keeps_test_closed(tmp_path):
     assert result["datasets"]["train"]["episodes"] == 1
     assert all(
         candidate["best_epoch"] == 1 for candidate in result["candidates"]
+    )
+
+
+def test_adaptive_curriculum_objective_keeps_fresh_test_closed(tmp_path):
+    base = nominal_scenario()
+    scenario = replace(
+        base,
+        name="adaptive_curriculum_smoke",
+        config=replace(
+            base.config,
+            timing=replace(base.config.timing, episode_duration_s=0.2),
+            camera=replace(
+                base.config.camera,
+                detection_latency_s=0.0,
+                detection_latency_jitter_s=0.0,
+                miss_probability=0.0,
+            ),
+        ),
+    )
+    train_path, _ = save_gimbal_dataset(
+        tmp_path / "adaptive_train",
+        _dataset("train", 111, scenario),
+    )
+    validation_path, _ = save_gimbal_dataset(
+        tmp_path / "adaptive_validation",
+        _dataset("validation", 211, scenario),
+    )
+
+    result = evaluate_adaptive_curriculum_objective(
+        train_path=train_path,
+        validation_path=validation_path,
+        checkpoint_directory=tmp_path / "adaptive_checkpoints",
+        config=AdaptiveCurriculumObjectiveConfig(
+            epochs=1,
+            batch_size=1,
+            hidden_dim=8,
+            embedding_dim=8,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.0
+            ),
+        ),
+    )
+
+    assert result["datasets"]["fresh_test"] == {"opened": False}
+    assert len(result["candidates"]) == 5
+    assert all(candidate["best_epoch"] == 1 for candidate in result["candidates"])
+    assert all(
+        candidate["common_adapter_validation"][
+            "adaptive_position_action_rmse_normalized"
+        ]
+        is not None
+        for candidate in result["candidates"]
+    )
+    assert all(
+        Path(candidate["checkpoint"]).exists()
+        for candidate in result["candidates"]
     )
 
 

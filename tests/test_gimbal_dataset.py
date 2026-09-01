@@ -33,6 +33,11 @@ from autonomous_observation_lab.gimbal_servoing.control_criticality import (
 from autonomous_observation_lab.gimbal_servoing.control_supervision import (
     compute_control_action_supervision,
 )
+from autonomous_observation_lab.gimbal_servoing.critical_curriculum import (
+    CriticalEpisodeCurriculumConfig,
+    compute_critical_episode_curriculum,
+    critical_episode_curriculum_report,
+)
 
 
 def short_scenario(
@@ -324,6 +329,38 @@ def test_control_action_supervision_uses_serialized_hardware_and_stays_privilege
     )
     assert np.all(supervision.mask == dataset.sequence_mask)
     assert all("oracle" not in name for name in dataset.manifest.feature_names)
+
+
+def test_critical_episode_curriculum_concentrates_without_label_reweighting():
+    scenario = short_scenario()
+    dataset = generate_gimbal_dataset(
+        dataset_request(),
+        scenarios=(scenario,),
+    )
+    criticality = compute_control_criticality(dataset)
+    config = CriticalEpisodeCurriculumConfig(
+        concentration_strength=2.0,
+        maximum_episode_weight=3.0,
+    )
+
+    curriculum = compute_critical_episode_curriculum(
+        dataset,
+        criticality,
+        config=config,
+    )
+    report = critical_episode_curriculum_report(
+        dataset,
+        curriculum,
+        config=config,
+    )
+
+    assert curriculum.episode_weights.shape == (dataset.episode_count,)
+    assert np.mean(curriculum.episode_weights) == pytest.approx(1.0)
+    assert curriculum.expected_sampled_critical_label_fraction >= (
+        curriculum.observed_critical_label_fraction
+    )
+    assert report["episode_count"] == dataset.episode_count
+    assert report["mean_episode_weight"] == pytest.approx(1.0)
 
 
 def test_dataset_round_trip_and_split_seed_validation(tmp_path):

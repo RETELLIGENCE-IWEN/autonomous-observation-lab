@@ -303,6 +303,20 @@ mean tracking, so position promotion fails the seed-consistency gate. The
 documents critical weighting, dual rate/position oracle-action supervision,
 hard dynamic-head ablations, and the exact performance verdict.
 
+The follow-up V6/V6.1 study adds deterministic controller-critical episode
+sampling and an exact differentiable replay of the selected V2.1 position
+adapter. Run its development-only protocols with:
+
+```bash
+aol-develop-gimbal-adaptive-curriculum
+aol-refine-gimbal-adaptive-curriculum
+```
+
+The [V6/V6.1 experiment report](docs/research_tracks/predictive_gimbal_servoing/adaptive_curriculum_v6_experiment.md)
+records the near-pass, the failed soft-constraint refinement, and why the next
+experiment should combine this objective with hard midpoint-integrated target
+dynamics. No fresh test block was opened.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

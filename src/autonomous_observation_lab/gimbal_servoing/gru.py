@@ -18,6 +18,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .config import GimbalServoingConfig, ObservationProfile
+from .controllers import AdaptivePositionControllerConfig
 from .dataset import FEATURE_NAMES, encode_deployable_observation
 from .estimators import TargetStateEstimate
 from .types import GimbalObservation, MaskedScalar
@@ -256,6 +257,8 @@ class GRULossConfig:
     dynamic_consistency_weight: float = 0.0
     rate_action_weight: float = 0.0
     position_action_weight: float = 0.0
+    adaptive_position_action_weight: float = 0.0
+    adaptive_position_config: AdaptivePositionControllerConfig | None = None
     horizon_weights: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
@@ -266,6 +269,7 @@ class GRULossConfig:
             "dynamic_consistency_weight",
             "rate_action_weight",
             "position_action_weight",
+            "adaptive_position_action_weight",
         ):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0.0:
@@ -287,6 +291,7 @@ class GRULoss:
     dynamic_consistency_rmse_rad: torch.Tensor
     rate_action_rmse_normalized: torch.Tensor
     position_action_rmse_normalized: torch.Tensor
+    adaptive_position_action_rmse_normalized: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -303,11 +308,320 @@ class GRUControlLossContext:
     mask: torch.Tensor
 
 
+@dataclass(frozen=True)
+class GRUAdaptivePositionLossContext:
+    teacher_action_normalized: torch.Tensor
+    mask: torch.Tensor
+    gimbal_angle_rad: torch.Tensor
+    gimbal_rate_rad_s: torch.Tensor
+    control_dt_s: torch.Tensor
+    selected_axis_fov_rad: torch.Tensor
+    servo_min_angle_rad: torch.Tensor
+    servo_max_angle_rad: torch.Tensor
+    servo_max_rate_rad_s: torch.Tensor
+    servo_max_acceleration_rad_s2: torch.Tensor
+    servo_position_gain_s_inv: torch.Tensor
+    servo_command_latency_s: torch.Tensor
+    servo_rate_time_constant_s: torch.Tensor
+
+
 def angular_residual_rad(
     prediction_rad: torch.Tensor, target_rad: torch.Tensor
 ) -> torch.Tensor:
     difference = prediction_rad - target_rad
     return torch.atan2(torch.sin(difference), torch.cos(difference))
+
+
+def _interpolate_gru_output(
+    output: GRUTargetStateOutput,
+    requested_horizon_s: torch.Tensor,
+    prediction_horizons_s: tuple[float, ...],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    requested = torch.clamp(
+        requested_horizon_s,
+        prediction_horizons_s[0],
+        prediction_horizons_s[-1],
+    )
+    bearing = output.mean[..., 0, 0]
+    rate = output.mean[..., 0, 1]
+    bearing_std = output.std[..., 0, 0]
+    rate_std = output.std[..., 0, 1]
+    for index, (left_horizon, right_horizon) in enumerate(
+        zip(prediction_horizons_s, prediction_horizons_s[1:])
+    ):
+        fraction = torch.clamp(
+            (requested - left_horizon) / (right_horizon - left_horizon),
+            0.0,
+            1.0,
+        )
+        candidate_bearing = output.mean[..., index, 0] + fraction * (
+            angular_residual_rad(
+                output.mean[..., index + 1, 0],
+                output.mean[..., index, 0],
+            )
+        )
+        candidate_bearing = angular_residual_rad(
+            candidate_bearing,
+            torch.zeros_like(candidate_bearing),
+        )
+        candidate_rate = output.mean[..., index, 1] + fraction * (
+            output.mean[..., index + 1, 1]
+            - output.mean[..., index, 1]
+        )
+        candidate_bearing_std = output.std[..., index, 0] + fraction * (
+            output.std[..., index + 1, 0] - output.std[..., index, 0]
+        )
+        candidate_rate_std = output.std[..., index, 1] + fraction * (
+            output.std[..., index + 1, 1] - output.std[..., index, 1]
+        )
+        selected = (requested >= left_horizon) & (
+            requested <= right_horizon
+        )
+        bearing = torch.where(selected, candidate_bearing, bearing)
+        rate = torch.where(selected, candidate_rate, rate)
+        bearing_std = torch.where(
+            selected,
+            candidate_bearing_std,
+            bearing_std,
+        )
+        rate_std = torch.where(selected, candidate_rate_std, rate_std)
+    return bearing, rate, bearing_std, rate_std
+
+
+def _adaptive_prediction_weight(
+    current_std: torch.Tensor,
+    forecast_std: torch.Tensor,
+    config: AdaptivePositionControllerConfig,
+) -> torch.Tensor:
+    ratio = forecast_std / current_std.clamp_min(1e-9)
+    fraction = torch.clamp(
+        (ratio - config.full_trust_std_ratio)
+        / (config.zero_trust_std_ratio - config.full_trust_std_ratio),
+        0.0,
+        1.0,
+    )
+    return 1.0 - fraction * (1.0 - config.minimum_prediction_weight)
+
+
+def adaptive_position_surrogate_actions(
+    output: GRUTargetStateOutput,
+    context: GRUAdaptivePositionLossContext,
+    prediction_horizons_s: tuple[float, ...],
+    config: AdaptivePositionControllerConfig,
+    sequence_mask: torch.Tensor,
+) -> torch.Tensor:
+    """Differentiably replay the selected adaptive position adapter."""
+
+    expected_shape = output.mean.shape[:2]
+    if sequence_mask.shape != expected_shape:
+        raise ValueError("adaptive position sequence mask shape is invalid")
+    for value in (
+        context.teacher_action_normalized,
+        context.mask,
+        context.gimbal_angle_rad,
+        context.gimbal_rate_rad_s,
+        context.control_dt_s,
+        context.selected_axis_fov_rad,
+        context.servo_min_angle_rad,
+        context.servo_max_angle_rad,
+        context.servo_max_rate_rad_s,
+        context.servo_max_acceleration_rad_s2,
+        context.servo_position_gain_s_inv,
+        context.servo_command_latency_s,
+        context.servo_rate_time_constant_s,
+    ):
+        if value.shape != expected_shape:
+            raise ValueError("adaptive position context shape is invalid")
+    if len(prediction_horizons_s) != output.mean.shape[-2]:
+        raise ValueError("adaptive position horizons do not match output")
+    if any(
+        right <= left
+        for left, right in zip(
+            prediction_horizons_s,
+            prediction_horizons_s[1:],
+        )
+    ):
+        raise ValueError(
+            "adaptive position horizons must be strictly increasing"
+        )
+
+    arrival = config.actuator_arrival_time_scale * (
+        context.servo_command_latency_s
+        + context.servo_rate_time_constant_s
+        + config.position_response_fraction
+        / context.servo_position_gain_s_inv
+    ) + config.additional_preview_s
+    arrival = torch.clamp(
+        arrival,
+        prediction_horizons_s[0],
+        prediction_horizons_s[-1],
+    )
+    current_bearing = output.mean[..., 0, 0]
+    current_rate = output.mean[..., 0, 1]
+    current_bearing_std = output.std[..., 0, 0]
+    base_bearing, base_rate, base_std, _base_rate_std = (
+        _interpolate_gru_output(output, arrival, prediction_horizons_s)
+    )
+    base_weight = _adaptive_prediction_weight(
+        current_bearing_std,
+        base_std,
+        config,
+    )
+    blended_base_bearing = current_bearing + base_weight * (
+        angular_residual_rad(base_bearing, current_bearing)
+    )
+    blended_base_bearing = angular_residual_rad(
+        blended_base_bearing,
+        torch.zeros_like(blended_base_bearing),
+    )
+    blended_base_rate = current_rate + base_weight * (
+        base_rate - current_rate
+    )
+    blended_base_std = current_bearing_std + base_weight * (
+        base_std - current_bearing_std
+    )
+    image_error = angular_residual_rad(
+        blended_base_bearing,
+        context.gimbal_angle_rad,
+    )
+    fov_fraction = (
+        torch.abs(image_error)
+        + config.visibility_uncertainty_sigma * blended_base_std
+    ) / (0.5 * context.selected_axis_fov_rad)
+    risk = torch.clamp(
+        (fov_fraction - config.visibility_risk_onset_fraction)
+        / (
+            config.visibility_risk_full_fraction
+            - config.visibility_risk_onset_fraction
+        ),
+        0.0,
+        1.0,
+    )
+    if config.risk_requires_outward_motion:
+        outward = image_error * (
+            blended_base_rate - context.gimbal_rate_rad_s
+        ) > 0.0
+        risk = torch.where(outward, risk, torch.zeros_like(risk))
+    requested = torch.clamp(
+        arrival + risk * config.risk_horizon_boost_s,
+        prediction_horizons_s[0],
+        prediction_horizons_s[-1],
+    )
+    forecast_bearing, _forecast_rate, forecast_std, _forecast_rate_std = (
+        _interpolate_gru_output(output, requested, prediction_horizons_s)
+    )
+    prediction_weight = _adaptive_prediction_weight(
+        current_bearing_std,
+        forecast_std,
+        config,
+    )
+    raw_target = current_bearing + prediction_weight * (
+        angular_residual_rad(forecast_bearing, current_bearing)
+    )
+    raw_target = angular_residual_rad(
+        raw_target,
+        torch.zeros_like(raw_target),
+    )
+    raw_target = torch.clamp(
+        raw_target,
+        context.servo_min_angle_rad,
+        context.servo_max_angle_rad,
+    )
+
+    batch_size, time_count = expected_shape
+    setpoint_angle = context.gimbal_angle_rad[:, 0]
+    setpoint_rate = output.mean.new_zeros(batch_size)
+    setpoint_acceleration = output.mean.new_zeros(batch_size)
+    commands = []
+    for time_index in range(time_count):
+        active = sequence_mask[:, time_index].bool()
+        target = raw_target[:, time_index]
+        dt_s = context.control_dt_s[:, time_index].clamp_min(1e-9)
+        step_risk = risk[:, time_index]
+        maximum_rate = (
+            config.setpoint_rate_limit_scale
+            * context.servo_max_rate_rad_s[:, time_index]
+            * (
+                1.0
+                + step_risk
+                * (config.risk_rate_limit_multiplier - 1.0)
+            )
+        )
+        base_acceleration = (
+            config.setpoint_acceleration_limit_scale
+            * context.servo_max_acceleration_rad_s2[:, time_index]
+        )
+        maximum_acceleration = base_acceleration * (
+            1.0
+            + step_risk
+            * (config.risk_acceleration_limit_multiplier - 1.0)
+        )
+        maximum_jerk = (
+            base_acceleration
+            / config.setpoint_jerk_rise_time_s
+            * (
+                1.0
+                + step_risk
+                * (config.risk_jerk_limit_multiplier - 1.0)
+            )
+        )
+        error = target - setpoint_angle
+        stopping_speed = torch.sqrt(
+            2.0 * maximum_acceleration * torch.abs(error) + 1e-12
+        )
+        desired_rate = torch.sign(error) * torch.minimum(
+            maximum_rate,
+            stopping_speed,
+        )
+        raw_acceleration = (desired_rate - setpoint_rate) / dt_s
+        desired_acceleration = torch.clamp(
+            raw_acceleration,
+            -maximum_acceleration,
+            maximum_acceleration,
+        )
+        acceleration = setpoint_acceleration + torch.clamp(
+            desired_acceleration - setpoint_acceleration,
+            -maximum_jerk * dt_s,
+            maximum_jerk * dt_s,
+        )
+        rate = torch.clamp(
+            setpoint_rate + acceleration * dt_s,
+            -maximum_rate,
+            maximum_rate,
+        )
+        step = rate * dt_s
+        overshoot = (step * error > 0.0) & (
+            torch.abs(step) >= torch.abs(error)
+        )
+        next_angle = torch.where(
+            overshoot,
+            target,
+            torch.clamp(
+                setpoint_angle + step,
+                context.servo_min_angle_rad[:, time_index],
+                context.servo_max_angle_rad[:, time_index],
+            ),
+        )
+        rate = torch.where(overshoot, torch.zeros_like(rate), rate)
+        acceleration = torch.where(
+            overshoot,
+            torch.zeros_like(acceleration),
+            acceleration,
+        )
+        setpoint_angle = torch.where(active, next_angle, setpoint_angle)
+        setpoint_rate = torch.where(active, rate, setpoint_rate)
+        setpoint_acceleration = torch.where(
+            active,
+            acceleration,
+            setpoint_acceleration,
+        )
+        normalized = torch.where(
+            setpoint_angle >= 0.0,
+            setpoint_angle / context.servo_max_angle_rad[:, time_index],
+            setpoint_angle / (-context.servo_min_angle_rad[:, time_index]),
+        )
+        commands.append(torch.clamp(normalized, -1.0, 1.0))
+    return torch.stack(commands, dim=1)
 
 
 def target_state_nll(
@@ -320,6 +634,7 @@ def target_state_nll(
     label_weights: torch.Tensor | None = None,
     prediction_horizons_s: tuple[float, ...] | None = None,
     control_context: GRUControlLossContext | None = None,
+    adaptive_position_context: GRUAdaptivePositionLossContext | None = None,
 ) -> GRULoss:
     """Masked heteroscedastic Gaussian loss with circular bearing residuals."""
     config = config or GRULossConfig()
@@ -430,6 +745,7 @@ def target_state_nll(
         ).sum() / selected_weights.sum().clamp_min(1.0)
     rate_action_mse = targets.new_zeros(())
     position_action_mse = targets.new_zeros(())
+    adaptive_position_action_mse = targets.new_zeros(())
     if config.rate_action_weight > 0.0 or config.position_action_weight > 0.0:
         if control_context is None:
             raise ValueError(
@@ -509,6 +825,39 @@ def target_state_nll(
             ).square()
             * action_weights
         ).sum() / action_weight_sum
+    if config.adaptive_position_action_weight > 0.0:
+        if prediction_horizons_s is None:
+            raise ValueError(
+                "prediction horizons are required for adaptive position loss"
+            )
+        if config.adaptive_position_config is None:
+            raise ValueError(
+                "adaptive position config is required for adaptive position loss"
+            )
+        if adaptive_position_context is None:
+            raise ValueError(
+                "adaptive position context is required for adaptive position loss"
+            )
+        predicted_adaptive_action = adaptive_position_surrogate_actions(
+            output,
+            adaptive_position_context,
+            prediction_horizons_s,
+            config.adaptive_position_config,
+            sequence_mask,
+        )
+        adaptive_mask = (
+            mask[..., 0] & adaptive_position_context.mask.bool()
+        )
+        adaptive_weights = (
+            weights[..., 0] * adaptive_mask.to(dtype=weights.dtype)
+        )
+        adaptive_position_action_mse = (
+            (
+                predicted_adaptive_action
+                - adaptive_position_context.teacher_action_normalized
+            ).square()
+            * adaptive_weights
+        ).sum() / adaptive_weights.sum().clamp_min(1.0)
     mean_error = bearing_mse + rate_mse
     total = (
         config.bearing_weight * bearing_nll
@@ -517,6 +866,8 @@ def target_state_nll(
         + config.dynamic_consistency_weight * consistency_mse
         + config.rate_action_weight * rate_action_mse
         + config.position_action_weight * position_action_mse
+        + config.adaptive_position_action_weight
+        * adaptive_position_action_mse
     )
     return GRULoss(
         total=total,
@@ -527,6 +878,9 @@ def target_state_nll(
         dynamic_consistency_rmse_rad=torch.sqrt(consistency_mse),
         rate_action_rmse_normalized=torch.sqrt(rate_action_mse),
         position_action_rmse_normalized=torch.sqrt(position_action_mse),
+        adaptive_position_action_rmse_normalized=torch.sqrt(
+            adaptive_position_action_mse
+        ),
     )
 
 

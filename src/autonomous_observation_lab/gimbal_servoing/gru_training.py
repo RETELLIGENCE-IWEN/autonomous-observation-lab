@@ -13,8 +13,12 @@ from typing import Sequence
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
+from .adaptive_position_supervision import (
+    AdaptivePositionSupervision,
+    compute_adaptive_position_supervision,
+)
 from .config import GimbalCommandMode, ObservationProfile
 from .control_supervision import (
     ControlActionSupervision,
@@ -33,9 +37,11 @@ from .estimators import (
 )
 from .gru import (
     CausalTargetStateGRU,
+    GRUAdaptivePositionLossContext,
     GRUControlLossContext,
     GRULossConfig,
     GRUTargetStateModelConfig,
+    adaptive_position_surrogate_actions,
     gru_parameter_count,
     save_gru_checkpoint,
     target_state_nll,
@@ -95,6 +101,7 @@ class GRUEvaluationMetrics:
     dynamic_consistency_rmse_deg: float | None
     rate_action_rmse_normalized: float | None
     position_action_rmse_normalized: float | None
+    adaptive_position_action_rmse_normalized: float | None
     per_horizon: tuple[HorizonMetrics, ...]
 
 
@@ -125,6 +132,7 @@ class GimbalTorchSequenceDataset(Dataset):
         profile: ObservationProfile,
         label_weights: np.ndarray | None = None,
         control_supervision: ControlActionSupervision | None = None,
+        adaptive_position_supervision: AdaptivePositionSupervision | None = None,
     ):
         try:
             self.profile_index = dataset.manifest.observation_profiles.index(
@@ -161,6 +169,28 @@ class GimbalTorchSequenceDataset(Dataset):
             if control_supervision.oracle_actions.shape != (*expected_shape, 2):
                 raise ValueError("oracle action supervision shape is invalid")
         self.control_supervision = control_supervision
+        if adaptive_position_supervision is not None:
+            expected_shape = dataset.sequence_mask.shape
+            for value in (
+                adaptive_position_supervision.teacher_action_normalized,
+                adaptive_position_supervision.mask,
+                adaptive_position_supervision.gimbal_angle_rad,
+                adaptive_position_supervision.gimbal_rate_rad_s,
+                adaptive_position_supervision.control_dt_s,
+                adaptive_position_supervision.selected_axis_fov_rad,
+                adaptive_position_supervision.servo_min_angle_rad,
+                adaptive_position_supervision.servo_max_angle_rad,
+                adaptive_position_supervision.servo_max_rate_rad_s,
+                adaptive_position_supervision.servo_max_acceleration_rad_s2,
+                adaptive_position_supervision.servo_position_gain_s_inv,
+                adaptive_position_supervision.servo_command_latency_s,
+                adaptive_position_supervision.servo_rate_time_constant_s,
+            ):
+                if value.shape != expected_shape:
+                    raise ValueError(
+                        "adaptive position supervision shape is invalid"
+                    )
+        self.adaptive_position_supervision = adaptive_position_supervision
 
     def __len__(self) -> int:
         return self.dataset.episode_count
@@ -212,6 +242,28 @@ class GimbalTorchSequenceDataset(Dataset):
                     ).bool(),
                 }
             )
+        if self.adaptive_position_supervision is not None:
+            supervision = self.adaptive_position_supervision
+            names = (
+                "teacher_action_normalized",
+                "mask",
+                "gimbal_angle_rad",
+                "gimbal_rate_rad_s",
+                "control_dt_s",
+                "selected_axis_fov_rad",
+                "servo_min_angle_rad",
+                "servo_max_angle_rad",
+                "servo_max_rate_rad_s",
+                "servo_max_acceleration_rad_s2",
+                "servo_position_gain_s_inv",
+                "servo_command_latency_s",
+                "servo_rate_time_constant_s",
+            )
+            for name in names:
+                value = torch.from_numpy(getattr(supervision, name)[index])
+                item[f"adaptive_{name}"] = (
+                    value.bool() if name == "mask" else value.float()
+                )
         return item
 
 
@@ -248,6 +300,9 @@ def _metrics_from_predictions(
     label_weights: np.ndarray | None = None,
     control_supervision: ControlActionSupervision | None = None,
     interval_rate_rad_s: np.ndarray | None = None,
+    adaptive_position_predictions: np.ndarray | None = None,
+    adaptive_position_teacher: np.ndarray | None = None,
+    adaptive_position_mask: np.ndarray | None = None,
 ) -> GRUEvaluationMetrics:
     loss_config = loss_config or GRULossConfig()
     if mean.shape != targets.shape or std.shape != targets.shape:
@@ -339,6 +394,7 @@ def _metrics_from_predictions(
             )
     rate_action_mse = None
     position_action_mse = None
+    adaptive_position_action_mse = None
     if (
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
@@ -407,6 +463,37 @@ def _metrics_from_predictions(
                 )
                 / action_weight_sum
             )
+    if loss_config.adaptive_position_action_weight > 0.0:
+        expected_time_shape = targets.shape[:2]
+        if (
+            adaptive_position_predictions is None
+            or adaptive_position_teacher is None
+            or adaptive_position_mask is None
+        ):
+            raise ValueError(
+                "adaptive position predictions and teacher are required"
+            )
+        if (
+            adaptive_position_predictions.shape != expected_time_shape
+            or adaptive_position_teacher.shape != expected_time_shape
+            or adaptive_position_mask.shape != expected_time_shape
+        ):
+            raise ValueError("adaptive position evaluation shape is invalid")
+        action_mask = mask[..., 0] & adaptive_position_mask
+        action_weights = weights[..., 0] * action_mask
+        action_weight_sum = float(np.sum(action_weights))
+        if action_weight_sum > 0.0:
+            adaptive_position_action_mse = float(
+                np.sum(
+                    (
+                        adaptive_position_predictions
+                        - adaptive_position_teacher
+                    )
+                    ** 2
+                    * action_weights
+                )
+                / action_weight_sum
+            )
     if bearing_nll is None or rate_nll is None:
         loss = None
     else:
@@ -421,6 +508,8 @@ def _metrics_from_predictions(
             + loss_config.rate_action_weight * (rate_action_mse or 0.0)
             + loss_config.position_action_weight
             * (position_action_mse or 0.0)
+            + loss_config.adaptive_position_action_weight
+            * (adaptive_position_action_mse or 0.0)
         )
 
     def coverage(error: np.ndarray, sigma: np.ndarray, multiple: float):
@@ -519,6 +608,11 @@ def _metrics_from_predictions(
             if position_action_mse is not None
             else None
         ),
+        adaptive_position_action_rmse_normalized=(
+            math.sqrt(adaptive_position_action_mse)
+            if adaptive_position_action_mse is not None
+            else None
+        ),
         per_horizon=tuple(per_horizon),
     )
 
@@ -540,24 +634,61 @@ def evaluate_gru(
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
     )
+    adaptive_aware = loss_config.adaptive_position_action_weight > 0.0
+    if adaptive_aware and loss_config.adaptive_position_config is None:
+        raise ValueError(
+            "adaptive position config is required for adaptive evaluation"
+        )
     control_supervision = (
         compute_control_action_supervision(dataset, profile=profile)
         if action_aware
         else None
     )
+    adaptive_position_supervision = (
+        compute_adaptive_position_supervision(
+            dataset,
+            adapter=loss_config.adaptive_position_config,
+            profile=profile,
+        )
+        if adaptive_aware and loss_config.adaptive_position_config is not None
+        else None
+    )
     model.to(device)
     model.eval()
     loader = DataLoader(
-        GimbalTorchSequenceDataset(dataset, profile, label_weights),
+        GimbalTorchSequenceDataset(
+            dataset,
+            profile,
+            label_weights=label_weights,
+            adaptive_position_supervision=adaptive_position_supervision,
+        ),
         batch_size=batch_size,
         shuffle=False,
     )
     means, stds, targets, prediction_masks, possible_masks = [], [], [], [], []
     interval_rates = []
     collected_weights = []
+    adaptive_predictions = []
+    adaptive_teachers = []
+    adaptive_masks = []
     for batch in loader:
         features = batch["features"].to(device)
         output = model(features)
+        if adaptive_aware:
+            assert loss_config.adaptive_position_config is not None
+            adaptive_predictions.append(
+                adaptive_position_surrogate_actions(
+                    output,
+                    _adaptive_position_context_from_batch(batch, device),
+                    dataset.manifest.prediction_horizons_s,
+                    loss_config.adaptive_position_config,
+                    batch["sequence_mask"].to(device),
+                ).cpu().numpy()
+            )
+            adaptive_teachers.append(
+                batch["adaptive_teacher_action_normalized"].numpy()
+            )
+            adaptive_masks.append(batch["adaptive_mask"].numpy())
         means.append(output.mean.cpu().numpy())
         stds.append(output.std.cpu().numpy())
         if output.interval_rate_rad_s is not None:
@@ -591,6 +722,17 @@ def evaluate_gru(
         interval_rate_rad_s=(
             np.concatenate(interval_rates) if interval_rates else None
         ),
+        adaptive_position_predictions=(
+            np.concatenate(adaptive_predictions)
+            if adaptive_predictions
+            else None
+        ),
+        adaptive_position_teacher=(
+            np.concatenate(adaptive_teachers) if adaptive_teachers else None
+        ),
+        adaptive_position_mask=(
+            np.concatenate(adaptive_masks) if adaptive_masks else None
+        ),
     )
 
 
@@ -615,6 +757,41 @@ def _control_context_from_batch(
         ].to(device),
         position_preview_s=batch["control_position_preview_s"].to(device),
         mask=batch["control_supervision_mask"].to(device),
+    )
+
+
+def _adaptive_position_context_from_batch(
+    batch: dict[str, torch.Tensor],
+    device: torch.device,
+) -> GRUAdaptivePositionLossContext:
+    return GRUAdaptivePositionLossContext(
+        teacher_action_normalized=batch[
+            "adaptive_teacher_action_normalized"
+        ].to(device),
+        mask=batch["adaptive_mask"].to(device),
+        gimbal_angle_rad=batch["adaptive_gimbal_angle_rad"].to(device),
+        gimbal_rate_rad_s=batch["adaptive_gimbal_rate_rad_s"].to(device),
+        control_dt_s=batch["adaptive_control_dt_s"].to(device),
+        selected_axis_fov_rad=batch[
+            "adaptive_selected_axis_fov_rad"
+        ].to(device),
+        servo_min_angle_rad=batch["adaptive_servo_min_angle_rad"].to(device),
+        servo_max_angle_rad=batch["adaptive_servo_max_angle_rad"].to(device),
+        servo_max_rate_rad_s=batch[
+            "adaptive_servo_max_rate_rad_s"
+        ].to(device),
+        servo_max_acceleration_rad_s2=batch[
+            "adaptive_servo_max_acceleration_rad_s2"
+        ].to(device),
+        servo_position_gain_s_inv=batch[
+            "adaptive_servo_position_gain_s_inv"
+        ].to(device),
+        servo_command_latency_s=batch[
+            "adaptive_servo_command_latency_s"
+        ].to(device),
+        servo_rate_time_constant_s=batch[
+            "adaptive_servo_rate_time_constant_s"
+        ].to(device),
     )
 
 
@@ -648,6 +825,7 @@ def train_gru(
     loss_config: GRULossConfig | None = None,
     training_label_weights: np.ndarray | None = None,
     validation_label_weights: np.ndarray | None = None,
+    training_episode_weights: np.ndarray | None = None,
 ) -> GRUTrainingResult:
     training_config = training_config or GRUTrainingConfig()
     loss_config = loss_config or GRULossConfig()
@@ -670,9 +848,23 @@ def train_gru(
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
     )
+    adaptive_aware = loss_config.adaptive_position_action_weight > 0.0
+    if adaptive_aware and loss_config.adaptive_position_config is None:
+        raise ValueError(
+            "adaptive position config is required for adaptive training"
+        )
     training_control_supervision = (
         compute_control_action_supervision(train, profile=profile)
         if action_aware
+        else None
+    )
+    training_adaptive_position_supervision = (
+        compute_adaptive_position_supervision(
+            train,
+            adapter=loss_config.adaptive_position_config,
+            profile=profile,
+        )
+        if adaptive_aware and loss_config.adaptive_position_config is not None
         else None
     )
     model = CausalTargetStateGRU(model_config).to(device)
@@ -682,16 +874,34 @@ def train_gru(
         weight_decay=training_config.weight_decay,
     )
     generator = torch.Generator().manual_seed(training_config.seed)
+    sampler = None
+    if training_episode_weights is not None:
+        if training_episode_weights.shape != (train.episode_count,):
+            raise ValueError("training episode weights shape is invalid")
+        if np.any(~np.isfinite(training_episode_weights)) or np.any(
+            training_episode_weights <= 0.0
+        ):
+            raise ValueError(
+                "training episode weights must be finite and positive"
+            )
+        sampler = WeightedRandomSampler(
+            torch.as_tensor(training_episode_weights, dtype=torch.double),
+            num_samples=train.episode_count,
+            replacement=True,
+            generator=generator,
+        )
     loader = DataLoader(
         GimbalTorchSequenceDataset(
             train,
             profile,
             training_label_weights,
             training_control_supervision,
+            training_adaptive_position_supervision,
         ),
         batch_size=training_config.batch_size,
-        shuffle=True,
-        generator=generator,
+        shuffle=sampler is None,
+        sampler=sampler,
+        generator=(generator if sampler is None else None),
     )
     initial_validation = evaluate_gru(
         model,
@@ -734,6 +944,11 @@ def train_gru(
                 control_context=(
                     _control_context_from_batch(batch, device)
                     if action_aware
+                    else None
+                ),
+                adaptive_position_context=(
+                    _adaptive_position_context_from_batch(batch, device)
+                    if adaptive_aware
                     else None
                 ),
             )

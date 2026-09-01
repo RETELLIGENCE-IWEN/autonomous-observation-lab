@@ -15,6 +15,12 @@ from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     ClosedLoopScenario,
     nominal_scenario,
 )
+from autonomous_observation_lab.gimbal_servoing.adaptive_position_supervision import (
+    compute_adaptive_position_supervision,
+)
+from autonomous_observation_lab.gimbal_servoing.adaptive_position_v21 import (
+    default_visibility_risk_candidates,
+)
 from autonomous_observation_lab.gimbal_servoing.dataset import (
     FEATURE_NAMES,
     GimbalDatasetGenerationConfig,
@@ -23,12 +29,14 @@ from autonomous_observation_lab.gimbal_servoing.dataset import (
 )
 from autonomous_observation_lab.gimbal_servoing.gru import (
     CausalTargetStateGRU,
+    GRUAdaptivePositionLossContext,
     GRUControlLossContext,
     GRUInferenceConfig,
     GRULossConfig,
     GRUTargetStateEstimator,
     GRUTargetStateModelConfig,
     GRUTargetStateOutput,
+    adaptive_position_surrogate_actions,
     angular_residual_rad,
     gru_parameter_count,
     load_gru_checkpoint,
@@ -194,12 +202,103 @@ def test_probabilistic_loss_wraps_bearing_and_ignores_masked_values():
         parameter.grad is None or torch.all(torch.isfinite(parameter.grad))
         for parameter in model.parameters()
     )
+    assert any(
+        parameter.grad is not None
+        and torch.any(torch.abs(parameter.grad) > 0.0)
+        for parameter in model.parameters()
+    )
 
     wrapped = angular_residual_rad(
         torch.tensor([math.pi - 0.1]),
         torch.tensor([-math.pi + 0.1]),
     )
     assert wrapped.item() == pytest.approx(-0.2, abs=1e-6)
+
+
+def test_adaptive_position_teacher_matches_differentiable_truth_replay():
+    dataset = learning_dataset("train", (161, 162))
+    adapter = default_visibility_risk_candidates()[2].controller
+    supervision = compute_adaptive_position_supervision(
+        dataset,
+        adapter=adapter,
+        profile=ObservationProfile.SERVO_AWARE,
+    )
+
+    def tensor(name: str, *, boolean: bool = False):
+        value = torch.from_numpy(getattr(supervision, name))
+        return value.bool() if boolean else value.float()
+
+    context = GRUAdaptivePositionLossContext(
+        teacher_action_normalized=tensor("teacher_action_normalized"),
+        mask=tensor("mask", boolean=True),
+        gimbal_angle_rad=tensor("gimbal_angle_rad"),
+        gimbal_rate_rad_s=tensor("gimbal_rate_rad_s"),
+        control_dt_s=tensor("control_dt_s"),
+        selected_axis_fov_rad=tensor("selected_axis_fov_rad"),
+        servo_min_angle_rad=tensor("servo_min_angle_rad"),
+        servo_max_angle_rad=tensor("servo_max_angle_rad"),
+        servo_max_rate_rad_s=tensor("servo_max_rate_rad_s"),
+        servo_max_acceleration_rad_s2=tensor(
+            "servo_max_acceleration_rad_s2"
+        ),
+        servo_position_gain_s_inv=tensor("servo_position_gain_s_inv"),
+        servo_command_latency_s=tensor("servo_command_latency_s"),
+        servo_rate_time_constant_s=tensor("servo_rate_time_constant_s"),
+    )
+    truth = torch.from_numpy(dataset.targets).float()
+    truth_output = GRUTargetStateOutput(
+        mean=truth,
+        std=torch.full_like(truth, 1e-8),
+        hidden=torch.empty(0),
+    )
+    sequence_mask = torch.from_numpy(dataset.sequence_mask)
+    actions = adaptive_position_surrogate_actions(
+        truth_output,
+        context,
+        dataset.manifest.prediction_horizons_s,
+        adapter,
+        sequence_mask,
+    )
+    selected = context.mask & sequence_mask
+    torch.testing.assert_close(
+        actions[selected],
+        context.teacher_action_normalized[selected],
+        atol=2e-5,
+        rtol=2e-5,
+    )
+    assert torch.all(torch.abs(actions) <= 1.0)
+
+    model = small_model()
+    profile_index = dataset.manifest.observation_profiles.index(
+        ObservationProfile.SERVO_AWARE.value
+    )
+    output = model(
+        torch.from_numpy(dataset.features[:, profile_index]).float()
+    )
+    loss = target_state_nll(
+        output,
+        truth,
+        torch.from_numpy(dataset.target_mask),
+        sequence_mask,
+        GRULossConfig(
+            adaptive_position_action_weight=0.25,
+            adaptive_position_config=adapter,
+        ),
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adaptive_position_context=context,
+    )
+    loss.total.backward()
+    assert torch.isfinite(loss.total)
+    assert torch.isfinite(loss.adaptive_position_action_rmse_normalized)
+    assert all(
+        parameter.grad is None or torch.all(torch.isfinite(parameter.grad))
+        for parameter in model.parameters()
+    )
+    assert any(
+        parameter.grad is not None
+        and torch.any(torch.abs(parameter.grad) > 0.0)
+        for parameter in model.parameters()
+    )
 
 
 def test_control_aware_loss_penalizes_inconsistent_prediction_heads():
@@ -450,6 +549,51 @@ def test_training_is_deterministic_and_improves_validation_loss(trained_gru):
     assert first.initial_validation.loss is not None
     assert first.best_validation.loss < first.initial_validation.loss
     assert first.best_epoch >= 1
+
+
+def test_episode_weighted_training_is_deterministic():
+    train = learning_dataset("train", (31, 32, 33))
+    validation = learning_dataset("validation", (41,))
+    model_config = GRUTargetStateModelConfig(
+        input_dim=len(FEATURE_NAMES),
+        prediction_horizons_s=train.manifest.prediction_horizons_s,
+        hidden_dim=8,
+        embedding_dim=8,
+    )
+    training_config = GRUTrainingConfig(
+        epochs=1,
+        batch_size=2,
+        seed=13,
+    )
+    episode_weights = np.asarray((0.5, 1.0, 2.0), dtype=np.float32)
+
+    first = train_gru(
+        train,
+        validation,
+        ObservationProfile.SERVO_AWARE,
+        model_config=model_config,
+        training_config=training_config,
+        training_episode_weights=episode_weights,
+    )
+    second = train_gru(
+        train,
+        validation,
+        ObservationProfile.SERVO_AWARE,
+        model_config=model_config,
+        training_config=training_config,
+        training_episode_weights=episode_weights,
+    )
+
+    assert first.history == second.history
+    with pytest.raises(ValueError, match="episode weights shape"):
+        train_gru(
+            train,
+            validation,
+            ObservationProfile.SERVO_AWARE,
+            model_config=model_config,
+            training_config=training_config,
+            training_episode_weights=np.ones(2, dtype=np.float32),
+        )
 
 
 def test_checkpoint_round_trip_and_analytical_comparison(trained_gru, tmp_path):

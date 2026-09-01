@@ -195,11 +195,11 @@ qualification.
 4. **Naive critical weighting and oracle-action imitation are not sufficient.**
    They improve their local objectives but create harmful gradient tradeoffs.
 5. **The immediate barrier is seed variance and controller mismatch.** The
-   generic oracle command is not the frozen V2.1 adapter's action. The next
-   study should concentrate minibatches at controller-critical episodes and
-   train against a differentiable approximation of the actual downstream
-   adapter/plant, then use either a validation-selected seed or a small causal
-   ensemble before opening another test block.
+   generic oracle command is not the frozen V2.1 adapter's action. The proposed
+   controller-critical curriculum and differentiable downstream adapter study
+   has now been executed as V6/V6.1. It produced a near-pass but exposed a
+   structural conflict with independent future-bearing heads; see the
+   [V6/V6.1 report](adaptive_curriculum_v6_experiment.md).
 
 Artifacts are intentionally ignored by Git but are reproducible through the
 `aol-develop-gimbal-*`, `aol-replicate-gimbal-control-aware-predictor`,
