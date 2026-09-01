@@ -358,15 +358,51 @@ class CausalTargetStateGRUEnsemble(nn.Module):
         )
 
 @dataclass(frozen=True)
+class GRUPositionPlantRolloutConfig:
+    """Numerical and scoring choices for a local causal servo rollout.
+
+    Hardware properties come from each serialized episode.  The optional
+    integration-period override is only a training-time numerical speed knob;
+    leaving it unset replays the simulator's configured integration period.
+    """
+
+    horizon_index: int = 1
+    visibility_margin_fraction: float = 0.85
+    integration_period_override_s: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.horizon_index <= 0:
+            raise ValueError("plant rollout horizon index must be positive")
+        if not 0.0 < self.visibility_margin_fraction <= 1.0:
+            raise ValueError("visibility margin fraction must be in (0, 1]")
+        if self.integration_period_override_s is not None and (
+            not math.isfinite(self.integration_period_override_s)
+            or self.integration_period_override_s <= 0.0
+        ):
+            raise ValueError(
+                "plant integration-period override must be finite and positive"
+            )
+
+
+@dataclass(frozen=True)
 class GRULossConfig:
     bearing_weight: float = 1.0
     rate_weight: float = 1.0
     mean_error_weight: float = 0.05
+    bearing_mean_error_weight: float = 0.0
+    rate_mean_error_weight: float = 0.0
     dynamic_consistency_weight: float = 0.0
     rate_action_weight: float = 0.0
     position_action_weight: float = 0.0
     adaptive_position_action_weight: float = 0.0
     adaptive_position_config: AdaptivePositionControllerConfig | None = None
+    position_plant_tracking_weight: float = 0.0
+    position_plant_response_weight: float = 0.0
+    position_plant_regret_weight: float = 0.0
+    position_plant_visibility_weight: float = 0.0
+    position_plant_smoothness_weight: float = 0.0
+    position_plant_saturation_weight: float = 0.0
+    position_plant_config: GRUPositionPlantRolloutConfig | None = None
     horizon_weights: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
@@ -374,10 +410,18 @@ class GRULossConfig:
             "bearing_weight",
             "rate_weight",
             "mean_error_weight",
+            "bearing_mean_error_weight",
+            "rate_mean_error_weight",
             "dynamic_consistency_weight",
             "rate_action_weight",
             "position_action_weight",
             "adaptive_position_action_weight",
+            "position_plant_tracking_weight",
+            "position_plant_response_weight",
+            "position_plant_regret_weight",
+            "position_plant_visibility_weight",
+            "position_plant_smoothness_weight",
+            "position_plant_saturation_weight",
         ):
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0.0:
@@ -400,6 +444,12 @@ class GRULoss:
     rate_action_rmse_normalized: torch.Tensor
     position_action_rmse_normalized: torch.Tensor
     adaptive_position_action_rmse_normalized: torch.Tensor
+    position_plant_tracking_rmse_normalized: torch.Tensor
+    position_plant_response_rmse_normalized: torch.Tensor
+    position_plant_regret_rmse_normalized: torch.Tensor
+    position_plant_visibility_rmse_normalized: torch.Tensor
+    position_plant_smoothness_rmse_normalized: torch.Tensor
+    position_plant_saturation_rmse_normalized: torch.Tensor
 
 
 @dataclass(frozen=True)
@@ -429,8 +479,21 @@ class GRUAdaptivePositionLossContext:
     servo_max_rate_rad_s: torch.Tensor
     servo_max_acceleration_rad_s2: torch.Tensor
     servo_position_gain_s_inv: torch.Tensor
+    servo_position_tolerance_rad: torch.Tensor
+    servo_position_quantization_rad: torch.Tensor
+    servo_command_polarity: torch.Tensor
     servo_command_latency_s: torch.Tensor
     servo_rate_time_constant_s: torch.Tensor
+    control_period_s: torch.Tensor
+    integration_period_s: torch.Tensor
+    camera_frame_period_s: torch.Tensor
+
+
+@dataclass
+class GRUPositionPlantRollout:
+    angle_rad: torch.Tensor
+    rate_rad_s: torch.Tensor
+    saturation_fraction: torch.Tensor
 
 
 def angular_residual_rad(
@@ -535,8 +598,14 @@ def adaptive_position_surrogate_actions(
         context.servo_max_rate_rad_s,
         context.servo_max_acceleration_rad_s2,
         context.servo_position_gain_s_inv,
+        context.servo_position_tolerance_rad,
+        context.servo_position_quantization_rad,
+        context.servo_command_polarity,
         context.servo_command_latency_s,
         context.servo_rate_time_constant_s,
+        context.control_period_s,
+        context.integration_period_s,
+        context.camera_frame_period_s,
     ):
         if value.shape != expected_shape:
             raise ValueError("adaptive position context shape is invalid")
@@ -732,6 +801,247 @@ def adaptive_position_surrogate_actions(
     return torch.stack(commands, dim=1)
 
 
+def differentiable_position_servo_rollout(
+    command_normalized: torch.Tensor,
+    context: GRUAdaptivePositionLossContext,
+    *,
+    duration_s: float,
+    integration_period_override_s: float | None = None,
+) -> GRUPositionPlantRollout:
+    """Roll one causal position command through the configured servo plant.
+
+    The current command is repeated at each control tick, matching a
+    zero-order hold when no future observation is available.  Each sample
+    begins from logged gimbal angle/rate and holds its initial angle until the
+    first command arrives.  Command, control, camera-frame, and integration
+    event boundaries mirror :class:`GimbalServoEnv`. Quantization uses a
+    straight-through gradient while retaining the exact forward value.
+    """
+
+    if not math.isfinite(duration_s) or duration_s <= 0.0:
+        raise ValueError("plant rollout duration must be finite and positive")
+    if integration_period_override_s is not None and (
+        not math.isfinite(integration_period_override_s)
+        or integration_period_override_s <= 0.0
+    ):
+        raise ValueError(
+            "plant integration-period override must be finite and positive"
+        )
+    shape = command_normalized.shape
+    for value in (
+        context.gimbal_angle_rad,
+        context.gimbal_rate_rad_s,
+        context.servo_min_angle_rad,
+        context.servo_max_angle_rad,
+        context.servo_max_rate_rad_s,
+        context.servo_max_acceleration_rad_s2,
+        context.servo_position_gain_s_inv,
+        context.servo_position_tolerance_rad,
+        context.servo_position_quantization_rad,
+        context.servo_command_polarity,
+        context.servo_command_latency_s,
+        context.servo_rate_time_constant_s,
+        context.control_period_s,
+        context.integration_period_s,
+        context.camera_frame_period_s,
+    ):
+        if value.shape != shape:
+            raise ValueError("position plant context shape is invalid")
+    for value, name in (
+        (context.servo_max_rate_rad_s, "maximum rate"),
+        (context.servo_max_acceleration_rad_s2, "maximum acceleration"),
+        (context.servo_position_gain_s_inv, "position gain"),
+        (context.control_period_s, "control period"),
+        (context.integration_period_s, "integration period"),
+        (context.camera_frame_period_s, "camera frame period"),
+    ):
+        if torch.any(value <= 0.0):
+            raise ValueError(f"servo {name} must be positive")
+
+    command_normalized = torch.clamp(command_normalized, -1.0, 1.0)
+    travel = torch.where(
+        command_normalized >= 0.0,
+        context.servo_max_angle_rad,
+        -context.servo_min_angle_rad,
+    )
+    requested_position = command_normalized * travel
+    adapted_position = requested_position * context.servo_command_polarity
+    quantum = context.servo_position_quantization_rad
+    safe_quantum = quantum.clamp_min(torch.finfo(adapted_position.dtype).eps)
+    quantized = torch.round(adapted_position / safe_quantum) * safe_quantum
+    exact_adapted_position = torch.where(
+        quantum > 0.0,
+        quantized,
+        adapted_position,
+    )
+    adapted_position = adapted_position + (
+        exact_adapted_position - adapted_position
+    ).detach()
+    adapted_position = torch.maximum(
+        adapted_position,
+        context.servo_min_angle_rad,
+    )
+    adapted_position = torch.minimum(
+        adapted_position,
+        context.servo_max_angle_rad,
+    )
+
+    integration_period = (
+        torch.full_like(
+            context.integration_period_s,
+            integration_period_override_s,
+        )
+        if integration_period_override_s is not None
+        else context.integration_period_s
+    )
+    minimum_integration = float(
+        torch.min(integration_period.detach()).cpu().item()
+    )
+    minimum_control = float(
+        torch.min(context.control_period_s.detach()).cpu().item()
+    )
+    minimum_frame = float(
+        torch.min(context.camera_frame_period_s.detach()).cpu().item()
+    )
+    maximum_events = (
+        math.ceil(duration_s / minimum_integration)
+        + 2 * math.ceil(duration_s / minimum_control)
+        + math.ceil(duration_s / minimum_frame)
+        + 8
+    )
+
+    angle = context.gimbal_angle_rad
+    rate = context.gimbal_rate_rad_s
+    applied_position = context.gimbal_angle_rad
+    elapsed = torch.zeros_like(angle)
+    next_arrival = context.servo_command_latency_s
+    next_control = context.control_period_s
+    next_capture = context.camera_frame_period_s
+    saturation_integral = torch.zeros_like(angle)
+    duration = torch.full_like(angle, duration_s)
+    epsilon = 8.0 * torch.finfo(angle.dtype).eps
+
+    for _ in range(maximum_events):
+        active = elapsed < duration - epsilon
+        arrival_due = active & (next_arrival <= elapsed + epsilon)
+        applied_position = torch.where(
+            arrival_due,
+            adapted_position,
+            applied_position,
+        )
+        next_arrival = torch.where(
+            arrival_due,
+            next_arrival + context.control_period_s,
+            next_arrival,
+        )
+
+        next_time = torch.minimum(duration, elapsed + integration_period)
+        next_time = torch.minimum(next_time, next_arrival)
+        next_time = torch.minimum(next_time, next_control)
+        next_time = torch.minimum(next_time, next_capture)
+        dt_s = torch.where(
+            active,
+            torch.clamp(next_time - elapsed, min=0.0),
+            torch.zeros_like(elapsed),
+        )
+
+        position_error = applied_position - angle
+        desired_rate_unclipped = context.servo_position_gain_s_inv * position_error
+        desired_rate_unclipped = torch.where(
+            torch.abs(position_error) <= context.servo_position_tolerance_rad,
+            torch.zeros_like(desired_rate_unclipped),
+            desired_rate_unclipped,
+        )
+        desired_rate = torch.clamp(
+            desired_rate_unclipped,
+            -context.servo_max_rate_rad_s,
+            context.servo_max_rate_rad_s,
+        )
+        acceleration_denominator = torch.where(
+            context.servo_rate_time_constant_s > 0.0,
+            context.servo_rate_time_constant_s,
+            dt_s.clamp_min(torch.finfo(dt_s.dtype).eps),
+        )
+        acceleration_unclipped = (desired_rate - rate) / acceleration_denominator
+        acceleration = torch.clamp(
+            acceleration_unclipped,
+            -context.servo_max_acceleration_rad_s2,
+            context.servo_max_acceleration_rad_s2,
+        )
+        rate_unclipped = rate + acceleration * dt_s
+        next_rate = torch.clamp(
+            rate_unclipped,
+            -context.servo_max_rate_rad_s,
+            context.servo_max_rate_rad_s,
+        )
+        angle_unclipped = angle + next_rate * dt_s
+        next_angle = torch.maximum(
+            angle_unclipped,
+            context.servo_min_angle_rad,
+        )
+        next_angle = torch.minimum(
+            next_angle,
+            context.servo_max_angle_rad,
+        )
+        pushing_lower = (
+            next_angle <= context.servo_min_angle_rad + epsilon
+        ) & (next_rate < 0.0) & (angle_unclipped < context.servo_min_angle_rad)
+        pushing_upper = (
+            next_angle >= context.servo_max_angle_rad - epsilon
+        ) & (next_rate > 0.0) & (angle_unclipped > context.servo_max_angle_rad)
+        next_rate = torch.where(
+            pushing_lower | pushing_upper,
+            torch.zeros_like(next_rate),
+            next_rate,
+        )
+
+        travel_scale = torch.where(
+            angle_unclipped >= 0.0,
+            context.servo_max_angle_rad,
+            -context.servo_min_angle_rad,
+        )
+        saturation = (
+            torch.relu(
+                torch.abs(desired_rate_unclipped)
+                / context.servo_max_rate_rad_s
+                - 1.0
+            ).square()
+            + torch.relu(
+                torch.abs(acceleration_unclipped)
+                / context.servo_max_acceleration_rad_s2
+                - 1.0
+            ).square()
+            + torch.relu(
+                torch.abs(rate_unclipped) / context.servo_max_rate_rad_s
+                - 1.0
+            ).square()
+            + torch.relu(torch.abs(angle_unclipped) / travel_scale - 1.0).square()
+        )
+        saturation_integral = saturation_integral + saturation * dt_s
+        angle = torch.where(active, next_angle, angle)
+        rate = torch.where(active, next_rate, rate)
+        elapsed = torch.where(active, next_time, elapsed)
+
+        control_due = next_control <= elapsed + epsilon
+        capture_due = next_capture <= elapsed + epsilon
+        next_control = torch.where(
+            control_due,
+            next_control + context.control_period_s,
+            next_control,
+        )
+        next_capture = torch.where(
+            capture_due,
+            next_capture + context.camera_frame_period_s,
+            next_capture,
+        )
+
+    return GRUPositionPlantRollout(
+        angle_rad=angle,
+        rate_rad_s=rate,
+        saturation_fraction=saturation_integral / duration,
+    )
+
+
 def target_state_nll(
     output: GRUTargetStateOutput,
     targets: torch.Tensor,
@@ -854,6 +1164,12 @@ def target_state_nll(
     rate_action_mse = targets.new_zeros(())
     position_action_mse = targets.new_zeros(())
     adaptive_position_action_mse = targets.new_zeros(())
+    position_plant_tracking_mse = targets.new_zeros(())
+    position_plant_response_mse = targets.new_zeros(())
+    position_plant_regret_mse = targets.new_zeros(())
+    position_plant_visibility_mse = targets.new_zeros(())
+    position_plant_smoothness_mse = targets.new_zeros(())
+    position_plant_saturation_mse = targets.new_zeros(())
     if config.rate_action_weight > 0.0 or config.position_action_weight > 0.0:
         if control_context is None:
             raise ValueError(
@@ -933,7 +1249,19 @@ def target_state_nll(
             ).square()
             * action_weights
         ).sum() / action_weight_sum
-    if config.adaptive_position_action_weight > 0.0:
+    plant_aware = any(
+        weight > 0.0
+        for weight in (
+            config.position_plant_tracking_weight,
+            config.position_plant_response_weight,
+            config.position_plant_regret_weight,
+            config.position_plant_visibility_weight,
+            config.position_plant_smoothness_weight,
+            config.position_plant_saturation_weight,
+        )
+    )
+    predicted_adaptive_action = None
+    if config.adaptive_position_action_weight > 0.0 or plant_aware:
         if prediction_horizons_s is None:
             raise ValueError(
                 "prediction horizons are required for adaptive position loss"
@@ -953,29 +1281,136 @@ def target_state_nll(
             config.adaptive_position_config,
             sequence_mask,
         )
-        adaptive_mask = (
-            mask[..., 0] & adaptive_position_context.mask.bool()
+        if config.adaptive_position_action_weight > 0.0:
+            adaptive_mask = (
+                mask[..., 0] & adaptive_position_context.mask.bool()
+            )
+            adaptive_weights = (
+                weights[..., 0] * adaptive_mask.to(dtype=weights.dtype)
+            )
+            adaptive_position_action_mse = (
+                (
+                    predicted_adaptive_action
+                    - adaptive_position_context.teacher_action_normalized
+                ).square()
+                * adaptive_weights
+            ).sum() / adaptive_weights.sum().clamp_min(1.0)
+    if plant_aware:
+        if config.position_plant_config is None:
+            raise ValueError(
+                "position plant config is required for plant-aware loss"
+            )
+        if adaptive_position_context is None or predicted_adaptive_action is None:
+            raise ValueError(
+                "adaptive position context is required for plant-aware loss"
+            )
+        horizon_index = config.position_plant_config.horizon_index
+        if horizon_index >= targets.shape[-2]:
+            raise ValueError("position plant horizon index is out of range")
+        assert prediction_horizons_s is not None
+        rollout = differentiable_position_servo_rollout(
+            predicted_adaptive_action,
+            adaptive_position_context,
+            duration_s=prediction_horizons_s[horizon_index],
+            integration_period_override_s=(
+                config.position_plant_config.integration_period_override_s
+            ),
         )
-        adaptive_weights = (
-            weights[..., 0] * adaptive_mask.to(dtype=weights.dtype)
+        rollout_mask = (
+            mask[..., horizon_index]
+            & adaptive_position_context.mask.bool()
         )
-        adaptive_position_action_mse = (
+        rollout_weights = weights[..., horizon_index] * rollout_mask.to(
+            dtype=weights.dtype
+        )
+        rollout_weight_sum = rollout_weights.sum().clamp_min(1.0)
+        image_error_normalized = angular_residual_rad(
+            targets[..., horizon_index, 0],
+            rollout.angle_rad,
+        ) / (0.5 * adaptive_position_context.selected_axis_fov_rad)
+        position_plant_tracking_mse = (
+            image_error_normalized.square() * rollout_weights
+        ).sum() / rollout_weight_sum
+        if (
+            config.position_plant_response_weight > 0.0
+            or config.position_plant_regret_weight > 0.0
+        ):
+            teacher_rollout = differentiable_position_servo_rollout(
+                adaptive_position_context.teacher_action_normalized.detach(),
+                adaptive_position_context,
+                duration_s=prediction_horizons_s[horizon_index],
+                integration_period_override_s=(
+                    config.position_plant_config.
+                    integration_period_override_s
+                ),
+            )
+            response_error_normalized = angular_residual_rad(
+                rollout.angle_rad,
+                teacher_rollout.angle_rad.detach(),
+            ) / (0.5 * adaptive_position_context.selected_axis_fov_rad)
+            position_plant_response_mse = (
+                response_error_normalized.square() * rollout_weights
+            ).sum() / rollout_weight_sum
+            teacher_error_normalized = angular_residual_rad(
+                targets[..., horizon_index, 0],
+                teacher_rollout.angle_rad.detach(),
+            ) / (0.5 * adaptive_position_context.selected_axis_fov_rad)
+            regret = torch.relu(
+                image_error_normalized.square()
+                - teacher_error_normalized.square()
+            )
+            position_plant_regret_mse = (
+                regret * rollout_weights
+            ).sum() / rollout_weight_sum
+        visibility_violation = torch.relu(
+            torch.abs(image_error_normalized)
+            - config.position_plant_config.visibility_margin_fraction
+        )
+        position_plant_visibility_mse = (
+            visibility_violation.square() * rollout_weights
+        ).sum() / rollout_weight_sum
+        position_plant_saturation_mse = (
+            rollout.saturation_fraction * rollout_weights
+        ).sum() / rollout_weight_sum
+
+        smooth_mask = rollout_mask[..., 1:] & rollout_mask[..., :-1]
+        # ``weights`` is [batch, time, horizon]; keep the time-axis operation
+        # explicit to prevent accidentally smoothing across episodes.
+        smooth_weights = 0.5 * (
+            weights[:, 1:, horizon_index]
+            + weights[:, :-1, horizon_index]
+        ) * smooth_mask.to(dtype=weights.dtype)
+        position_plant_smoothness_mse = (
             (
-                predicted_adaptive_action
-                - adaptive_position_context.teacher_action_normalized
+                predicted_adaptive_action[:, 1:]
+                - predicted_adaptive_action[:, :-1]
             ).square()
-            * adaptive_weights
-        ).sum() / adaptive_weights.sum().clamp_min(1.0)
+            * smooth_weights
+        ).sum() / smooth_weights.sum().clamp_min(1.0)
     mean_error = bearing_mse + rate_mse
     total = (
         config.bearing_weight * bearing_nll
         + config.rate_weight * rate_nll
         + config.mean_error_weight * mean_error
+        + config.bearing_mean_error_weight * bearing_mse
+        + config.rate_mean_error_weight * rate_mse
         + config.dynamic_consistency_weight * consistency_mse
         + config.rate_action_weight * rate_action_mse
         + config.position_action_weight * position_action_mse
         + config.adaptive_position_action_weight
         * adaptive_position_action_mse
+        + config.position_plant_tracking_weight
+        * position_plant_tracking_mse
+        + config.position_plant_response_weight
+        * position_plant_response_mse
+        + config.position_plant_regret_weight
+        * position_plant_regret_mse
+        + config.position_plant_visibility_weight
+        * position_plant_visibility_mse
+        + config.position_plant_smoothness_weight
+        * position_plant_smoothness_mse
+        + config.position_plant_saturation_weight
+        * position_plant_saturation_mse
     )
     return GRULoss(
         total=total,
@@ -988,6 +1423,24 @@ def target_state_nll(
         position_action_rmse_normalized=torch.sqrt(position_action_mse),
         adaptive_position_action_rmse_normalized=torch.sqrt(
             adaptive_position_action_mse
+        ),
+        position_plant_tracking_rmse_normalized=torch.sqrt(
+            position_plant_tracking_mse
+        ),
+        position_plant_response_rmse_normalized=torch.sqrt(
+            position_plant_response_mse
+        ),
+        position_plant_regret_rmse_normalized=torch.sqrt(
+            position_plant_regret_mse
+        ),
+        position_plant_visibility_rmse_normalized=torch.sqrt(
+            position_plant_visibility_mse
+        ),
+        position_plant_smoothness_rmse_normalized=torch.sqrt(
+            position_plant_smoothness_mse
+        ),
+        position_plant_saturation_rmse_normalized=torch.sqrt(
+            position_plant_saturation_mse
         ),
     )
 

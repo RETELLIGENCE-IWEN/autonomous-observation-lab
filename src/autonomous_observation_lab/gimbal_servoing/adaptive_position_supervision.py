@@ -26,8 +26,14 @@ class AdaptivePositionSupervision:
     servo_max_rate_rad_s: np.ndarray
     servo_max_acceleration_rad_s2: np.ndarray
     servo_position_gain_s_inv: np.ndarray
+    servo_position_tolerance_rad: np.ndarray
+    servo_position_quantization_rad: np.ndarray
+    servo_command_polarity: np.ndarray
     servo_command_latency_s: np.ndarray
     servo_rate_time_constant_s: np.ndarray
+    control_period_s: np.ndarray
+    integration_period_s: np.ndarray
+    camera_frame_period_s: np.ndarray
 
 
 def _wrap(value: float) -> float:
@@ -115,8 +121,14 @@ def compute_adaptive_position_supervision(
             "servo_max_rate_rad_s",
             "servo_max_acceleration_rad_s2",
             "servo_position_gain_s_inv",
+            "servo_position_tolerance_rad",
+            "servo_position_quantization_rad",
+            "servo_command_polarity",
             "servo_command_latency_s",
             "servo_rate_time_constant_s",
+            "control_period_s",
+            "integration_period_s",
+            "camera_frame_period_s",
         )
     }
     feature_indices = {name: index for index, name in enumerate(FEATURE_NAMES)}
@@ -149,10 +161,24 @@ def compute_adaptive_position_supervision(
                 servo["max_acceleration_rad_s2"]
             ),
             "servo_position_gain_s_inv": float(servo["position_gain_s_inv"]),
+            "servo_position_tolerance_rad": float(
+                servo["position_tolerance_rad"]
+            ),
+            "servo_position_quantization_rad": float(
+                servo["position_quantization_rad"]
+            ),
+            "servo_command_polarity": float(servo["command_polarity"]),
             "servo_command_latency_s": float(servo["command_latency_s"]),
             "servo_rate_time_constant_s": float(
                 servo["rate_time_constant_s"]
             ),
+            "control_period_s": 1.0 / float(
+                hardware["timing"]["control_rate_hz"]
+            ),
+            "integration_period_s": 1.0 / float(
+                hardware["timing"]["integration_rate_hz"]
+            ),
+            "camera_frame_period_s": 1.0 / float(camera["frame_rate_hz"]),
         }
         for name, value in values.items():
             arrays[name][episode_index] = value

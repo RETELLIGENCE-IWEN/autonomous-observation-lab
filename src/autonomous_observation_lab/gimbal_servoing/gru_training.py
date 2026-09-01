@@ -42,6 +42,8 @@ from .gru import (
     GRULossConfig,
     GRUTargetStateModelConfig,
     adaptive_position_surrogate_actions,
+    angular_residual_rad,
+    differentiable_position_servo_rollout,
     gru_parameter_count,
     save_gru_checkpoint,
     target_state_nll,
@@ -102,6 +104,12 @@ class GRUEvaluationMetrics:
     rate_action_rmse_normalized: float | None
     position_action_rmse_normalized: float | None
     adaptive_position_action_rmse_normalized: float | None
+    position_plant_tracking_rmse_normalized: float | None
+    position_plant_response_rmse_normalized: float | None
+    position_plant_regret_rmse_normalized: float | None
+    position_plant_visibility_rmse_normalized: float | None
+    position_plant_smoothness_rmse_normalized: float | None
+    position_plant_saturation_rmse_normalized: float | None
     per_horizon: tuple[HorizonMetrics, ...]
 
 
@@ -183,8 +191,14 @@ class GimbalTorchSequenceDataset(Dataset):
                 adaptive_position_supervision.servo_max_rate_rad_s,
                 adaptive_position_supervision.servo_max_acceleration_rad_s2,
                 adaptive_position_supervision.servo_position_gain_s_inv,
+                adaptive_position_supervision.servo_position_tolerance_rad,
+                adaptive_position_supervision.servo_position_quantization_rad,
+                adaptive_position_supervision.servo_command_polarity,
                 adaptive_position_supervision.servo_command_latency_s,
                 adaptive_position_supervision.servo_rate_time_constant_s,
+                adaptive_position_supervision.control_period_s,
+                adaptive_position_supervision.integration_period_s,
+                adaptive_position_supervision.camera_frame_period_s,
             ):
                 if value.shape != expected_shape:
                     raise ValueError(
@@ -256,8 +270,14 @@ class GimbalTorchSequenceDataset(Dataset):
                 "servo_max_rate_rad_s",
                 "servo_max_acceleration_rad_s2",
                 "servo_position_gain_s_inv",
+                "servo_position_tolerance_rad",
+                "servo_position_quantization_rad",
+                "servo_command_polarity",
                 "servo_command_latency_s",
                 "servo_rate_time_constant_s",
+                "control_period_s",
+                "integration_period_s",
+                "camera_frame_period_s",
             )
             for name in names:
                 value = torch.from_numpy(getattr(supervision, name)[index])
@@ -303,6 +323,12 @@ def _metrics_from_predictions(
     adaptive_position_predictions: np.ndarray | None = None,
     adaptive_position_teacher: np.ndarray | None = None,
     adaptive_position_mask: np.ndarray | None = None,
+    position_plant_tracking_error_normalized: np.ndarray | None = None,
+    position_plant_response_error_normalized: np.ndarray | None = None,
+    position_plant_regret_fraction: np.ndarray | None = None,
+    position_plant_visibility_violation_normalized: np.ndarray | None = None,
+    position_plant_saturation_fraction: np.ndarray | None = None,
+    position_plant_mask: np.ndarray | None = None,
 ) -> GRUEvaluationMetrics:
     loss_config = loss_config or GRULossConfig()
     if mean.shape != targets.shape or std.shape != targets.shape:
@@ -395,6 +421,12 @@ def _metrics_from_predictions(
     rate_action_mse = None
     position_action_mse = None
     adaptive_position_action_mse = None
+    position_plant_tracking_mse = None
+    position_plant_response_mse = None
+    position_plant_regret_mse = None
+    position_plant_visibility_mse = None
+    position_plant_smoothness_mse = None
+    position_plant_saturation_mse = None
     if (
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
@@ -494,6 +526,93 @@ def _metrics_from_predictions(
                 )
                 / action_weight_sum
             )
+    plant_aware = any(
+        value > 0.0
+        for value in (
+            loss_config.position_plant_tracking_weight,
+            loss_config.position_plant_response_weight,
+            loss_config.position_plant_regret_weight,
+            loss_config.position_plant_visibility_weight,
+            loss_config.position_plant_smoothness_weight,
+            loss_config.position_plant_saturation_weight,
+        )
+    )
+    if plant_aware:
+        if loss_config.position_plant_config is None:
+            raise ValueError(
+                "position plant config is required for plant-aware evaluation"
+            )
+        expected_time_shape = targets.shape[:2]
+        values = (
+            position_plant_tracking_error_normalized,
+            position_plant_response_error_normalized,
+            position_plant_regret_fraction,
+            position_plant_visibility_violation_normalized,
+            position_plant_saturation_fraction,
+            position_plant_mask,
+            adaptive_position_predictions,
+        )
+        if any(value is None for value in values):
+            raise ValueError("position plant evaluation arrays are required")
+        assert position_plant_tracking_error_normalized is not None
+        assert position_plant_response_error_normalized is not None
+        assert position_plant_regret_fraction is not None
+        assert position_plant_visibility_violation_normalized is not None
+        assert position_plant_saturation_fraction is not None
+        assert position_plant_mask is not None
+        assert adaptive_position_predictions is not None
+        if any(value.shape != expected_time_shape for value in values):
+            raise ValueError("position plant evaluation shape is invalid")
+        horizon_index = loss_config.position_plant_config.horizon_index
+        if horizon_index >= targets.shape[-2]:
+            raise ValueError("position plant horizon index is out of range")
+        rollout_mask = mask[..., horizon_index] & position_plant_mask
+        rollout_weights = weights[..., horizon_index] * rollout_mask
+        rollout_weight_sum = float(np.sum(rollout_weights))
+        if rollout_weight_sum > 0.0:
+            position_plant_tracking_mse = float(
+                np.sum(
+                    position_plant_tracking_error_normalized**2
+                    * rollout_weights
+                )
+                / rollout_weight_sum
+            )
+            position_plant_response_mse = float(
+                np.sum(
+                    position_plant_response_error_normalized**2
+                    * rollout_weights
+                )
+                / rollout_weight_sum
+            )
+            position_plant_regret_mse = float(
+                np.sum(position_plant_regret_fraction * rollout_weights)
+                / rollout_weight_sum
+            )
+            position_plant_visibility_mse = float(
+                np.sum(
+                    position_plant_visibility_violation_normalized**2
+                    * rollout_weights
+                )
+                / rollout_weight_sum
+            )
+            position_plant_saturation_mse = float(
+                np.sum(position_plant_saturation_fraction * rollout_weights)
+                / rollout_weight_sum
+            )
+        smooth_mask = rollout_mask[:, 1:] & rollout_mask[:, :-1]
+        smooth_weights = 0.5 * (
+            weights[:, 1:, horizon_index]
+            + weights[:, :-1, horizon_index]
+        ) * smooth_mask
+        smooth_weight_sum = float(np.sum(smooth_weights))
+        if smooth_weight_sum > 0.0:
+            position_plant_smoothness_mse = float(
+                np.sum(
+                    np.diff(adaptive_position_predictions, axis=1) ** 2
+                    * smooth_weights
+                )
+                / smooth_weight_sum
+            )
     if bearing_nll is None or rate_nll is None:
         loss = None
     else:
@@ -503,6 +622,9 @@ def _metrics_from_predictions(
             + loss_config.rate_weight * weighted_rate_nll
             + loss_config.mean_error_weight
             * (weighted_bearing_mse + weighted_rate_mse)
+            + loss_config.bearing_mean_error_weight
+            * weighted_bearing_mse
+            + loss_config.rate_mean_error_weight * weighted_rate_mse
             + loss_config.dynamic_consistency_weight
             * dynamic_consistency_mse
             + loss_config.rate_action_weight * (rate_action_mse or 0.0)
@@ -510,6 +632,18 @@ def _metrics_from_predictions(
             * (position_action_mse or 0.0)
             + loss_config.adaptive_position_action_weight
             * (adaptive_position_action_mse or 0.0)
+            + loss_config.position_plant_tracking_weight
+            * (position_plant_tracking_mse or 0.0)
+            + loss_config.position_plant_response_weight
+            * (position_plant_response_mse or 0.0)
+            + loss_config.position_plant_regret_weight
+            * (position_plant_regret_mse or 0.0)
+            + loss_config.position_plant_visibility_weight
+            * (position_plant_visibility_mse or 0.0)
+            + loss_config.position_plant_smoothness_weight
+            * (position_plant_smoothness_mse or 0.0)
+            + loss_config.position_plant_saturation_weight
+            * (position_plant_saturation_mse or 0.0)
         )
 
     def coverage(error: np.ndarray, sigma: np.ndarray, multiple: float):
@@ -613,6 +747,36 @@ def _metrics_from_predictions(
             if adaptive_position_action_mse is not None
             else None
         ),
+        position_plant_tracking_rmse_normalized=(
+            math.sqrt(position_plant_tracking_mse)
+            if position_plant_tracking_mse is not None
+            else None
+        ),
+        position_plant_response_rmse_normalized=(
+            math.sqrt(position_plant_response_mse)
+            if position_plant_response_mse is not None
+            else None
+        ),
+        position_plant_regret_rmse_normalized=(
+            math.sqrt(position_plant_regret_mse)
+            if position_plant_regret_mse is not None
+            else None
+        ),
+        position_plant_visibility_rmse_normalized=(
+            math.sqrt(position_plant_visibility_mse)
+            if position_plant_visibility_mse is not None
+            else None
+        ),
+        position_plant_smoothness_rmse_normalized=(
+            math.sqrt(position_plant_smoothness_mse)
+            if position_plant_smoothness_mse is not None
+            else None
+        ),
+        position_plant_saturation_rmse_normalized=(
+            math.sqrt(position_plant_saturation_mse)
+            if position_plant_saturation_mse is not None
+            else None
+        ),
         per_horizon=tuple(per_horizon),
     )
 
@@ -634,7 +798,35 @@ def evaluate_gru(
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
     )
-    adaptive_aware = loss_config.adaptive_position_action_weight > 0.0
+    adaptive_aware = (
+        loss_config.adaptive_position_action_weight > 0.0
+        or any(
+            weight > 0.0
+            for weight in (
+                loss_config.position_plant_tracking_weight,
+                loss_config.position_plant_response_weight,
+                loss_config.position_plant_regret_weight,
+                loss_config.position_plant_visibility_weight,
+                loss_config.position_plant_smoothness_weight,
+                loss_config.position_plant_saturation_weight,
+            )
+        )
+    )
+    plant_aware = any(
+        weight > 0.0
+        for weight in (
+            loss_config.position_plant_tracking_weight,
+            loss_config.position_plant_response_weight,
+            loss_config.position_plant_regret_weight,
+            loss_config.position_plant_visibility_weight,
+            loss_config.position_plant_smoothness_weight,
+            loss_config.position_plant_saturation_weight,
+        )
+    )
+    if plant_aware and loss_config.position_plant_config is None:
+        raise ValueError(
+            "position plant config is required for plant-aware evaluation"
+        )
     if adaptive_aware and loss_config.adaptive_position_config is None:
         raise ValueError(
             "adaptive position config is required for adaptive evaluation"
@@ -671,24 +863,104 @@ def evaluate_gru(
     adaptive_predictions = []
     adaptive_teachers = []
     adaptive_masks = []
+    plant_tracking_errors = []
+    plant_response_errors = []
+    plant_regret_fractions = []
+    plant_visibility_violations = []
+    plant_saturation_fractions = []
+    plant_masks = []
     for batch in loader:
         features = batch["features"].to(device)
         output = model(features)
         if adaptive_aware:
             assert loss_config.adaptive_position_config is not None
-            adaptive_predictions.append(
-                adaptive_position_surrogate_actions(
-                    output,
-                    _adaptive_position_context_from_batch(batch, device),
-                    dataset.manifest.prediction_horizons_s,
-                    loss_config.adaptive_position_config,
-                    batch["sequence_mask"].to(device),
-                ).cpu().numpy()
+            adaptive_context = _adaptive_position_context_from_batch(
+                batch,
+                device,
             )
+            predicted_actions = adaptive_position_surrogate_actions(
+                output,
+                adaptive_context,
+                dataset.manifest.prediction_horizons_s,
+                loss_config.adaptive_position_config,
+                batch["sequence_mask"].to(device),
+            )
+            adaptive_predictions.append(predicted_actions.cpu().numpy())
             adaptive_teachers.append(
                 batch["adaptive_teacher_action_normalized"].numpy()
             )
             adaptive_masks.append(batch["adaptive_mask"].numpy())
+            if plant_aware:
+                assert loss_config.position_plant_config is not None
+                horizon_index = (
+                    loss_config.position_plant_config.horizon_index
+                )
+                if horizon_index >= len(
+                    dataset.manifest.prediction_horizons_s
+                ):
+                    raise ValueError(
+                        "position plant horizon index is out of range"
+                    )
+                rollout = differentiable_position_servo_rollout(
+                    predicted_actions,
+                    adaptive_context,
+                    duration_s=dataset.manifest.prediction_horizons_s[
+                        horizon_index
+                    ],
+                    integration_period_override_s=(
+                        loss_config.position_plant_config.
+                        integration_period_override_s
+                    ),
+                )
+                future_bearing = batch["targets"][
+                    ..., horizon_index, 0
+                ].to(device)
+                tracking_error = angular_residual_rad(
+                    future_bearing,
+                    rollout.angle_rad,
+                ) / (0.5 * adaptive_context.selected_axis_fov_rad)
+                plant_tracking_errors.append(tracking_error.cpu().numpy())
+                teacher_rollout = differentiable_position_servo_rollout(
+                    batch["adaptive_teacher_action_normalized"].to(device),
+                    adaptive_context,
+                    duration_s=dataset.manifest.prediction_horizons_s[
+                        horizon_index
+                    ],
+                    integration_period_override_s=(
+                        loss_config.position_plant_config.
+                        integration_period_override_s
+                    ),
+                )
+                plant_response_errors.append(
+                    (
+                        angular_residual_rad(
+                            rollout.angle_rad,
+                            teacher_rollout.angle_rad,
+                        )
+                        / (0.5 * adaptive_context.selected_axis_fov_rad)
+                    ).cpu().numpy()
+                )
+                teacher_tracking_error = angular_residual_rad(
+                    future_bearing,
+                    teacher_rollout.angle_rad,
+                ) / (0.5 * adaptive_context.selected_axis_fov_rad)
+                plant_regret_fractions.append(
+                    torch.relu(
+                        tracking_error.square()
+                        - teacher_tracking_error.square()
+                    ).cpu().numpy()
+                )
+                plant_visibility_violations.append(
+                    torch.relu(
+                        torch.abs(tracking_error)
+                        - loss_config.position_plant_config.
+                        visibility_margin_fraction
+                    ).cpu().numpy()
+                )
+                plant_saturation_fractions.append(
+                    rollout.saturation_fraction.cpu().numpy()
+                )
+                plant_masks.append(batch["adaptive_mask"].numpy())
         means.append(output.mean.cpu().numpy())
         stds.append(output.std.cpu().numpy())
         if output.interval_rate_rad_s is not None:
@@ -732,6 +1004,34 @@ def evaluate_gru(
         ),
         adaptive_position_mask=(
             np.concatenate(adaptive_masks) if adaptive_masks else None
+        ),
+        position_plant_tracking_error_normalized=(
+            np.concatenate(plant_tracking_errors)
+            if plant_tracking_errors
+            else None
+        ),
+        position_plant_response_error_normalized=(
+            np.concatenate(plant_response_errors)
+            if plant_response_errors
+            else None
+        ),
+        position_plant_regret_fraction=(
+            np.concatenate(plant_regret_fractions)
+            if plant_regret_fractions
+            else None
+        ),
+        position_plant_visibility_violation_normalized=(
+            np.concatenate(plant_visibility_violations)
+            if plant_visibility_violations
+            else None
+        ),
+        position_plant_saturation_fraction=(
+            np.concatenate(plant_saturation_fractions)
+            if plant_saturation_fractions
+            else None
+        ),
+        position_plant_mask=(
+            np.concatenate(plant_masks) if plant_masks else None
         ),
     )
 
@@ -786,11 +1086,25 @@ def _adaptive_position_context_from_batch(
         servo_position_gain_s_inv=batch[
             "adaptive_servo_position_gain_s_inv"
         ].to(device),
+        servo_position_tolerance_rad=batch[
+            "adaptive_servo_position_tolerance_rad"
+        ].to(device),
+        servo_position_quantization_rad=batch[
+            "adaptive_servo_position_quantization_rad"
+        ].to(device),
+        servo_command_polarity=batch[
+            "adaptive_servo_command_polarity"
+        ].to(device),
         servo_command_latency_s=batch[
             "adaptive_servo_command_latency_s"
         ].to(device),
         servo_rate_time_constant_s=batch[
             "adaptive_servo_rate_time_constant_s"
+        ].to(device),
+        control_period_s=batch["adaptive_control_period_s"].to(device),
+        integration_period_s=batch["adaptive_integration_period_s"].to(device),
+        camera_frame_period_s=batch[
+            "adaptive_camera_frame_period_s"
         ].to(device),
     )
 
@@ -826,6 +1140,7 @@ def train_gru(
     training_label_weights: np.ndarray | None = None,
     validation_label_weights: np.ndarray | None = None,
     training_episode_weights: np.ndarray | None = None,
+    initial_state_dict: dict[str, torch.Tensor] | None = None,
 ) -> GRUTrainingResult:
     training_config = training_config or GRUTrainingConfig()
     loss_config = loss_config or GRULossConfig()
@@ -848,7 +1163,20 @@ def train_gru(
         loss_config.rate_action_weight > 0.0
         or loss_config.position_action_weight > 0.0
     )
-    adaptive_aware = loss_config.adaptive_position_action_weight > 0.0
+    adaptive_aware = (
+        loss_config.adaptive_position_action_weight > 0.0
+        or any(
+            weight > 0.0
+            for weight in (
+                loss_config.position_plant_tracking_weight,
+                loss_config.position_plant_response_weight,
+                loss_config.position_plant_regret_weight,
+                loss_config.position_plant_visibility_weight,
+                loss_config.position_plant_smoothness_weight,
+                loss_config.position_plant_saturation_weight,
+            )
+        )
+    )
     if adaptive_aware and loss_config.adaptive_position_config is None:
         raise ValueError(
             "adaptive position config is required for adaptive training"
@@ -868,6 +1196,8 @@ def train_gru(
         else None
     )
     model = CausalTargetStateGRU(model_config).to(device)
+    if initial_state_dict is not None:
+        model.load_state_dict(initial_state_dict)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=training_config.learning_rate,

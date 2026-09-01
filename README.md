@@ -332,6 +332,20 @@ critical-action gate. The test remains sealed; the next justified objective is
 a differentiable closed-loop plant/tracking rollout rather than command
 imitation on logged trajectories.
 
+That outcome-aware follow-up is implemented as V8--V8.7:
+
+```bash
+aol-develop-gimbal-counterfactual-plant
+```
+
+The [V8--V8.7 experiment report](docs/research_tracks/predictive_gimbal_servoing/counterfactual_plant_v8_experiment.md)
+documents exact differentiable servo parity, the failed 100 ms/absolute-cost/
+response-matching formulations, and the selected one-sided counterfactual
+regret objective. The final seed-17 development candidate improves exact 300 ms
+tracking by 0.63%, critical tracking by 0.77%, command smoothness by 6.10%, and
+saturation by 5.89% while passing every frozen guard. Its average-rate margin
+is narrow, so the test remains sealed pending seed-matched V8.7 replication.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

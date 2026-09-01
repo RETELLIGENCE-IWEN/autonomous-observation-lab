@@ -7,6 +7,8 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from autonomous_observation_lab.gimbal_servoing import (
+    GimbalAction,
+    GimbalCommandMode,
     GimbalServoEnv,
     GimbalDomainRandomizationConfig,
     ObservationProfile,
@@ -34,11 +36,13 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
     GRUControlLossContext,
     GRUInferenceConfig,
     GRULossConfig,
+    GRUPositionPlantRolloutConfig,
     GRUTargetStateEstimator,
     GRUTargetStateModelConfig,
     GRUTargetStateOutput,
     adaptive_position_surrogate_actions,
     angular_residual_rad,
+    differentiable_position_servo_rollout,
     gru_parameter_count,
     load_gru_checkpoint,
     save_gru_checkpoint,
@@ -269,8 +273,16 @@ def test_adaptive_position_teacher_matches_differentiable_truth_replay():
             "servo_max_acceleration_rad_s2"
         ),
         servo_position_gain_s_inv=tensor("servo_position_gain_s_inv"),
+        servo_position_tolerance_rad=tensor("servo_position_tolerance_rad"),
+        servo_position_quantization_rad=tensor(
+            "servo_position_quantization_rad"
+        ),
+        servo_command_polarity=tensor("servo_command_polarity"),
         servo_command_latency_s=tensor("servo_command_latency_s"),
         servo_rate_time_constant_s=tensor("servo_rate_time_constant_s"),
+        control_period_s=tensor("control_period_s"),
+        integration_period_s=tensor("integration_period_s"),
+        camera_frame_period_s=tensor("camera_frame_period_s"),
     )
     truth = torch.from_numpy(dataset.targets).float()
     truth_output = GRUTargetStateOutput(
@@ -302,21 +314,38 @@ def test_adaptive_position_teacher_matches_differentiable_truth_replay():
     output = model(
         torch.from_numpy(dataset.features[:, profile_index]).float()
     )
+    plant_loss_config = GRULossConfig(
+        adaptive_position_action_weight=0.25,
+        adaptive_position_config=adapter,
+        position_plant_tracking_weight=0.20,
+        position_plant_response_weight=0.10,
+        position_plant_regret_weight=0.10,
+        position_plant_visibility_weight=0.05,
+        position_plant_smoothness_weight=0.01,
+        position_plant_saturation_weight=0.01,
+        position_plant_config=GRUPositionPlantRolloutConfig(
+            horizon_index=1,
+            integration_period_override_s=0.01,
+        ),
+    )
     loss = target_state_nll(
         output,
         truth,
         torch.from_numpy(dataset.target_mask),
         sequence_mask,
-        GRULossConfig(
-            adaptive_position_action_weight=0.25,
-            adaptive_position_config=adapter,
-        ),
+        plant_loss_config,
         prediction_horizons_s=dataset.manifest.prediction_horizons_s,
         adaptive_position_context=context,
     )
     loss.total.backward()
     assert torch.isfinite(loss.total)
     assert torch.isfinite(loss.adaptive_position_action_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_tracking_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_response_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_regret_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_visibility_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_smoothness_rmse_normalized)
+    assert torch.isfinite(loss.position_plant_saturation_rmse_normalized)
     assert all(
         parameter.grad is None or torch.all(torch.isfinite(parameter.grad))
         for parameter in model.parameters()
@@ -326,6 +355,97 @@ def test_adaptive_position_teacher_matches_differentiable_truth_replay():
         and torch.any(torch.abs(parameter.grad) > 0.0)
         for parameter in model.parameters()
     )
+    evaluation = evaluate_gru(
+        model,
+        dataset,
+        ObservationProfile.SERVO_AWARE,
+        batch_size=2,
+        loss_config=plant_loss_config,
+    )
+    assert evaluation.loss is not None
+    assert evaluation.position_plant_tracking_rmse_normalized is not None
+    assert evaluation.position_plant_response_rmse_normalized is not None
+    assert evaluation.position_plant_regret_rmse_normalized is not None
+    assert evaluation.position_plant_smoothness_rmse_normalized is not None
+
+
+def test_differentiable_position_plant_matches_multi_step_simulator():
+    base = nominal_scenario()
+    servo = replace(
+        base.config.servo,
+        command_latency_s=0.0073,
+        rate_time_constant_s=0.025,
+        position_tolerance_rad=0.0007,
+        position_quantization_rad=0.0013,
+    )
+    config = replace(
+        base.config,
+        servo=servo,
+        command_mode=GimbalCommandMode.POSITION,
+        timing=replace(
+            base.config.timing,
+            control_rate_hz=20.0,
+            integration_rate_hz=1000.0,
+            episode_duration_s=0.1,
+        ),
+        camera=replace(base.config.camera, frame_rate_hz=20.0),
+        scenario=replace(
+            base.config.scenario,
+            initial_gimbal_angle_rad=0.12,
+            initial_gimbal_rate_rad_s=-0.25,
+        ),
+    )
+    env = GimbalServoEnv(config)
+    env.reset(seed=37)
+    command_value = 0.15
+    for _ in range(2):
+        result = env.step(
+            GimbalAction.position(command_value)
+        )
+
+    def value(number: float) -> torch.Tensor:
+        return torch.tensor([[number]], dtype=torch.float64)
+
+    context = GRUAdaptivePositionLossContext(
+        teacher_action_normalized=value(0.0),
+        mask=torch.tensor([[True]]),
+        gimbal_angle_rad=value(config.scenario.initial_gimbal_angle_rad),
+        gimbal_rate_rad_s=value(config.scenario.initial_gimbal_rate_rad_s),
+        control_dt_s=value(config.timing.control_period_s),
+        selected_axis_fov_rad=value(config.camera.selected_axis_fov_rad),
+        servo_min_angle_rad=value(servo.min_angle_rad),
+        servo_max_angle_rad=value(servo.max_angle_rad),
+        servo_max_rate_rad_s=value(servo.max_rate_rad_s),
+        servo_max_acceleration_rad_s2=value(servo.max_acceleration_rad_s2),
+        servo_position_gain_s_inv=value(servo.position_gain_s_inv),
+        servo_position_tolerance_rad=value(servo.position_tolerance_rad),
+        servo_position_quantization_rad=value(servo.position_quantization_rad),
+        servo_command_polarity=value(float(servo.command_polarity)),
+        servo_command_latency_s=value(servo.command_latency_s),
+        servo_rate_time_constant_s=value(servo.rate_time_constant_s),
+        control_period_s=value(config.timing.control_period_s),
+        integration_period_s=value(config.timing.integration_period_s),
+        camera_frame_period_s=value(config.camera.frame_period_s),
+    )
+    command = value(command_value).requires_grad_()
+    rollout = differentiable_position_servo_rollout(
+        command,
+        context,
+        duration_s=0.1,
+    )
+
+    assert rollout.angle_rad.item() == pytest.approx(
+        result.diagnostics.gimbal_angle_rad,
+        abs=2e-12,
+    )
+    assert rollout.rate_rad_s.item() == pytest.approx(
+        result.diagnostics.gimbal_rate_rad_s,
+        abs=2e-12,
+    )
+    rollout.angle_rad.sum().backward()
+    assert command.grad is not None
+    assert torch.isfinite(command.grad).all()
+    assert torch.abs(command.grad).item() > 0.0
 
 
 def test_control_aware_loss_penalizes_inconsistent_prediction_heads():
