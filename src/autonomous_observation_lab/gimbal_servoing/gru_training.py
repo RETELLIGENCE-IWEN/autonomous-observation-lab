@@ -73,6 +73,36 @@ class GRUTrainingConfig:
 
 
 @dataclass(frozen=True)
+class GRUReferenceAnchorConfig:
+    """Function-space trust region around the starting predictor.
+
+    The anchor is a training-only regularizer. Its weights use the same
+    physical units as the bearing/rate mean-squared-error terms, and the
+    caller selects which labels are anchored independently of supervision
+    weights.
+    """
+
+    bearing_weight: float = 0.0
+    rate_weight: float = 0.0
+    project_conflicting_gradients: bool = False
+    projection_epsilon: float = 1e-12
+
+    def __post_init__(self) -> None:
+        for name in ("bearing_weight", "rate_weight"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if not math.isfinite(self.projection_epsilon) or (
+            self.projection_epsilon <= 0.0
+        ):
+            raise ValueError("projection epsilon must be finite and positive")
+
+    @property
+    def active(self) -> bool:
+        return self.bearing_weight > 0.0 or self.rate_weight > 0.0
+
+
+@dataclass(frozen=True)
 class HorizonMetrics:
     horizon_s: float
     valid_samples: int
@@ -120,6 +150,8 @@ class GRUEpochRecord:
     validation_loss: float
     validation_bearing_rmse_deg: float | None
     validation_rate_rmse_deg_s: float | None
+    training_reference_anchor_loss: float = 0.0
+    reference_anchor_conflict_fraction: float = 0.0
 
 
 @dataclass
@@ -142,6 +174,7 @@ class GimbalTorchSequenceDataset(Dataset):
         label_weights: np.ndarray | None = None,
         control_supervision: ControlActionSupervision | None = None,
         adaptive_position_supervision: AdaptivePositionSupervision | None = None,
+        reference_anchor_weights: np.ndarray | None = None,
     ):
         try:
             self.profile_index = dataset.manifest.observation_profiles.index(
@@ -162,6 +195,18 @@ class GimbalTorchSequenceDataset(Dataset):
                     "label weights must be finite and non-negative"
                 )
         self.label_weights = label_weights
+        if reference_anchor_weights is not None:
+            if reference_anchor_weights.shape != dataset.target_mask.shape:
+                raise ValueError(
+                    "reference anchor weights do not match target masks"
+                )
+            if np.any(~np.isfinite(reference_anchor_weights)) or np.any(
+                reference_anchor_weights < 0.0
+            ):
+                raise ValueError(
+                    "reference anchor weights must be finite and non-negative"
+                )
+        self.reference_anchor_weights = reference_anchor_weights
         if control_supervision is not None:
             expected_shape = dataset.sequence_mask.shape
             for value in (
@@ -226,6 +271,10 @@ class GimbalTorchSequenceDataset(Dataset):
         if self.label_weights is not None:
             item["label_weights"] = torch.from_numpy(
                 self.label_weights[index]
+            ).float()
+        if self.reference_anchor_weights is not None:
+            item["reference_anchor_weights"] = torch.from_numpy(
+                self.reference_anchor_weights[index]
             ).float()
         if self.control_supervision is not None:
             supervision = self.control_supervision
@@ -1142,10 +1191,15 @@ def train_gru(
     validation_label_weights: np.ndarray | None = None,
     training_episode_weights: np.ndarray | None = None,
     initial_state_dict: dict[str, torch.Tensor] | None = None,
+    reference_anchor_config: GRUReferenceAnchorConfig | None = None,
+    training_reference_anchor_weights: np.ndarray | None = None,
     retain_epoch_states: bool = False,
 ) -> GRUTrainingResult:
     training_config = training_config or GRUTrainingConfig()
     loss_config = loss_config or GRULossConfig()
+    reference_anchor_config = (
+        reference_anchor_config or GRUReferenceAnchorConfig()
+    )
     _compatible_datasets(train, validation, profile)
     model_config = model_config or GRUTargetStateModelConfig(
         input_dim=len(FEATURE_NAMES),
@@ -1200,6 +1254,15 @@ def train_gru(
     model = CausalTargetStateGRU(model_config).to(device)
     if initial_state_dict is not None:
         model.load_state_dict(initial_state_dict)
+    reference_model = None
+    if reference_anchor_config.active:
+        if initial_state_dict is None:
+            raise ValueError(
+                "reference anchoring requires an initial state dictionary"
+            )
+        reference_model = copy.deepcopy(model).eval()
+        for parameter in reference_model.parameters():
+            parameter.requires_grad_(False)
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=training_config.learning_rate,
@@ -1229,6 +1292,7 @@ def train_gru(
             training_label_weights,
             training_control_supervision,
             training_adaptive_position_supervision,
+            training_reference_anchor_weights,
         ),
         batch_size=training_config.batch_size,
         shuffle=sampler is None,
@@ -1253,7 +1317,10 @@ def train_gru(
     for epoch in range(1, training_config.epochs + 1):
         model.train()
         total_weighted_loss = 0.0
+        total_weighted_anchor_loss = 0.0
         total_labels = 0
+        anchor_conflict_batches = 0
+        anchor_evaluated_batches = 0
         for batch in loader:
             features = batch["features"].to(device)
             targets = batch["targets"].to(device)
@@ -1285,8 +1352,119 @@ def train_gru(
                     else None
                 ),
             )
+            anchor_loss = targets.new_zeros(())
+            if reference_model is not None:
+                with torch.no_grad():
+                    reference_output = reference_model(features)
+                anchor_weights = (
+                    batch["reference_anchor_weights"].to(device)
+                    if "reference_anchor_weights" in batch
+                    else torch.ones_like(target_mask, dtype=targets.dtype)
+                )
+                if loss_config.horizon_weights:
+                    anchor_weights = anchor_weights * targets.new_tensor(
+                        loss_config.horizon_weights
+                    ).view(1, 1, -1)
+                anchor_mask = (
+                    target_mask.bool() & sequence_mask.bool().unsqueeze(-1)
+                )
+                selected_anchor_weights = anchor_weights * anchor_mask.to(
+                    dtype=anchor_weights.dtype
+                )
+                anchor_weight_sum = selected_anchor_weights.sum().clamp_min(
+                    1.0
+                )
+                bearing_anchor_mse = (
+                    angular_residual_rad(
+                        output.mean[..., 0],
+                        reference_output.mean[..., 0],
+                    ).square()
+                    * selected_anchor_weights
+                ).sum() / anchor_weight_sum
+                rate_anchor_mse = (
+                    (output.mean[..., 1] - reference_output.mean[..., 1])
+                    .square()
+                    * selected_anchor_weights
+                ).sum() / anchor_weight_sum
+                anchor_loss = (
+                    reference_anchor_config.bearing_weight
+                    * bearing_anchor_mse
+                    + reference_anchor_config.rate_weight * rate_anchor_mse
+                )
+            total_loss = loss.total + anchor_loss
             optimizer.zero_grad(set_to_none=True)
-            loss.total.backward()
+            if (
+                reference_model is not None
+                and reference_anchor_config.project_conflicting_gradients
+            ):
+                parameters = tuple(
+                    parameter
+                    for parameter in model.parameters()
+                    if parameter.requires_grad
+                )
+                control_gradients = torch.autograd.grad(
+                    loss.total,
+                    parameters,
+                    retain_graph=True,
+                    allow_unused=True,
+                )
+                anchor_gradients = torch.autograd.grad(
+                    anchor_loss,
+                    parameters,
+                    allow_unused=True,
+                )
+                gradient_dot = targets.new_zeros(())
+                anchor_norm_squared = targets.new_zeros(())
+                for control_gradient, anchor_gradient in zip(
+                    control_gradients,
+                    anchor_gradients,
+                ):
+                    if anchor_gradient is not None:
+                        anchor_norm_squared = (
+                            anchor_norm_squared
+                            + anchor_gradient.square().sum()
+                        )
+                    if (
+                        control_gradient is not None
+                        and anchor_gradient is not None
+                    ):
+                        gradient_dot = gradient_dot + (
+                            control_gradient * anchor_gradient
+                        ).sum()
+                conflict = float(gradient_dot.detach()) < 0.0
+                anchor_evaluated_batches += 1
+                if conflict:
+                    anchor_conflict_batches += 1
+                projection_scale = (
+                    gradient_dot
+                    / anchor_norm_squared.clamp_min(
+                        reference_anchor_config.projection_epsilon
+                    )
+                    if conflict
+                    else targets.new_zeros(())
+                )
+                for parameter, control_gradient, anchor_gradient in zip(
+                    parameters,
+                    control_gradients,
+                    anchor_gradients,
+                ):
+                    combined_gradient = None
+                    if control_gradient is not None:
+                        combined_gradient = control_gradient
+                        if conflict and anchor_gradient is not None:
+                            combined_gradient = (
+                                combined_gradient
+                                - projection_scale * anchor_gradient
+                            )
+                    if anchor_gradient is not None:
+                        combined_gradient = (
+                            anchor_gradient
+                            if combined_gradient is None
+                            else combined_gradient + anchor_gradient
+                        )
+                    parameter.grad = combined_gradient
+            else:
+                total_loss.backward()
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(), training_config.gradient_clip_norm
             )
@@ -1294,7 +1472,10 @@ def train_gru(
             label_count = int(
                 (target_mask & sequence_mask.unsqueeze(-1)).sum().item()
             )
-            total_weighted_loss += float(loss.total.detach()) * label_count
+            total_weighted_loss += float(total_loss.detach()) * label_count
+            total_weighted_anchor_loss += (
+                float(anchor_loss.detach()) * label_count
+            )
             total_labels += label_count
 
         validation_metrics = evaluate_gru(
@@ -1318,6 +1499,14 @@ def train_gru(
                 ),
                 validation_rate_rmse_deg_s=(
                     validation_metrics.rate_rmse_deg_s
+                ),
+                training_reference_anchor_loss=(
+                    total_weighted_anchor_loss / max(1, total_labels)
+                ),
+                reference_anchor_conflict_fraction=(
+                    anchor_conflict_batches / anchor_evaluated_batches
+                    if anchor_evaluated_batches
+                    else 0.0
                 ),
             )
         )

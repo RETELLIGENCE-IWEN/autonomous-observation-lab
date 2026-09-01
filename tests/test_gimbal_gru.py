@@ -49,6 +49,7 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
     target_state_nll,
 )
 from autonomous_observation_lab.gimbal_servoing.gru_training import (
+    GRUReferenceAnchorConfig,
     GRUTrainingConfig,
     constant_velocity_predictions,
     evaluate_constant_velocity_baseline,
@@ -740,6 +741,83 @@ def test_episode_weighted_training_is_deterministic():
             model_config=model_config,
             training_config=training_config,
             training_episode_weights=np.ones(2, dtype=np.float32),
+        )
+
+
+def test_reference_anchor_limits_function_drift():
+    train = learning_dataset("train", (51, 52, 53))
+    validation = learning_dataset("validation", (61,))
+    model_config = GRUTargetStateModelConfig(
+        input_dim=len(FEATURE_NAMES),
+        prediction_horizons_s=train.manifest.prediction_horizons_s,
+        hidden_dim=8,
+        embedding_dim=8,
+    )
+    torch.manual_seed(23)
+    reference_model = CausalTargetStateGRU(model_config)
+    reference_state = {
+        name: value.detach().clone()
+        for name, value in reference_model.state_dict().items()
+    }
+    training_config = GRUTrainingConfig(
+        epochs=2,
+        batch_size=2,
+        learning_rate=3e-3,
+        seed=19,
+    )
+    unanchored = train_gru(
+        train,
+        validation,
+        ObservationProfile.SERVO_AWARE,
+        model_config=model_config,
+        training_config=training_config,
+        initial_state_dict=reference_state,
+        retain_epoch_states=True,
+    )
+    anchored = train_gru(
+        train,
+        validation,
+        ObservationProfile.SERVO_AWARE,
+        model_config=model_config,
+        training_config=training_config,
+        initial_state_dict=reference_state,
+        reference_anchor_config=GRUReferenceAnchorConfig(
+            bearing_weight=100.0,
+            rate_weight=100.0,
+            project_conflicting_gradients=True,
+        ),
+        training_reference_anchor_weights=np.ones_like(
+            train.target_mask,
+            dtype=np.float32,
+        ),
+        retain_epoch_states=True,
+    )
+
+    def displacement(state):
+        return sum(
+            torch.sum((state[name] - reference_state[name]).square()).item()
+            for name in reference_state
+        )
+
+    assert displacement(anchored.epoch_state_dicts[-1]) < displacement(
+        unanchored.epoch_state_dicts[-1]
+    )
+    assert anchored.history[-1].training_reference_anchor_loss > 0.0
+    assert 0.0 <= (
+        anchored.history[-1].reference_anchor_conflict_fraction
+    ) <= 1.0
+    with pytest.raises(ValueError, match="projection epsilon"):
+        GRUReferenceAnchorConfig(projection_epsilon=0.0)
+    with pytest.raises(ValueError, match="initial state dictionary"):
+        train_gru(
+            train,
+            validation,
+            ObservationProfile.SERVO_AWARE,
+            model_config=model_config,
+            training_config=replace(training_config, epochs=1),
+            reference_anchor_config=GRUReferenceAnchorConfig(
+                bearing_weight=1.0
+            ),
         )
 
 

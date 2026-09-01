@@ -202,6 +202,60 @@ controller-critical examples and retaining the starting model's ordinary-state
 behavior. It is not explained by training duration, learning rate, epoch
 selection, or data-order randomness.
 
+## V8.8 conservative-update experiments
+
+V8.8 added a training-only functional trust region. The V7 predictor remains
+frozen as a reference, and the fine-tuned model is penalized for changing its
+bearing/rate means on valid non-critical labels. Critical labels retain the
+full V8.7 counterfactual objective. The deployed architecture and observation
+schema are unchanged. Anchor weights 6 and 2 were predeclared to match V8.7's
+bearing/rate mean-error weights; 83.47% of valid training labels are anchored.
+
+The plain anchor produced no passing seed-29 checkpoint, but epoch 4 passed
+every per-seed safety check and substantially reduced the V8.7 failure:
+
+| Metric | Unanchored V8.7 epoch 4 | Anchored V8.8 epoch 4 |
+|---|---:|---:|
+| Average bearing RMSE | +3.27% | +0.43% |
+| 100 ms bearing RMSE | +3.48% | +0.55% |
+| Adapter-action RMSE | +5.42% | +0.49% |
+| Global exact tracking RMSE | +0.13% | **-0.34%** |
+| Critical exact tracking RMSE | -0.61% | **-0.53%** |
+| Global regret RMSE | +3.92% | **-2.77%** |
+| Critical regret RMSE | -8.09% | **-6.01%** |
+| Visibility violation | +1.53% | +0.11% |
+| Command difference | -1.55% | **-0.18%** |
+
+It missed only the stricter 0.5% global-tracking requirement and global
+visibility non-regression. Adding weak direct tracking and visibility terms
+(weight 1 each versus regret weight 7.5) did not fix those misses and worsened
+state, action, visibility, and smoothness. This rules out that simple residual
+scalarization.
+
+The next ablation projected the V8.7 control gradient away from the anchor
+gradient whenever their dot product was negative. Gradient conflict occurred
+in 49--72% of minibatches, directly confirming the interference hypothesis.
+Projection improved the Pareto frontier but still produced no passing epoch:
+
+| Metric | Projected anchor, epoch 4 |
+|---|---:|
+| Average bearing RMSE | **-0.59%** |
+| 100 ms bearing RMSE | **-0.58%** |
+| Average rate RMSE | **-1.63%** |
+| Adapter-action RMSE | **-0.71%** |
+| Critical adapter-action RMSE | **-3.25%** |
+| Global exact tracking RMSE | **-0.46%** |
+| Critical exact tracking RMSE | **-0.45%** |
+| Global regret RMSE | **-4.44%** |
+| Critical regret RMSE | **-4.98%** |
+| Visibility violation | **-0.30%** |
+| Command difference | +0.99% |
+| Plant saturation | **-0.44%** |
+
+This checkpoint misses both tracking thresholds by less than 0.05 percentage
+points and regresses smoothness. The result is scientifically useful but does
+not pass the frozen gate; thresholds were not relaxed after observing it.
+
 ## Interpretation
 
 V8.7 provides development evidence for the three barrier hypotheses that
@@ -231,14 +285,17 @@ This is not a promoted controller. The three-seed replication failed.
 - All selection used development data. No fresh test, deployment run, or
   sim-to-real claim was opened.
 
-The seed-29 diagnostic is complete and rules out simple optimization overshoot.
-The justified next step is a conservative functional update: anchor the
-fine-tuned predictor to its V7 reference on ordinary states while retaining the
-V8.7 counterfactual objective on controller-critical states. This directly
-addresses the observed gradient conflict without changing the deployment
-architecture or using privileged inputs at inference. Any selected anchor must
-be re-replicated from all three base checkpoints; the current result does not
-qualify for closed-loop promotion or a fresh test block.
+The seed-29 diagnostic, functional anchor, residual scalarization, and
+conflict-projected update are complete. They show that optimization noise is
+not the limiting factor and that preserving ordinary predictions improves the
+trade-off, but the shared state representation still couples control gains to
+state/action/smoothness regressions. The justified next step is to freeze the
+validated state predictor and train a small bounded causal control-residual
+head through the same exact plant objective. This separates control adaptation
+from state estimation while keeping the residual hardware-normalized and
+deployable. Any selected residual head must be evaluated across independent
+initializations; the current result does not qualify for closed-loop promotion
+or a fresh test block.
 
 Reproduce the development screen with:
 
@@ -246,6 +303,7 @@ Reproduce the development screen with:
 aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
 aol-diagnose-gimbal-counterfactual-seed
+aol-develop-gimbal-counterfactual-reference-anchor
 ```
 
 Generated datasets, result JSON, and checkpoints remain under ignored

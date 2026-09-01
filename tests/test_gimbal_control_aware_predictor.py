@@ -70,6 +70,10 @@ from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_replication
     CounterfactualPlantReplicationConfig,
     evaluate_counterfactual_plant_replication,
 )
+from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_reference_anchor import (
+    CounterfactualPlantReferenceAnchorConfig,
+    evaluate_counterfactual_plant_reference_anchor,
+)
 from autonomous_observation_lab.gimbal_servoing.counterfactual_plant_seed_diagnostic import (
     CounterfactualPlantSeedDiagnosticConfig,
     evaluate_counterfactual_plant_seed_diagnostic,
@@ -628,6 +632,27 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
     assert result["datasets"]["fresh_test"] == {"opened": False}
     assert len(result["trajectories"]) == 1
     assert len(result["trajectories"][0]["epochs"]) == 1
+
+    anchored = evaluate_counterfactual_plant_reference_anchor(
+        train_path=train_path,
+        validation_path=validation_path,
+        base_checkpoint=base_checkpoint,
+        checkpoint_directory=tmp_path / "reference_anchor_outputs",
+        config=CounterfactualPlantReferenceAnchorConfig(
+            epochs=1,
+            batch_size=1,
+            rollout_horizon_index=1,
+            training_integration_period_s=0.01,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.01
+            ),
+        ),
+    )
+    assert anchored["datasets"]["fresh_test"] == {"opened": False}
+    assert anchored["anchor_scope"]["ordinary_label_count"] > 0
+    assert len(anchored["epochs"]) == 1
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):

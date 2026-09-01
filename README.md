@@ -338,6 +338,7 @@ That outcome-aware follow-up is implemented as V8--V8.7:
 aol-develop-gimbal-counterfactual-plant
 aol-replicate-gimbal-counterfactual-plant
 aol-diagnose-gimbal-counterfactual-seed
+aol-develop-gimbal-counterfactual-reference-anchor
 ```
 
 The [V8--V8.7 experiment report](docs/research_tracks/predictive_gimbal_servoing/counterfactual_plant_v8_experiment.md)
@@ -353,7 +354,12 @@ An epoch-, learning-rate-, and sampler-seed diagnostic finds no passing seed-29
 checkpoint and shows a repeatable trade from ordinary-state behavior into
 critical-state performance. The next experiment therefore targets this
 gradient conflict with a conservative reference anchor rather than more
-epochs.
+epochs. The anchor sharply reduces seed-29 state/action regressions but misses
+the global tracking gate; conflict projection observes opposing gradients in
+49--72% of minibatches and reaches -0.46% global/-0.45% critical tracking, just
+short of both -0.5% requirements while regressing smoothness. V8.8 is therefore
+also unpromoted. The next structural experiment freezes state estimation and
+learns a bounded causal control residual.
 
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
