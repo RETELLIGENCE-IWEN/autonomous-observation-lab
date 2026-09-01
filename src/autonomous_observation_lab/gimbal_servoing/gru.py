@@ -249,6 +249,114 @@ class CausalTargetStateGRU(nn.Module):
         )
 
 
+class CausalTargetStateGRUEnsemble(nn.Module):
+    """Causal moment-matched ensemble of compatible GRU predictors."""
+
+    def __init__(self, models: tuple[CausalTargetStateGRU, ...]):
+        super().__init__()
+        if not models:
+            raise ValueError("at least one GRU ensemble member is required")
+        if any(model.config != models[0].config for model in models[1:]):
+            raise ValueError("GRU ensemble members must share one config")
+        self.members = nn.ModuleList(models)
+        self.config = models[0].config
+
+    @property
+    def member_count(self) -> int:
+        return len(self.members)
+
+    @staticmethod
+    def _combine(
+        outputs: tuple[GRUTargetStateOutput, ...],
+    ) -> GRUTargetStateOutput:
+        means = torch.stack([output.mean for output in outputs], dim=0)
+        stds = torch.stack([output.std for output in outputs], dim=0)
+        bearing_mean = torch.atan2(
+            torch.mean(torch.sin(means[..., 0]), dim=0),
+            torch.mean(torch.cos(means[..., 0]), dim=0),
+        )
+        rate_mean = torch.mean(means[..., 1], dim=0)
+        combined_mean = torch.stack((bearing_mean, rate_mean), dim=-1)
+        bearing_residual = angular_residual_rad(
+            means[..., 0],
+            bearing_mean.unsqueeze(0),
+        )
+        bearing_variance = torch.mean(
+            stds[..., 0].square() + bearing_residual.square(),
+            dim=0,
+        )
+        rate_variance = torch.mean(
+            stds[..., 1].square()
+            + (means[..., 1] - rate_mean.unsqueeze(0)).square(),
+            dim=0,
+        )
+        combined_std = torch.stack(
+            (
+                torch.sqrt(bearing_variance.clamp_min(1e-12)),
+                torch.sqrt(rate_variance.clamp_min(1e-12)),
+            ),
+            dim=-1,
+        )
+        interval_values = [
+            output.interval_rate_rad_s for output in outputs
+        ]
+        if all(value is None for value in interval_values):
+            interval_rate = None
+        elif all(value is not None for value in interval_values):
+            interval_rate = torch.mean(
+                torch.stack(
+                    [value for value in interval_values if value is not None],
+                    dim=0,
+                ),
+                dim=0,
+            )
+        else:
+            raise ValueError("GRU ensemble interval-rate heads are incompatible")
+        return GRUTargetStateOutput(
+            mean=combined_mean,
+            std=combined_std,
+            hidden=torch.stack([output.hidden for output in outputs], dim=0),
+            interval_rate_rad_s=interval_rate,
+        )
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> GRUTargetStateOutput:
+        member_hidden = (
+            (None,) * self.member_count
+            if hidden is None
+            else tuple(hidden[index] for index in range(self.member_count))
+        )
+        if len(member_hidden) != self.member_count:
+            raise ValueError("GRU ensemble hidden state is invalid")
+        return self._combine(
+            tuple(
+                member(features, member_hidden[index])
+                for index, member in enumerate(self.members)
+            )
+        )
+
+    def forward_step(
+        self,
+        feature: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> GRUTargetStateOutput:
+        member_hidden = (
+            (None,) * self.member_count
+            if hidden is None
+            else tuple(hidden[index] for index in range(self.member_count))
+        )
+        if len(member_hidden) != self.member_count:
+            raise ValueError("GRU ensemble hidden state is invalid")
+        return self._combine(
+            tuple(
+                member.forward_step(feature, member_hidden[index])
+                for index, member in enumerate(self.members)
+            )
+        )
+
 @dataclass(frozen=True)
 class GRULossConfig:
     bearing_weight: float = 1.0

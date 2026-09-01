@@ -6,7 +6,7 @@ import argparse
 import hashlib
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -28,7 +28,12 @@ from .critical_curriculum import (
     critical_episode_curriculum_report,
 )
 from .dataset import FEATURE_NAMES, load_gimbal_dataset
-from .gru import GRULossConfig, GRUTargetStateModelConfig, save_gru_checkpoint
+from .gru import (
+    GRULossConfig,
+    GRUTargetStateModelConfig,
+    gru_parameter_count,
+    save_gru_checkpoint,
+)
 from .gru_training import GRUTrainingConfig, evaluate_gru, train_gru
 
 
@@ -53,6 +58,8 @@ class AdaptiveCurriculumCandidate:
     adaptive_position_action_weight: float
     use_critical_episode_curriculum: bool
     dynamic_consistency_weight: float = 25.0
+    mean_parameterization: str = "independent"
+    curriculum_concentration_strength: float | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -69,6 +76,24 @@ class AdaptiveCurriculumCandidate:
             raise ValueError(
                 "dynamic consistency weight must be finite and non-negative"
             )
+        if self.mean_parameterization not in {
+            "independent",
+            "integrated_rate",
+            "integrated_midpoint",
+        }:
+            raise ValueError("unsupported V6 mean parameterization")
+        if self.curriculum_concentration_strength is not None:
+            if (
+                not math.isfinite(self.curriculum_concentration_strength)
+                or self.curriculum_concentration_strength < 0.0
+            ):
+                raise ValueError(
+                    "curriculum concentration must be finite and non-negative"
+                )
+            if not self.use_critical_episode_curriculum:
+                raise ValueError(
+                    "curriculum concentration requires episode curriculum"
+                )
 
     @property
     def loss(self) -> GRULossConfig:
@@ -296,7 +321,7 @@ def evaluate_adaptive_curriculum_objective(
         seed=config.training_seed,
         device=config.device,
     )
-    model_config = GRUTargetStateModelConfig(
+    base_model_config = GRUTargetStateModelConfig(
         input_dim=len(FEATURE_NAMES),
         prediction_horizons_s=horizons_s,
         hidden_dim=config.hidden_dim,
@@ -306,6 +331,25 @@ def evaluate_adaptive_curriculum_objective(
     records = []
     models = {}
     for candidate in config.candidates:
+        model_config = replace(
+            base_model_config,
+            mean_parameterization=candidate.mean_parameterization,
+        )
+        candidate_curriculum = None
+        candidate_curriculum_config = config.curriculum
+        if candidate.use_critical_episode_curriculum:
+            if candidate.curriculum_concentration_strength is not None:
+                candidate_curriculum_config = replace(
+                    config.curriculum,
+                    concentration_strength=(
+                        candidate.curriculum_concentration_strength
+                    ),
+                )
+            candidate_curriculum = compute_critical_episode_curriculum(
+                train,
+                train_criticality,
+                config=candidate_curriculum_config,
+            )
         training = train_gru(
             train,
             validation,
@@ -314,8 +358,8 @@ def evaluate_adaptive_curriculum_objective(
             training_config=training_config,
             loss_config=candidate.loss,
             training_episode_weights=(
-                curriculum.episode_weights
-                if candidate.use_critical_episode_curriculum
+                candidate_curriculum.episode_weights
+                if candidate_curriculum is not None
                 else None
             ),
         )
@@ -355,8 +399,19 @@ def evaluate_adaptive_curriculum_objective(
             {
                 "name": candidate.name,
                 "loss_config": asdict(candidate.loss),
+                "model_config": asdict(model_config),
+                "parameter_count": gru_parameter_count(training.model),
                 "use_critical_episode_curriculum": (
                     candidate.use_critical_episode_curriculum
+                ),
+                "curriculum": (
+                    critical_episode_curriculum_report(
+                        train,
+                        candidate_curriculum,
+                        config=candidate_curriculum_config,
+                    )
+                    if candidate_curriculum is not None
+                    else None
                 ),
                 "best_epoch": training.best_epoch,
                 "training_history": [
@@ -426,7 +481,7 @@ def evaluate_adaptive_curriculum_objective(
     return {
         "experiment": ADAPTIVE_CURRICULUM_OBJECTIVE_SCHEMA_VERSION,
         "config": asdict(config),
-        "model_config": asdict(model_config),
+        "model_config": asdict(base_model_config),
         "adapter_config": asdict(adapter),
         "datasets": {
             "train": {

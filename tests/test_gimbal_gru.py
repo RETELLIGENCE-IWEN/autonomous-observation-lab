@@ -29,6 +29,7 @@ from autonomous_observation_lab.gimbal_servoing.dataset import (
 )
 from autonomous_observation_lab.gimbal_servoing.gru import (
     CausalTargetStateGRU,
+    CausalTargetStateGRUEnsemble,
     GRUAdaptivePositionLossContext,
     GRUControlLossContext,
     GRUInferenceConfig,
@@ -123,6 +124,32 @@ def test_gru_is_causal_and_streaming_matches_batched_forward():
     torch.testing.assert_close(reference.mean, torch.stack(step_means, dim=1))
     torch.testing.assert_close(reference.std, torch.stack(step_stds, dim=1))
     assert torch.all(reference.std > 0.0)
+
+
+def test_gru_ensemble_matches_identical_members_and_streaming_forward():
+    torch.manual_seed(13)
+    first = small_model().eval()
+    second = small_model().eval()
+    second.load_state_dict(first.state_dict())
+    ensemble = CausalTargetStateGRUEnsemble((first, second)).eval()
+    features = torch.randn(2, 7, len(FEATURE_NAMES))
+    reference = first(features)
+    combined = ensemble(features)
+
+    torch.testing.assert_close(combined.mean, reference.mean)
+    torch.testing.assert_close(combined.std, reference.std)
+    assert combined.hidden.shape[0] == 2
+
+    hidden = None
+    step_means = []
+    step_stds = []
+    for time_index in range(features.shape[1]):
+        output = ensemble.forward_step(features[:, time_index], hidden)
+        hidden = output.hidden
+        step_means.append(output.mean)
+        step_stds.append(output.std)
+    torch.testing.assert_close(combined.mean, torch.stack(step_means, dim=1))
+    torch.testing.assert_close(combined.std, torch.stack(step_stds, dim=1))
 
 
 def test_integrated_rate_head_is_dynamically_constrained_by_construction():

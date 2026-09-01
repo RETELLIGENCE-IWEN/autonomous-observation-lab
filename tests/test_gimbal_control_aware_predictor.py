@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -39,6 +40,18 @@ from autonomous_observation_lab.gimbal_servoing.integrated_dynamics_objective im
 )
 from autonomous_observation_lab.gimbal_servoing.midpoint_dynamics_objective import (
     midpoint_dynamics_candidates,
+)
+from autonomous_observation_lab.gimbal_servoing.midpoint_adapter_objective import (
+    evaluate_midpoint_adapter_objective,
+    midpoint_adapter_candidates,
+)
+from autonomous_observation_lab.gimbal_servoing.midpoint_adapter_replication import (
+    MidpointAdapterReplicationConfig,
+    evaluate_midpoint_adapter_replication,
+)
+from autonomous_observation_lab.gimbal_servoing.midpoint_adapter_ensemble import (
+    MidpointAdapterEnsembleConfig,
+    evaluate_midpoint_adapter_ensemble,
 )
 from autonomous_observation_lab.gimbal_servoing.control_aware_replication import (
     ControlAwareReplicationConfig,
@@ -138,6 +151,20 @@ def test_control_aware_candidates_isolate_required_ablation_factors():
     ]
     assert refinement[-1].adaptive_position_action_weight < (
         refinement[2].adaptive_position_action_weight
+    )
+    structural = midpoint_adapter_candidates()
+    assert structural[0].mean_parameterization == "independent"
+    assert all(
+        candidate.mean_parameterization == "integrated_midpoint"
+        for candidate in structural[1:]
+    )
+    assert all(
+        candidate.dynamic_consistency_weight == 0.0
+        for candidate in structural[1:]
+    )
+    assert all(
+        candidate.curriculum_concentration_strength == 1.0
+        for candidate in structural[-2:]
     )
     assert any(
         candidate.adaptive_position_action_weight == 0.0
@@ -281,6 +308,142 @@ def test_adaptive_curriculum_objective_keeps_fresh_test_closed(tmp_path):
         Path(candidate["checkpoint"]).exists()
         for candidate in result["candidates"]
     )
+
+
+def test_midpoint_adapter_objective_enforces_hard_dynamics(tmp_path):
+    base = nominal_scenario()
+    scenario = replace(
+        base,
+        name="midpoint_adapter_smoke",
+        config=replace(
+            base.config,
+            timing=replace(base.config.timing, episode_duration_s=0.2),
+            camera=replace(
+                base.config.camera,
+                detection_latency_s=0.0,
+                detection_latency_jitter_s=0.0,
+                miss_probability=0.0,
+            ),
+        ),
+    )
+    train_path, _ = save_gimbal_dataset(
+        tmp_path / "midpoint_train",
+        _dataset("train", 311, scenario),
+    )
+    validation_path, _ = save_gimbal_dataset(
+        tmp_path / "midpoint_validation",
+        _dataset("validation", 411, scenario),
+    )
+
+    result = evaluate_midpoint_adapter_objective(
+        train_path=train_path,
+        validation_path=validation_path,
+        checkpoint_directory=tmp_path / "midpoint_checkpoints",
+        config=AdaptiveCurriculumObjectiveConfig(
+            epochs=1,
+            batch_size=1,
+            hidden_dim=8,
+            embedding_dim=8,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.0
+            ),
+        ),
+    )
+
+    assert result["datasets"]["fresh_test"] == {"opened": False}
+    assert len(result["candidates"]) == 5
+    midpoint_records = result["candidates"][1:]
+    assert all(
+        record["model_config"]["mean_parameterization"]
+        == "integrated_midpoint"
+        for record in midpoint_records
+    )
+    assert all(
+        record["standard_validation"]["dynamic_consistency_rmse_deg"]
+        < 1e-4
+        for record in midpoint_records
+    )
+    assert midpoint_records[-1]["curriculum"]["configuration"][
+        "concentration_strength"
+    ] == 1.0
+
+
+def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):
+    base = nominal_scenario()
+    scenario = replace(
+        base,
+        name="midpoint_replication_smoke",
+        config=replace(
+            base.config,
+            timing=replace(base.config.timing, episode_duration_s=0.2),
+            camera=replace(
+                base.config.camera,
+                detection_latency_s=0.0,
+                detection_latency_jitter_s=0.0,
+                miss_probability=0.0,
+            ),
+        ),
+    )
+    train_path, _ = save_gimbal_dataset(
+        tmp_path / "midpoint_replication_train",
+        _dataset("train", 511, scenario),
+    )
+    validation_path, _ = save_gimbal_dataset(
+        tmp_path / "midpoint_replication_validation",
+        _dataset("validation", 611, scenario),
+    )
+
+    result = evaluate_midpoint_adapter_replication(
+        train_path=train_path,
+        validation_path=validation_path,
+        checkpoint_directory=tmp_path / "midpoint_replication_checkpoints",
+        config=MidpointAdapterReplicationConfig(
+            training_seeds=(7,),
+            epochs=1,
+            batch_size=1,
+            hidden_dim=8,
+            embedding_dim=8,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            minimum_improving_seed_count=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.0
+            ),
+        ),
+    )
+
+    assert result["datasets"]["test"] == {"opened": False}
+    assert len(result["training_seed_results"]) == 1
+    record = result["training_seed_results"][0]
+    assert record["training_seed"] == 7
+    assert record["v4_reference"]["best_epoch"] == 1
+    assert record["midpoint_state_reference"]["best_epoch"] == 1
+    assert record["midpoint_state_reference"]["standard_validation"][
+        "dynamic_consistency_rmse_deg"
+    ] < 1e-4
+    assert Path(record["v4_reference"]["checkpoint"]).exists()
+    assert Path(record["midpoint_state_reference"]["checkpoint"]).exists()
+
+    replication_path = tmp_path / "midpoint_replication.json"
+    replication_path.write_text(json.dumps(result), encoding="utf-8")
+    ensemble = evaluate_midpoint_adapter_ensemble(
+        validation_path=validation_path,
+        replication_path=replication_path,
+        config=MidpointAdapterEnsembleConfig(
+            batch_size=1,
+            minimum_member_count=1,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.0
+            ),
+        ),
+    )
+    assert ensemble["datasets"]["test"] == {"opened": False}
+    assert ensemble["ensembles"]["v4_reference"]["member_count"] == 1
+    assert ensemble["ensembles"]["midpoint_state_reference"][
+        "member_count"
+    ] == 1
 
 
 def test_control_aware_replication_is_seed_matched_and_keeps_test_closed(

@@ -317,6 +317,21 @@ records the near-pass, the failed soft-constraint refinement, and why the next
 experiment should combine this objective with hard midpoint-integrated target
 dynamics. No fresh test block was opened.
 
+That structural follow-up is implemented as V7:
+
+```bash
+aol-develop-gimbal-midpoint-adapter
+aol-replicate-gimbal-midpoint-adapter
+aol-evaluate-gimbal-midpoint-ensemble
+```
+
+The [V7 experiment report](docs/research_tracks/predictive_gimbal_servoing/midpoint_adapter_v7_experiment.md)
+documents a seed-17 development pass, its failed three-seed replication, and a
+matched causal ensemble that improves global action RMSE but misses the
+critical-action gate. The test remains sealed; the next justified objective is
+a differentiable closed-loop plant/tracking rollout rather than command
+imitation on logged trajectories.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:
