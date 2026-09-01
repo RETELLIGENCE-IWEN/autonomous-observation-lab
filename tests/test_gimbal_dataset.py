@@ -25,6 +25,14 @@ from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     ClosedLoopScenario,
     nominal_scenario,
 )
+from autonomous_observation_lab.gimbal_servoing.control_criticality import (
+    ControlCriticalityConfig,
+    compute_control_criticality,
+    control_criticality_report,
+)
+from autonomous_observation_lab.gimbal_servoing.control_supervision import (
+    compute_control_action_supervision,
+)
 
 
 def short_scenario(
@@ -256,6 +264,66 @@ def test_detector_corruption_changes_features_but_not_privileged_targets():
     np.testing.assert_array_equal(
         clean_data.oracle_actions, noisy_data.oracle_actions
     )
+
+
+def test_control_criticality_is_hardware_relative_and_training_only():
+    scenario = short_scenario()
+    dataset = generate_gimbal_dataset(
+        dataset_request(
+            behavior_names=("privileged_oracle_position",),
+            observation_profiles=(ObservationProfile.DISTURBANCE_AWARE,),
+        ),
+        scenarios=(scenario,),
+    )
+    config = ControlCriticalityConfig(critical_weight_threshold=1.0)
+
+    criticality = compute_control_criticality(dataset, config=config)
+    report = control_criticality_report(
+        dataset,
+        criticality,
+        config=config,
+    )
+    valid = dataset.target_mask & dataset.sequence_mask[:, :, None]
+
+    assert criticality.weights.shape == dataset.target_mask.shape
+    assert np.mean(criticality.weights[valid]) == pytest.approx(1.0)
+    assert np.all(criticality.raw_weights[valid] >= 1.0)
+    assert np.all(criticality.critical_mask[valid])
+    assert report["episode_count"] == dataset.episode_count
+    assert report["overall"]["critical_label_fraction"] == 1.0
+    assert set(report["by_scenario"]) == {scenario.name}
+    assert all("target" not in name for name in dataset.manifest.feature_names)
+
+    uniform = compute_control_criticality(
+        dataset,
+        config=ControlCriticalityConfig(weighting_strength=0.0),
+    )
+    assert np.all(uniform.weights[valid] == pytest.approx(1.0))
+
+
+def test_control_action_supervision_uses_serialized_hardware_and_stays_privileged():
+    scenario = short_scenario()
+    dataset = generate_gimbal_dataset(
+        dataset_request(
+            behavior_names=("privileged_oracle_position",),
+            observation_profiles=(ObservationProfile.DISTURBANCE_AWARE,),
+        ),
+        scenarios=(scenario,),
+    )
+
+    supervision = compute_control_action_supervision(dataset)
+
+    assert supervision.oracle_actions.shape == (*dataset.sequence_mask.shape, 2)
+    np.testing.assert_array_equal(
+        supervision.oracle_actions,
+        dataset.oracle_actions,
+    )
+    assert np.all(
+        supervision.servo_max_rate_rad_s[dataset.sequence_mask]
+        == pytest.approx(scenario.config.servo.max_rate_rad_s)
+    )
+    assert np.all(supervision.mask == dataset.sequence_mask)
+    assert all("oracle" not in name for name in dataset.manifest.feature_names)
 
 
 def test_dataset_round_trip_and_split_seed_validation(tmp_path):

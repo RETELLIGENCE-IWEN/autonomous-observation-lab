@@ -282,6 +282,27 @@ See the
 [V3/V3.1 experiment report](docs/research_tracks/predictive_gimbal_servoing/constrained_predictive_position_v3_experiment.md)
 for the frozen gates, scenario results, and next predictor-training decision.
 
+Develop, replicate, and test the control-aware V4 predictor with:
+
+```bash
+aol-develop-gimbal-control-aware-predictor
+aol-replicate-gimbal-control-aware-predictor
+aol-test-gimbal-control-aware-predictor
+aol-evaluate-gimbal-control-aware-closed-loop
+```
+
+V4 expands randomized training from 432 to 1,728 episodes and adds a
+cross-horizon bearing/rate consistency loss. It passes all three matched
+replication seeds and the sealed 31000-series open-loop test, reducing critical
+100 ms bearing RMSE by 5.45% and dynamic inconsistency by 57.97%. In fresh
+closed-loop worlds, its rate adapter passes with 4.25% lower mean error and
+0.69 percentage points less avoidable loss. Position averages improve slightly
+and command variation falls 5.6%, but only one of three initializations improves
+mean tracking, so position promotion fails the seed-consistency gate. The
+[V4/V5 experiment report](docs/research_tracks/predictive_gimbal_servoing/control_aware_predictor_v4_experiment.md)
+documents critical weighting, dual rate/position oracle-action supervision,
+hard dynamic-head ablations, and the exact performance verdict.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

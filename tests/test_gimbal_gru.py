@@ -23,11 +23,14 @@ from autonomous_observation_lab.gimbal_servoing.dataset import (
 )
 from autonomous_observation_lab.gimbal_servoing.gru import (
     CausalTargetStateGRU,
+    GRUControlLossContext,
     GRUInferenceConfig,
     GRULossConfig,
     GRUTargetStateEstimator,
     GRUTargetStateModelConfig,
+    GRUTargetStateOutput,
     angular_residual_rad,
+    gru_parameter_count,
     load_gru_checkpoint,
     save_gru_checkpoint,
     target_state_nll,
@@ -114,6 +117,51 @@ def test_gru_is_causal_and_streaming_matches_batched_forward():
     assert torch.all(reference.std > 0.0)
 
 
+def test_integrated_rate_head_is_dynamically_constrained_by_construction():
+    model = CausalTargetStateGRU(
+        GRUTargetStateModelConfig(
+            input_dim=len(FEATURE_NAMES),
+            prediction_horizons_s=(0.0, 0.1, 0.25),
+            hidden_dim=16,
+            embedding_dim=12,
+            mean_parameterization="integrated_rate",
+        )
+    )
+    independent = CausalTargetStateGRU(
+        replace(model.config, mean_parameterization="independent")
+    )
+    output = model(torch.randn(2, 5, len(FEATURE_NAMES)))
+    intervals = torch.tensor([0.1, 0.15])
+    bearing_step = angular_residual_rad(
+        output.mean[..., 1:, 0],
+        output.mean[..., :-1, 0],
+    )
+    integrated_rate = 0.5 * (
+        output.mean[..., 1:, 1] + output.mean[..., :-1, 1]
+    ) * intervals
+
+    torch.testing.assert_close(bearing_step, integrated_rate, atol=1e-6, rtol=1e-6)
+    assert gru_parameter_count(model) < gru_parameter_count(independent)
+
+    midpoint_model = CausalTargetStateGRU(
+        replace(model.config, mean_parameterization="integrated_midpoint")
+    )
+    midpoint_output = midpoint_model(
+        torch.randn(2, 5, len(FEATURE_NAMES))
+    )
+    assert midpoint_output.interval_rate_rad_s is not None
+    midpoint_step = angular_residual_rad(
+        midpoint_output.mean[..., 1:, 0],
+        midpoint_output.mean[..., :-1, 0],
+    )
+    simpson_rate = (
+        midpoint_output.mean[..., :-1, 1]
+        + 4.0 * midpoint_output.interval_rate_rad_s
+        + midpoint_output.mean[..., 1:, 1]
+    ) * intervals / 6.0
+    torch.testing.assert_close(midpoint_step, simpson_rate, atol=1e-6, rtol=1e-6)
+
+
 def test_probabilistic_loss_wraps_bearing_and_ignores_masked_values():
     model = small_model()
     features = torch.randn(2, 6, len(FEATURE_NAMES))
@@ -152,6 +200,126 @@ def test_probabilistic_loss_wraps_bearing_and_ignores_masked_values():
         torch.tensor([-math.pi + 0.1]),
     )
     assert wrapped.item() == pytest.approx(-0.2, abs=1e-6)
+
+
+def test_control_aware_loss_penalizes_inconsistent_prediction_heads():
+    consistent_mean = torch.tensor(
+        [[[[0.0, 1.0], [0.1, 1.0], [0.2, 1.0]]]]
+    )
+    inconsistent_mean = consistent_mean.clone()
+    inconsistent_mean[..., 1, 0] = 0.3
+    std = torch.ones_like(consistent_mean)
+    targets = torch.zeros_like(consistent_mean)
+    target_mask = torch.ones(targets.shape[:-1], dtype=torch.bool)
+    sequence_mask = torch.ones(targets.shape[:2], dtype=torch.bool)
+    config = GRULossConfig(
+        bearing_weight=0.0,
+        rate_weight=0.0,
+        mean_error_weight=0.0,
+        dynamic_consistency_weight=1.0,
+    )
+
+    consistent = target_state_nll(
+        GRUTargetStateOutput(consistent_mean, std, torch.empty(0)),
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+        prediction_horizons_s=(0.0, 0.1, 0.2),
+    )
+    inconsistent = target_state_nll(
+        GRUTargetStateOutput(inconsistent_mean, std, torch.empty(0)),
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+        prediction_horizons_s=(0.0, 0.1, 0.2),
+    )
+
+    assert consistent.dynamic_consistency_rmse_rad == pytest.approx(0.0)
+    assert inconsistent.total > consistent.total
+
+
+def test_control_aware_loss_applies_horizon_and_critical_label_weights():
+    mean = torch.zeros(1, 1, 2, 2)
+    std = torch.ones_like(mean)
+    targets = torch.zeros_like(mean)
+    targets[..., 1, 0] = 1.0
+    target_mask = torch.ones(targets.shape[:-1], dtype=torch.bool)
+    sequence_mask = torch.ones(targets.shape[:2], dtype=torch.bool)
+    output = GRUTargetStateOutput(mean, std, torch.empty(0))
+    config = GRULossConfig(
+        bearing_weight=0.0,
+        rate_weight=0.0,
+        mean_error_weight=1.0,
+        horizon_weights=(1.0, 2.0),
+    )
+
+    uniform = target_state_nll(
+        output,
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+    )
+    critical = target_state_nll(
+        output,
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+        label_weights=torch.tensor([[[1.0, 4.0]]]),
+    )
+
+    assert critical.total > uniform.total
+
+
+def test_control_aware_loss_matches_hardware_normalized_oracle_actions():
+    mean = torch.tensor([[[[0.2, 0.1], [0.3, 0.1]]]])
+    std = torch.ones_like(mean)
+    targets = mean.clone()
+    target_mask = torch.ones(targets.shape[:-1], dtype=torch.bool)
+    sequence_mask = torch.ones(targets.shape[:2], dtype=torch.bool)
+    context = GRUControlLossContext(
+        oracle_actions=torch.tensor([[[0.4, 0.4]]]),
+        gimbal_angle_rad=torch.tensor([[0.05]]),
+        servo_max_rate_rad_s=torch.tensor([[1.0]]),
+        servo_min_angle_rad=torch.tensor([[-0.5]]),
+        servo_max_angle_rad=torch.tensor([[0.5]]),
+        rate_feedback_gain_s_inv=torch.tensor([[2.0]]),
+        position_preview_s=torch.tensor([[0.0]]),
+        mask=torch.tensor([[True]]),
+    )
+    config = GRULossConfig(
+        bearing_weight=0.0,
+        rate_weight=0.0,
+        mean_error_weight=0.0,
+        rate_action_weight=1.0,
+        position_action_weight=1.0,
+    )
+
+    matched = target_state_nll(
+        GRUTargetStateOutput(mean, std, torch.empty(0)),
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+        control_context=context,
+    )
+    shifted_mean = mean.clone()
+    shifted_mean[..., 0, 0] = 0.3
+    shifted = target_state_nll(
+        GRUTargetStateOutput(shifted_mean, std, torch.empty(0)),
+        targets,
+        target_mask,
+        sequence_mask,
+        config,
+        control_context=context,
+    )
+
+    assert matched.rate_action_rmse_normalized == pytest.approx(0.0)
+    assert matched.position_action_rmse_normalized == pytest.approx(0.0)
+    assert shifted.total > matched.total
 
 
 def test_streaming_estimator_produces_controller_compatible_state():

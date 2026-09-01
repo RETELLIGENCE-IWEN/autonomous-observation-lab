@@ -16,6 +16,10 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from .config import GimbalCommandMode, ObservationProfile
+from .control_supervision import (
+    ControlActionSupervision,
+    compute_control_action_supervision,
+)
 from .dataset import (
     FEATURE_NAMES,
     TARGET_NAMES,
@@ -29,6 +33,7 @@ from .estimators import (
 )
 from .gru import (
     CausalTargetStateGRU,
+    GRUControlLossContext,
     GRULossConfig,
     GRUTargetStateModelConfig,
     gru_parameter_count,
@@ -87,6 +92,9 @@ class GRUEvaluationMetrics:
     bearing_two_sigma_coverage: float | None
     rate_one_sigma_coverage: float | None
     rate_two_sigma_coverage: float | None
+    dynamic_consistency_rmse_deg: float | None
+    rate_action_rmse_normalized: float | None
+    position_action_rmse_normalized: float | None
     per_horizon: tuple[HorizonMetrics, ...]
 
 
@@ -115,6 +123,8 @@ class GimbalTorchSequenceDataset(Dataset):
         self,
         dataset: GimbalTargetStateDataset,
         profile: ObservationProfile,
+        label_weights: np.ndarray | None = None,
+        control_supervision: ControlActionSupervision | None = None,
     ):
         try:
             self.profile_index = dataset.manifest.observation_profiles.index(
@@ -125,12 +135,38 @@ class GimbalTorchSequenceDataset(Dataset):
                 f"profile {profile.value!r} is absent from the dataset"
             ) from error
         self.dataset = dataset
+        if label_weights is not None:
+            if label_weights.shape != dataset.target_mask.shape:
+                raise ValueError("label weights do not match target masks")
+            if np.any(~np.isfinite(label_weights)) or np.any(
+                label_weights < 0.0
+            ):
+                raise ValueError(
+                    "label weights must be finite and non-negative"
+                )
+        self.label_weights = label_weights
+        if control_supervision is not None:
+            expected_shape = dataset.sequence_mask.shape
+            for value in (
+                control_supervision.gimbal_angle_rad,
+                control_supervision.servo_max_rate_rad_s,
+                control_supervision.servo_min_angle_rad,
+                control_supervision.servo_max_angle_rad,
+                control_supervision.rate_feedback_gain_s_inv,
+                control_supervision.position_preview_s,
+                control_supervision.mask,
+            ):
+                if value.shape != expected_shape:
+                    raise ValueError("control supervision shape is invalid")
+            if control_supervision.oracle_actions.shape != (*expected_shape, 2):
+                raise ValueError("oracle action supervision shape is invalid")
+        self.control_supervision = control_supervision
 
     def __len__(self) -> int:
         return self.dataset.episode_count
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
-        return {
+        item = {
             "features": torch.from_numpy(
                 self.dataset.features[index, self.profile_index]
             ).float(),
@@ -142,6 +178,41 @@ class GimbalTorchSequenceDataset(Dataset):
                 self.dataset.target_mask[index]
             ).bool(),
         }
+        if self.label_weights is not None:
+            item["label_weights"] = torch.from_numpy(
+                self.label_weights[index]
+            ).float()
+        if self.control_supervision is not None:
+            supervision = self.control_supervision
+            item.update(
+                {
+                    "oracle_actions": torch.from_numpy(
+                        supervision.oracle_actions[index]
+                    ).float(),
+                    "control_gimbal_angle_rad": torch.from_numpy(
+                        supervision.gimbal_angle_rad[index]
+                    ).float(),
+                    "control_servo_max_rate_rad_s": torch.from_numpy(
+                        supervision.servo_max_rate_rad_s[index]
+                    ).float(),
+                    "control_servo_min_angle_rad": torch.from_numpy(
+                        supervision.servo_min_angle_rad[index]
+                    ).float(),
+                    "control_servo_max_angle_rad": torch.from_numpy(
+                        supervision.servo_max_angle_rad[index]
+                    ).float(),
+                    "control_rate_feedback_gain_s_inv": torch.from_numpy(
+                        supervision.rate_feedback_gain_s_inv[index]
+                    ).float(),
+                    "control_position_preview_s": torch.from_numpy(
+                        supervision.position_preview_s[index]
+                    ).float(),
+                    "control_supervision_mask": torch.from_numpy(
+                        supervision.mask[index]
+                    ).bool(),
+                }
+            )
+        return item
 
 
 def set_gru_seed(seed: int) -> None:
@@ -174,6 +245,9 @@ def _metrics_from_predictions(
     possible_mask: np.ndarray,
     horizons_s: tuple[float, ...],
     loss_config: GRULossConfig | None = None,
+    label_weights: np.ndarray | None = None,
+    control_supervision: ControlActionSupervision | None = None,
+    interval_rate_rad_s: np.ndarray | None = None,
 ) -> GRUEvaluationMetrics:
     loss_config = loss_config or GRULossConfig()
     if mean.shape != targets.shape or std.shape != targets.shape:
@@ -186,6 +260,21 @@ def _metrics_from_predictions(
     possible_count = int(possible_mask.sum())
     valid_count = int(mask.sum())
     availability = valid_count / possible_count if possible_count else 0.0
+    if label_weights is None:
+        weights = np.ones_like(prediction_mask, dtype=np.float64)
+    else:
+        if label_weights.shape != prediction_mask.shape:
+            raise ValueError("label weights shape is invalid")
+        if np.any(~np.isfinite(label_weights)) or np.any(label_weights < 0.0):
+            raise ValueError("label weights must be finite and non-negative")
+        weights = label_weights.astype(np.float64, copy=False)
+    if loss_config.horizon_weights:
+        if len(loss_config.horizon_weights) != targets.shape[-2]:
+            raise ValueError("horizon weights do not match predictions")
+        weights = weights * np.asarray(
+            loss_config.horizon_weights,
+            dtype=np.float64,
+        )[None, None, :]
 
     bearing_error = _angle_residual_numpy(mean[..., 0], targets[..., 0])
     rate_error = mean[..., 1] - targets[..., 1]
@@ -202,14 +291,136 @@ def _metrics_from_predictions(
     rate_mse = _masked_metric(rate_error**2, mask, np.mean)
     bearing_nll = _masked_metric(bearing_nll_values, mask, np.mean)
     rate_nll = _masked_metric(rate_nll_values, mask, np.mean)
+    weighted_mask = weights * mask
+    weight_sum = float(np.sum(weighted_mask))
+
+    def weighted_mean(values: np.ndarray) -> float:
+        if weight_sum <= 0.0:
+            return 0.0
+        return float(np.sum(values * weighted_mask) / weight_sum)
+
+    weighted_bearing_nll = weighted_mean(bearing_nll_values)
+    weighted_rate_nll = weighted_mean(rate_nll_values)
+    weighted_bearing_mse = weighted_mean(bearing_error**2)
+    weighted_rate_mse = weighted_mean(rate_error**2)
+    dynamic_consistency_mse = 0.0
+    if len(horizons_s) > 1:
+        intervals = np.diff(np.asarray(horizons_s, dtype=np.float64))
+        bearing_step = _angle_residual_numpy(
+            mean[..., 1:, 0],
+            mean[..., :-1, 0],
+        )
+        if interval_rate_rad_s is None:
+            integrated_rate = 0.5 * (
+                mean[..., 1:, 1] + mean[..., :-1, 1]
+            ) * intervals
+        else:
+            if interval_rate_rad_s.shape != mean.shape[:-2] + (
+                mean.shape[-2] - 1,
+            ):
+                raise ValueError("interval rate prediction shape is invalid")
+            integrated_rate = (
+                mean[..., :-1, 1]
+                + 4.0 * interval_rate_rad_s
+                + mean[..., 1:, 1]
+            ) * intervals / 6.0
+        consistency_error = _angle_residual_numpy(
+            bearing_step,
+            integrated_rate,
+        )
+        consistency_mask = mask[..., 1:] & mask[..., :-1]
+        pair_weights = 0.5 * (weights[..., 1:] + weights[..., :-1])
+        selected_pair_weights = pair_weights * consistency_mask
+        pair_weight_sum = float(np.sum(selected_pair_weights))
+        if pair_weight_sum > 0.0:
+            dynamic_consistency_mse = float(
+                np.sum(consistency_error**2 * selected_pair_weights)
+                / pair_weight_sum
+            )
+    rate_action_mse = None
+    position_action_mse = None
+    if (
+        loss_config.rate_action_weight > 0.0
+        or loss_config.position_action_weight > 0.0
+    ):
+        if control_supervision is None:
+            raise ValueError(
+                "control supervision is required for action-aware evaluation"
+            )
+        expected_time_shape = targets.shape[:2]
+        if control_supervision.oracle_actions.shape != (*expected_time_shape, 2):
+            raise ValueError("oracle action supervision shape is invalid")
+        predicted_bearing = mean[..., 0, 0]
+        predicted_rate = mean[..., 0, 1]
+        bearing_to_gimbal = _angle_residual_numpy(
+            predicted_bearing,
+            control_supervision.gimbal_angle_rad,
+        )
+        predicted_rate_action = np.clip(
+            (
+                predicted_rate
+                + control_supervision.rate_feedback_gain_s_inv
+                * bearing_to_gimbal
+            )
+            / control_supervision.servo_max_rate_rad_s,
+            -1.0,
+            1.0,
+        )
+        predicted_position = _angle_residual_numpy(
+            predicted_bearing
+            + control_supervision.position_preview_s * predicted_rate,
+            np.zeros_like(predicted_bearing),
+        )
+        predicted_position = np.clip(
+            predicted_position,
+            control_supervision.servo_min_angle_rad,
+            control_supervision.servo_max_angle_rad,
+        )
+        predicted_position_action = np.where(
+            predicted_position >= 0.0,
+            predicted_position / control_supervision.servo_max_angle_rad,
+            predicted_position / (-control_supervision.servo_min_angle_rad),
+        )
+        action_mask = mask[..., 0] & control_supervision.mask
+        action_weights = weights[..., 0] * action_mask
+        action_weight_sum = float(np.sum(action_weights))
+        if action_weight_sum > 0.0:
+            rate_action_mse = float(
+                np.sum(
+                    (
+                        predicted_rate_action
+                        - control_supervision.oracle_actions[..., 0]
+                    )
+                    ** 2
+                    * action_weights
+                )
+                / action_weight_sum
+            )
+            position_action_mse = float(
+                np.sum(
+                    (
+                        predicted_position_action
+                        - control_supervision.oracle_actions[..., 1]
+                    )
+                    ** 2
+                    * action_weights
+                )
+                / action_weight_sum
+            )
     if bearing_nll is None or rate_nll is None:
         loss = None
     else:
         assert bearing_mse is not None and rate_mse is not None
         loss = (
-            loss_config.bearing_weight * bearing_nll
-            + loss_config.rate_weight * rate_nll
-            + loss_config.mean_error_weight * (bearing_mse + rate_mse)
+            loss_config.bearing_weight * weighted_bearing_nll
+            + loss_config.rate_weight * weighted_rate_nll
+            + loss_config.mean_error_weight
+            * (weighted_bearing_mse + weighted_rate_mse)
+            + loss_config.dynamic_consistency_weight
+            * dynamic_consistency_mse
+            + loss_config.rate_action_weight * (rate_action_mse or 0.0)
+            + loss_config.position_action_weight
+            * (position_action_mse or 0.0)
         )
 
     def coverage(error: np.ndarray, sigma: np.ndarray, multiple: float):
@@ -293,6 +504,21 @@ def _metrics_from_predictions(
         ),
         rate_one_sigma_coverage=coverage(rate_error, rate_std, 1.0),
         rate_two_sigma_coverage=coverage(rate_error, rate_std, 2.0),
+        dynamic_consistency_rmse_deg=(
+            math.degrees(math.sqrt(dynamic_consistency_mse))
+            if valid_count
+            else None
+        ),
+        rate_action_rmse_normalized=(
+            math.sqrt(rate_action_mse)
+            if rate_action_mse is not None
+            else None
+        ),
+        position_action_rmse_normalized=(
+            math.sqrt(position_action_mse)
+            if position_action_mse is not None
+            else None
+        ),
         per_horizon=tuple(per_horizon),
     )
 
@@ -307,26 +533,43 @@ def evaluate_gru(
     device: str | torch.device = "cpu",
     loss_config: GRULossConfig | None = None,
     evaluation_mask: np.ndarray | None = None,
+    label_weights: np.ndarray | None = None,
 ) -> GRUEvaluationMetrics:
+    loss_config = loss_config or GRULossConfig()
+    action_aware = (
+        loss_config.rate_action_weight > 0.0
+        or loss_config.position_action_weight > 0.0
+    )
+    control_supervision = (
+        compute_control_action_supervision(dataset, profile=profile)
+        if action_aware
+        else None
+    )
     model.to(device)
     model.eval()
     loader = DataLoader(
-        GimbalTorchSequenceDataset(dataset, profile),
+        GimbalTorchSequenceDataset(dataset, profile, label_weights),
         batch_size=batch_size,
         shuffle=False,
     )
     means, stds, targets, prediction_masks, possible_masks = [], [], [], [], []
+    interval_rates = []
+    collected_weights = []
     for batch in loader:
         features = batch["features"].to(device)
         output = model(features)
         means.append(output.mean.cpu().numpy())
         stds.append(output.std.cpu().numpy())
+        if output.interval_rate_rad_s is not None:
+            interval_rates.append(output.interval_rate_rad_s.cpu().numpy())
         targets.append(batch["targets"].numpy())
         sequence_mask = batch["sequence_mask"].numpy()
         target_mask = batch["target_mask"].numpy()
         possible = target_mask & sequence_mask[..., None]
         prediction_masks.append(possible.copy())
         possible_masks.append(possible)
+        if "label_weights" in batch:
+            collected_weights.append(batch["label_weights"].numpy())
     prediction_mask = np.concatenate(prediction_masks)
     possible_mask = np.concatenate(possible_masks)
     if evaluation_mask is not None:
@@ -341,6 +584,37 @@ def evaluate_gru(
         possible_mask=possible_mask,
         horizons_s=dataset.manifest.prediction_horizons_s,
         loss_config=loss_config,
+        label_weights=(
+            np.concatenate(collected_weights) if collected_weights else None
+        ),
+        control_supervision=control_supervision,
+        interval_rate_rad_s=(
+            np.concatenate(interval_rates) if interval_rates else None
+        ),
+    )
+
+
+def _control_context_from_batch(
+    batch: dict[str, torch.Tensor],
+    device: torch.device,
+) -> GRUControlLossContext:
+    return GRUControlLossContext(
+        oracle_actions=batch["oracle_actions"].to(device),
+        gimbal_angle_rad=batch["control_gimbal_angle_rad"].to(device),
+        servo_max_rate_rad_s=batch[
+            "control_servo_max_rate_rad_s"
+        ].to(device),
+        servo_min_angle_rad=batch[
+            "control_servo_min_angle_rad"
+        ].to(device),
+        servo_max_angle_rad=batch[
+            "control_servo_max_angle_rad"
+        ].to(device),
+        rate_feedback_gain_s_inv=batch[
+            "control_rate_feedback_gain_s_inv"
+        ].to(device),
+        position_preview_s=batch["control_position_preview_s"].to(device),
+        mask=batch["control_supervision_mask"].to(device),
     )
 
 
@@ -372,6 +646,8 @@ def train_gru(
     model_config: GRUTargetStateModelConfig | None = None,
     training_config: GRUTrainingConfig | None = None,
     loss_config: GRULossConfig | None = None,
+    training_label_weights: np.ndarray | None = None,
+    validation_label_weights: np.ndarray | None = None,
 ) -> GRUTrainingResult:
     training_config = training_config or GRUTrainingConfig()
     loss_config = loss_config or GRULossConfig()
@@ -390,6 +666,15 @@ def train_gru(
 
     set_gru_seed(training_config.seed)
     device = torch.device(training_config.device)
+    action_aware = (
+        loss_config.rate_action_weight > 0.0
+        or loss_config.position_action_weight > 0.0
+    )
+    training_control_supervision = (
+        compute_control_action_supervision(train, profile=profile)
+        if action_aware
+        else None
+    )
     model = CausalTargetStateGRU(model_config).to(device)
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -398,7 +683,12 @@ def train_gru(
     )
     generator = torch.Generator().manual_seed(training_config.seed)
     loader = DataLoader(
-        GimbalTorchSequenceDataset(train, profile),
+        GimbalTorchSequenceDataset(
+            train,
+            profile,
+            training_label_weights,
+            training_control_supervision,
+        ),
         batch_size=training_config.batch_size,
         shuffle=True,
         generator=generator,
@@ -410,6 +700,7 @@ def train_gru(
         batch_size=training_config.batch_size,
         device=device,
         loss_config=loss_config,
+        label_weights=validation_label_weights,
     )
     best_loss = math.inf
     best_epoch = 0
@@ -432,6 +723,19 @@ def train_gru(
                 target_mask,
                 sequence_mask,
                 loss_config,
+                label_weights=(
+                    batch["label_weights"].to(device)
+                    if "label_weights" in batch
+                    else None
+                ),
+                prediction_horizons_s=(
+                    train.manifest.prediction_horizons_s
+                ),
+                control_context=(
+                    _control_context_from_batch(batch, device)
+                    if action_aware
+                    else None
+                ),
             )
             optimizer.zero_grad(set_to_none=True)
             loss.total.backward()
@@ -452,6 +756,7 @@ def train_gru(
             batch_size=training_config.batch_size,
             device=device,
             loss_config=loss_config,
+            label_weights=validation_label_weights,
         )
         if validation_metrics.loss is None:
             raise RuntimeError("validation set contains no valid targets")
@@ -481,6 +786,7 @@ def train_gru(
         batch_size=training_config.batch_size,
         device=device,
         loss_config=loss_config,
+        label_weights=validation_label_weights,
     )
     return GRUTrainingResult(
         model=model,

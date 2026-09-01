@@ -45,6 +45,7 @@ class GRUTargetStateModelConfig:
     embedding_dim: int = 64
     num_layers: int = 1
     dropout: float = 0.0
+    mean_parameterization: str = "independent"
     minimum_bearing_std_rad: float = math.radians(0.05)
     minimum_rate_std_rad_s: float = math.radians(0.50)
 
@@ -69,6 +70,25 @@ class GRUTargetStateModelConfig:
             raise ValueError("num_layers must be positive")
         if not 0.0 <= self.dropout < 1.0:
             raise ValueError("dropout must be in [0, 1)")
+        if self.mean_parameterization not in {
+            "independent",
+            "integrated_rate",
+            "integrated_midpoint",
+        }:
+            raise ValueError("unsupported mean parameterization")
+        if self.mean_parameterization in {
+            "integrated_rate",
+            "integrated_midpoint",
+        } and any(
+            right <= left
+            for left, right in zip(
+                self.prediction_horizons_s,
+                self.prediction_horizons_s[1:],
+            )
+        ):
+            raise ValueError(
+                "integrated-rate horizons must be strictly increasing"
+            )
         if self.minimum_bearing_std_rad <= 0.0:
             raise ValueError("minimum bearing standard deviation must be positive")
         if self.minimum_rate_std_rad_s <= 0.0:
@@ -80,6 +100,7 @@ class GRUTargetStateOutput:
     mean: torch.Tensor
     std: torch.Tensor
     hidden: torch.Tensor
+    interval_rate_rad_s: torch.Tensor | None = None
 
 
 class CausalTargetStateGRU(nn.Module):
@@ -103,12 +124,19 @@ class CausalTargetStateGRU(nn.Module):
             batch_first=True,
             bidirectional=False,
         )
+        horizon_count = len(config.prediction_horizons_s)
+        if config.mean_parameterization == "independent":
+            head_output_dim = horizon_count * 4
+        elif config.mean_parameterization == "integrated_rate":
+            head_output_dim = 1 + 3 * horizon_count
+        else:
+            head_output_dim = 4 * horizon_count
         self.head = nn.Sequential(
             nn.Linear(config.hidden_dim, config.hidden_dim),
             nn.SiLU(),
             nn.Linear(
                 config.hidden_dim,
-                len(config.prediction_horizons_s) * 4,
+                head_output_dim,
             ),
         )
 
@@ -127,22 +155,78 @@ class CausalTargetStateGRU(nn.Module):
             )
         encoded = self.encoder(features)
         recurrent, hidden = self.recurrent(encoded, hidden)
-        raw = self.head(recurrent).view(
-            *recurrent.shape[:2], self.horizon_count, 4
-        )
-        bearing = math.pi * torch.tanh(raw[..., 0])
-        rate = raw[..., 1]
+        raw = self.head(recurrent)
+        interval_rate = None
+        if self.config.mean_parameterization == "independent":
+            raw = raw.view(
+                *recurrent.shape[:2], self.horizon_count, 4
+            )
+            bearing = math.pi * torch.tanh(raw[..., 0])
+            rate = raw[..., 1]
+            bearing_std_raw = raw[..., 2]
+            rate_std_raw = raw[..., 3]
+        else:
+            horizon_count = self.horizon_count
+            current_bearing = math.pi * torch.tanh(raw[..., 0])
+            rate = raw[..., 1 : 1 + horizon_count]
+            offset = 1 + horizon_count
+            if self.config.mean_parameterization == "integrated_midpoint":
+                interval_rate = raw[..., offset : offset + horizon_count - 1]
+                offset += horizon_count - 1
+            bearing_std_raw = raw[
+                ..., offset : offset + horizon_count
+            ]
+            rate_std_raw = raw[..., offset + horizon_count :]
+            if horizon_count == 1:
+                bearing = current_bearing.unsqueeze(-1)
+            else:
+                intervals = raw.new_tensor(
+                    [
+                        right - left
+                        for left, right in zip(
+                            self.config.prediction_horizons_s,
+                            self.config.prediction_horizons_s[1:],
+                        )
+                    ]
+                )
+                if interval_rate is None:
+                    increments = 0.5 * (
+                        rate[..., 1:] + rate[..., :-1]
+                    ) * intervals
+                else:
+                    increments = (
+                        rate[..., :-1]
+                        + 4.0 * interval_rate
+                        + rate[..., 1:]
+                    ) * intervals / 6.0
+                future_bearing = current_bearing.unsqueeze(-1) + torch.cumsum(
+                    increments,
+                    dim=-1,
+                )
+                future_bearing = torch.atan2(
+                    torch.sin(future_bearing),
+                    torch.cos(future_bearing),
+                )
+                bearing = torch.cat(
+                    (current_bearing.unsqueeze(-1), future_bearing),
+                    dim=-1,
+                )
         mean = torch.stack((bearing, rate), dim=-1)
         bearing_std = (
-            F.softplus(raw[..., 2])
+            F.softplus(bearing_std_raw)
             + self.config.minimum_bearing_std_rad
         )
         rate_std = (
-            F.softplus(raw[..., 3])
+            F.softplus(rate_std_raw)
             + self.config.minimum_rate_std_rad_s
         )
         std = torch.stack((bearing_std, rate_std), dim=-1)
-        return GRUTargetStateOutput(mean=mean, std=std, hidden=hidden)
+        return GRUTargetStateOutput(
+            mean=mean,
+            std=std,
+            hidden=hidden,
+            interval_rate_rad_s=interval_rate,
+        )
 
     def forward_step(
         self,
@@ -156,6 +240,11 @@ class CausalTargetStateGRU(nn.Module):
             mean=output.mean[:, 0],
             std=output.std[:, 0],
             hidden=output.hidden,
+            interval_rate_rad_s=(
+                output.interval_rate_rad_s[:, 0]
+                if output.interval_rate_rad_s is not None
+                else None
+            ),
         )
 
 
@@ -164,12 +253,28 @@ class GRULossConfig:
     bearing_weight: float = 1.0
     rate_weight: float = 1.0
     mean_error_weight: float = 0.05
+    dynamic_consistency_weight: float = 0.0
+    rate_action_weight: float = 0.0
+    position_action_weight: float = 0.0
+    horizon_weights: tuple[float, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.bearing_weight < 0.0 or self.rate_weight < 0.0:
-            raise ValueError("loss weights must be non-negative")
-        if self.mean_error_weight < 0.0:
-            raise ValueError("mean error weight must be non-negative")
+        for name in (
+            "bearing_weight",
+            "rate_weight",
+            "mean_error_weight",
+            "dynamic_consistency_weight",
+            "rate_action_weight",
+            "position_action_weight",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        if any(
+            not math.isfinite(weight) or weight <= 0.0
+            for weight in self.horizon_weights
+        ):
+            raise ValueError("horizon weights must be finite and positive")
 
 
 @dataclass
@@ -179,6 +284,23 @@ class GRULoss:
     rate_nll: torch.Tensor
     bearing_rmse_rad: torch.Tensor
     rate_rmse_rad_s: torch.Tensor
+    dynamic_consistency_rmse_rad: torch.Tensor
+    rate_action_rmse_normalized: torch.Tensor
+    position_action_rmse_normalized: torch.Tensor
+
+
+@dataclass(frozen=True)
+class GRUControlLossContext:
+    """Batch-local privileged context used only by the training loss."""
+
+    oracle_actions: torch.Tensor
+    gimbal_angle_rad: torch.Tensor
+    servo_max_rate_rad_s: torch.Tensor
+    servo_min_angle_rad: torch.Tensor
+    servo_max_angle_rad: torch.Tensor
+    rate_feedback_gain_s_inv: torch.Tensor
+    position_preview_s: torch.Tensor
+    mask: torch.Tensor
 
 
 def angular_residual_rad(
@@ -188,17 +310,16 @@ def angular_residual_rad(
     return torch.atan2(torch.sin(difference), torch.cos(difference))
 
 
-def _masked_mean(value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    mask = mask.to(dtype=value.dtype)
-    return (value * mask).sum() / mask.sum().clamp_min(1.0)
-
-
 def target_state_nll(
     output: GRUTargetStateOutput,
     targets: torch.Tensor,
     target_mask: torch.Tensor,
     sequence_mask: torch.Tensor,
     config: GRULossConfig | None = None,
+    *,
+    label_weights: torch.Tensor | None = None,
+    prediction_horizons_s: tuple[float, ...] | None = None,
+    control_context: GRUControlLossContext | None = None,
 ) -> GRULoss:
     """Masked heteroscedastic Gaussian loss with circular bearing residuals."""
     config = config or GRULossConfig()
@@ -210,6 +331,30 @@ def target_state_nll(
     if sequence_mask.shape != targets.shape[:2]:
         raise ValueError("sequence_mask shape is invalid")
     mask = target_mask.bool() & sequence_mask.bool().unsqueeze(-1)
+    if label_weights is None:
+        weights = torch.ones_like(target_mask, dtype=targets.dtype)
+    else:
+        if label_weights.shape != target_mask.shape:
+            raise ValueError("label_weights shape is invalid")
+        if torch.any(~torch.isfinite(label_weights)) or torch.any(
+            label_weights < 0.0
+        ):
+            raise ValueError("label_weights must be finite and non-negative")
+        weights = label_weights.to(
+            device=targets.device,
+            dtype=targets.dtype,
+        )
+    if config.horizon_weights:
+        if len(config.horizon_weights) != targets.shape[-2]:
+            raise ValueError("horizon weights do not match model outputs")
+        horizon_weights = targets.new_tensor(config.horizon_weights)
+        weights = weights * horizon_weights.view(1, 1, -1)
+
+    def weighted_mean(value: torch.Tensor, selected: torch.Tensor) -> torch.Tensor:
+        selected_weights = weights * selected.to(dtype=weights.dtype)
+        return (value * selected_weights).sum() / selected_weights.sum().clamp_min(
+            1.0
+        )
 
     bearing_error = angular_residual_rad(
         output.mean[..., 0], targets[..., 0]
@@ -224,15 +369,154 @@ def target_state_nll(
     rate_nll_values = (
         torch.log(rate_std) + 0.5 * (rate_error / rate_std).square()
     )
-    bearing_nll = _masked_mean(bearing_nll_values, mask)
-    rate_nll = _masked_mean(rate_nll_values, mask)
-    bearing_mse = _masked_mean(bearing_error.square(), mask)
-    rate_mse = _masked_mean(rate_error.square(), mask)
+    bearing_nll = weighted_mean(bearing_nll_values, mask)
+    rate_nll = weighted_mean(rate_nll_values, mask)
+    bearing_mse = weighted_mean(bearing_error.square(), mask)
+    rate_mse = weighted_mean(rate_error.square(), mask)
+    consistency_mse = targets.new_zeros(())
+    if config.dynamic_consistency_weight > 0.0:
+        if prediction_horizons_s is None:
+            raise ValueError(
+                "prediction horizons are required for dynamic consistency"
+            )
+        if len(prediction_horizons_s) != targets.shape[-2]:
+            raise ValueError("prediction horizons do not match model outputs")
+        if any(
+            right <= left
+            for left, right in zip(
+                prediction_horizons_s,
+                prediction_horizons_s[1:],
+            )
+        ):
+            raise ValueError("prediction horizons must be strictly increasing")
+        intervals = targets.new_tensor(
+            [
+                right - left
+                for left, right in zip(
+                    prediction_horizons_s,
+                    prediction_horizons_s[1:],
+                )
+            ]
+        )
+        bearing_step = angular_residual_rad(
+            output.mean[..., 1:, 0],
+            output.mean[..., :-1, 0],
+        )
+        if output.interval_rate_rad_s is None:
+            integrated_rate = 0.5 * (
+                output.mean[..., 1:, 1] + output.mean[..., :-1, 1]
+            ) * intervals
+        else:
+            if output.interval_rate_rad_s.shape != targets.shape[:-2] + (
+                targets.shape[-2] - 1,
+            ):
+                raise ValueError("interval rate shape is invalid")
+            integrated_rate = (
+                output.mean[..., :-1, 1]
+                + 4.0 * output.interval_rate_rad_s
+                + output.mean[..., 1:, 1]
+            ) * intervals / 6.0
+        consistency_error = angular_residual_rad(
+            bearing_step,
+            integrated_rate,
+        )
+        consistency_mask = mask[..., 1:] & mask[..., :-1]
+        pair_weights = 0.5 * (weights[..., 1:] + weights[..., :-1])
+        selected_weights = pair_weights * consistency_mask.to(
+            dtype=pair_weights.dtype
+        )
+        consistency_mse = (
+            consistency_error.square() * selected_weights
+        ).sum() / selected_weights.sum().clamp_min(1.0)
+    rate_action_mse = targets.new_zeros(())
+    position_action_mse = targets.new_zeros(())
+    if config.rate_action_weight > 0.0 or config.position_action_weight > 0.0:
+        if control_context is None:
+            raise ValueError(
+                "control context is required for action-aware supervision"
+            )
+        expected_time_shape = targets.shape[:2]
+        if control_context.oracle_actions.shape != (*expected_time_shape, 2):
+            raise ValueError("oracle action context shape is invalid")
+        for value in (
+            control_context.gimbal_angle_rad,
+            control_context.servo_max_rate_rad_s,
+            control_context.servo_min_angle_rad,
+            control_context.servo_max_angle_rad,
+            control_context.rate_feedback_gain_s_inv,
+            control_context.position_preview_s,
+            control_context.mask,
+        ):
+            if value.shape != expected_time_shape:
+                raise ValueError("control context time shape is invalid")
+        if torch.any(control_context.servo_max_rate_rad_s <= 0.0):
+            raise ValueError("servo maximum rate must be positive")
+        if torch.any(control_context.servo_min_angle_rad >= 0.0) or torch.any(
+            control_context.servo_max_angle_rad <= 0.0
+        ):
+            raise ValueError("servo position limits must straddle zero")
+
+        predicted_bearing = output.mean[..., 0, 0]
+        predicted_rate = output.mean[..., 0, 1]
+        bearing_error = angular_residual_rad(
+            predicted_bearing,
+            control_context.gimbal_angle_rad,
+        )
+        predicted_rate_action = torch.clamp(
+            (
+                predicted_rate
+                + control_context.rate_feedback_gain_s_inv * bearing_error
+            )
+            / control_context.servo_max_rate_rad_s,
+            -1.0,
+            1.0,
+        )
+        predicted_position = angular_residual_rad(
+            predicted_bearing
+            + control_context.position_preview_s * predicted_rate,
+            torch.zeros_like(predicted_bearing),
+        )
+        predicted_position = torch.maximum(
+            predicted_position,
+            control_context.servo_min_angle_rad,
+        )
+        predicted_position = torch.minimum(
+            predicted_position,
+            control_context.servo_max_angle_rad,
+        )
+        predicted_position_action = torch.where(
+            predicted_position >= 0.0,
+            predicted_position / control_context.servo_max_angle_rad,
+            predicted_position / (-control_context.servo_min_angle_rad),
+        )
+        action_mask = (
+            mask[..., 0]
+            & control_context.mask.bool()
+        )
+        action_weights = weights[..., 0] * action_mask.to(weights.dtype)
+        action_weight_sum = action_weights.sum().clamp_min(1.0)
+        rate_action_mse = (
+            (
+                predicted_rate_action
+                - control_context.oracle_actions[..., 0]
+            ).square()
+            * action_weights
+        ).sum() / action_weight_sum
+        position_action_mse = (
+            (
+                predicted_position_action
+                - control_context.oracle_actions[..., 1]
+            ).square()
+            * action_weights
+        ).sum() / action_weight_sum
     mean_error = bearing_mse + rate_mse
     total = (
         config.bearing_weight * bearing_nll
         + config.rate_weight * rate_nll
         + config.mean_error_weight * mean_error
+        + config.dynamic_consistency_weight * consistency_mse
+        + config.rate_action_weight * rate_action_mse
+        + config.position_action_weight * position_action_mse
     )
     return GRULoss(
         total=total,
@@ -240,6 +524,9 @@ def target_state_nll(
         rate_nll=rate_nll,
         bearing_rmse_rad=torch.sqrt(bearing_mse),
         rate_rmse_rad_s=torch.sqrt(rate_mse),
+        dynamic_consistency_rmse_rad=torch.sqrt(consistency_mse),
+        rate_action_rmse_normalized=torch.sqrt(rate_action_mse),
+        position_action_rmse_normalized=torch.sqrt(position_action_mse),
     )
 
 
