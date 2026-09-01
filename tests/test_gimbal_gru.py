@@ -1,5 +1,5 @@
 import math
-from dataclasses import replace
+from dataclasses import fields, replace
 
 import numpy as np
 import pytest
@@ -45,6 +45,7 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
     adaptive_position_surrogate_actions,
     angular_residual_rad,
     differentiable_position_servo_rollout,
+    differentiable_position_servo_sequence,
     gru_parameter_count,
     load_gru_checkpoint,
     load_gru_position_residual_checkpoint,
@@ -62,6 +63,14 @@ from autonomous_observation_lab.gimbal_servoing.gru_training import (
 )
 from autonomous_observation_lab.gimbal_servoing.gru_profiles import (
     run_gru_profile_comparison,
+)
+from autonomous_observation_lab.gimbal_servoing.multi_command_policy import (
+    CausalRecurrentPositionResidualPolicy,
+    CounterfactualWindowBatch,
+    RecurrentPositionResidualPolicyConfig,
+    counterfactual_capture_source_indices,
+    recurrent_policy_input_dim,
+    rollout_counterfactual_window,
 )
 
 
@@ -500,6 +509,236 @@ def test_differentiable_position_plant_matches_multi_step_simulator():
     assert command.grad is not None
     assert torch.isfinite(command.grad).all()
     assert torch.abs(command.grad).item() > 0.0
+
+
+def test_differentiable_position_sequence_preserves_command_queue():
+    base = nominal_scenario()
+    servo = replace(
+        base.config.servo,
+        command_latency_s=0.0127,
+        rate_time_constant_s=0.023,
+        position_tolerance_rad=0.0006,
+        position_quantization_rad=0.0011,
+    )
+    commands = (0.15, -0.20, 0.35, 0.05)
+    config = replace(
+        base.config,
+        servo=servo,
+        command_mode=GimbalCommandMode.POSITION,
+        timing=replace(
+            base.config.timing,
+            control_rate_hz=20.0,
+            integration_rate_hz=1000.0,
+            episode_duration_s=0.20,
+        ),
+        camera=replace(base.config.camera, frame_rate_hz=27.0),
+        scenario=replace(
+            base.config.scenario,
+            initial_gimbal_angle_rad=0.12,
+            initial_gimbal_rate_rad_s=-0.25,
+        ),
+    )
+    env = GimbalServoEnv(config)
+    env.reset(seed=41)
+    expected_angles = []
+    expected_rates = []
+    expected_applied = []
+    for command_value in commands:
+        result = env.step(GimbalAction.position(command_value))
+        expected_angles.append(result.diagnostics.gimbal_angle_rad)
+        expected_rates.append(result.diagnostics.gimbal_rate_rad_s)
+        expected_applied.append(
+            result.diagnostics.applied_position_command_rad
+        )
+
+    shape = (1, len(commands))
+
+    def values(number: float) -> torch.Tensor:
+        return torch.full(shape, number, dtype=torch.float64)
+
+    context = GRUAdaptivePositionLossContext(
+        teacher_action_normalized=values(0.0),
+        mask=torch.ones(shape, dtype=torch.bool),
+        gimbal_angle_rad=values(config.scenario.initial_gimbal_angle_rad),
+        gimbal_rate_rad_s=values(config.scenario.initial_gimbal_rate_rad_s),
+        control_dt_s=values(config.timing.control_period_s),
+        selected_axis_fov_rad=values(config.camera.selected_axis_fov_rad),
+        servo_min_angle_rad=values(servo.min_angle_rad),
+        servo_max_angle_rad=values(servo.max_angle_rad),
+        servo_max_rate_rad_s=values(servo.max_rate_rad_s),
+        servo_max_acceleration_rad_s2=values(
+            servo.max_acceleration_rad_s2
+        ),
+        servo_position_gain_s_inv=values(servo.position_gain_s_inv),
+        servo_position_tolerance_rad=values(
+            servo.position_tolerance_rad
+        ),
+        servo_position_quantization_rad=values(
+            servo.position_quantization_rad
+        ),
+        servo_command_polarity=values(float(servo.command_polarity)),
+        servo_command_latency_s=values(servo.command_latency_s),
+        servo_rate_time_constant_s=values(servo.rate_time_constant_s),
+        control_period_s=values(config.timing.control_period_s),
+        integration_period_s=values(config.timing.integration_period_s),
+        camera_frame_period_s=values(config.camera.frame_period_s),
+    )
+    command = torch.tensor([commands], dtype=torch.float64, requires_grad=True)
+    rollout = differentiable_position_servo_sequence(
+        command,
+        context,
+        torch.ones(shape, dtype=torch.bool),
+    )
+
+    torch.testing.assert_close(
+        rollout.angle_rad,
+        torch.tensor([expected_angles], dtype=torch.float64),
+        atol=2e-12,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        rollout.rate_rad_s,
+        torch.tensor([expected_rates], dtype=torch.float64),
+        atol=2e-12,
+        rtol=0.0,
+    )
+    torch.testing.assert_close(
+        rollout.applied_position_rad,
+        torch.tensor([expected_applied], dtype=torch.float64),
+        atol=2e-12,
+        rtol=0.0,
+    )
+    rollout.angle_rad[:, -1].sum().backward()
+    assert command.grad is not None
+    assert torch.isfinite(command.grad).all()
+    assert torch.count_nonzero(command.grad).item() >= 2
+
+
+def test_counterfactual_window_is_causal_and_updates_servo_features():
+    dataset = learning_dataset("train", (171, 172))
+    adapter = default_visibility_risk_candidates()[2].controller
+    supervision = compute_adaptive_position_supervision(
+        dataset,
+        adapter=adapter,
+        profile=ObservationProfile.SERVO_AWARE,
+    )
+    profile_index = dataset.manifest.observation_profiles.index(
+        ObservationProfile.SERVO_AWARE.value
+    )
+    start = 1
+    step_count = 3
+    end = start + step_count
+    logged = torch.from_numpy(
+        dataset.features[:, profile_index, start:end]
+    ).float()
+    warmup = torch.from_numpy(
+        dataset.features[:, profile_index, :start]
+    ).float()
+    target_bearing = torch.from_numpy(
+        dataset.targets[:, start : end + 1, 0, 0]
+    ).float()
+    time_s = torch.from_numpy(dataset.time_s[:, start : end + 1]).float()
+    capture_source = counterfactual_capture_source_indices(time_s, logged)
+    context = GRUAdaptivePositionLossContext(
+        **{
+            field.name: (
+                torch.from_numpy(
+                    getattr(supervision, field.name)[:, start:end]
+                ).bool()
+                if field.name == "mask"
+                else torch.from_numpy(
+                    getattr(supervision, field.name)[:, start:end]
+                ).float()
+            )
+            for field in fields(GRUAdaptivePositionLossContext)
+        }
+    )
+    window = CounterfactualWindowBatch(
+        logged_features=logged,
+        warmup_features=warmup,
+        target_bearing_rad=target_bearing,
+        time_s=time_s,
+        capture_source_index=capture_source,
+        context=context,
+        sequence_mask=torch.ones(
+            dataset.episode_count,
+            step_count,
+            dtype=torch.bool,
+        ),
+    )
+    model = small_model().eval()
+    policy = CausalRecurrentPositionResidualPolicy(
+        RecurrentPositionResidualPolicyConfig(
+            input_dim=recurrent_policy_input_dim(model.horizon_count),
+            hidden_dim=8,
+            embedding_dim=8,
+        )
+    )
+    rollout = rollout_counterfactual_window(
+        model,
+        policy,
+        window,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+    )
+
+    torch.testing.assert_close(
+        rollout.policy_residual_normalized,
+        torch.zeros_like(rollout.policy_residual_normalized),
+    )
+    angle_index = FEATURE_NAMES.index("gimbal_angle_rad")
+    torch.testing.assert_close(
+        rollout.synthetic_features[:, 1:, angle_index],
+        rollout.gimbal_angle_rad[:, :-1],
+    )
+    assert torch.all(torch.isfinite(rollout.tracking_error_normalized))
+
+    changed_logged = logged.clone()
+    changed_logged[:, -1] = torch.randn_like(changed_logged[:, -1]) * 50.0
+    changed = rollout_counterfactual_window(
+        model,
+        policy,
+        replace(window, logged_features=changed_logged),
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+    )
+    torch.testing.assert_close(
+        rollout.command_normalized[:, :-1],
+        changed.command_normalized[:, :-1],
+    )
+    rollout.policy_residual_normalized.sum().backward()
+    assert any(
+        parameter.grad is not None and torch.any(parameter.grad != 0.0)
+        for parameter in policy.parameters()
+    )
+
+    final = policy.head[-1]
+    assert isinstance(final, torch.nn.Linear)
+    with torch.no_grad():
+        final.bias.fill_(0.25)
+    direct = rollout_counterfactual_window(
+        model,
+        policy,
+        window,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        residual_application="command_normalized",
+    )
+    position_index = FEATURE_NAMES.index("previous_position_command_rad")
+    minimum_angle = context.servo_min_angle_rad[:, 0]
+    maximum_angle = context.servo_max_angle_rad[:, 0]
+    issued = direct.command_normalized[:, 0] * torch.where(
+        direct.command_normalized[:, 0] >= 0.0,
+        maximum_angle,
+        -minimum_angle,
+    )
+    torch.testing.assert_close(
+        direct.synthetic_features[:, 1, position_index],
+        issued,
+    )
+    assert torch.any(
+        direct.command_normalized[:, 0] != rollout.command_normalized[:, 0]
+    )
 
 
 def test_control_aware_loss_penalizes_inconsistent_prediction_heads():

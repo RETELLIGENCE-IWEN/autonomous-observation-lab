@@ -82,6 +82,10 @@ from autonomous_observation_lab.gimbal_servoing.counterfactual_residual_policy i
     CounterfactualResidualPolicyConfig,
     evaluate_counterfactual_residual_policy,
 )
+from autonomous_observation_lab.gimbal_servoing.multi_command_experiment import (
+    MultiCommandExperimentConfig,
+    evaluate_multi_command_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -686,6 +690,39 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
             "standard_bearing_rmse_deg"
         ]
     )
+
+    multi_command = evaluate_multi_command_experiment(
+        train_path=train_path,
+        validation_path=validation_path,
+        base_checkpoint=base_checkpoint,
+        checkpoint_directory=tmp_path / "multi_command_outputs",
+        config=MultiCommandExperimentConfig(
+            epochs=1,
+            batches_per_epoch=1,
+            batch_size=1,
+            window_steps=2,
+            earliest_training_start_index=0,
+            validation_start_indices=(0,),
+            exact_epoch_candidate_count=1,
+            training_integration_period_s=0.01,
+            minimum_training_episodes=1,
+            minimum_validation_episodes=1,
+            residual_policy_hidden_dim=8,
+            residual_policy_embedding_dim=8,
+            residual_application="command_normalized",
+            teacher_action_weight=1.0,
+            criticality=ControlCriticalityConfig(
+                critical_weight_threshold=1.01
+            ),
+        ),
+    )
+    assert multi_command["datasets"]["fresh_test"] == {"opened": False}
+    assert multi_command["architecture"]["base_state_predictor_frozen"]
+    assert multi_command["architecture"][
+        "persistent_command_latency_queue"
+    ]
+    assert len(multi_command["exact_epochs"]) == 1
+    json.dumps(multi_command, allow_nan=False)
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):

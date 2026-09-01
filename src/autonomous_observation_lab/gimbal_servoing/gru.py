@@ -611,6 +611,16 @@ class GRUPositionPlantRollout:
     saturation_fraction: torch.Tensor
 
 
+@dataclass
+class GRUPositionPlantSequenceRollout:
+    """State after every command in a latency-preserving servo sequence."""
+
+    angle_rad: torch.Tensor
+    rate_rad_s: torch.Tensor
+    applied_position_rad: torch.Tensor
+    saturation_fraction: torch.Tensor
+
+
 def angular_residual_rad(
     prediction_rad: torch.Tensor, target_rad: torch.Tensor
 ) -> torch.Tensor:
@@ -1167,6 +1177,300 @@ def differentiable_position_servo_rollout(
         angle_rad=angle,
         rate_rad_s=rate,
         saturation_fraction=saturation_integral / duration,
+    )
+
+
+def differentiable_position_servo_sequence(
+    command_normalized: torch.Tensor,
+    context: GRUAdaptivePositionLossContext,
+    sequence_mask: torch.Tensor,
+    *,
+    initial_time_s: torch.Tensor | None = None,
+    initial_applied_position_rad: torch.Tensor | None = None,
+    integration_period_override_s: float | None = None,
+) -> GRUPositionPlantSequenceRollout:
+    """Roll a causal command sequence through one persistent servo plant.
+
+    Unlike :func:`differentiable_position_servo_rollout`, each command is
+    submitted once and its latency queue persists into subsequent control
+    intervals. Camera capture boundaries are retained because the simulator's
+    explicit Euler integration is event split at those times. Quantization is
+    straight-through in the same way as the single-command rollout.
+    """
+
+    if command_normalized.ndim != 2:
+        raise ValueError("position command sequence must have shape [batch, time]")
+    shape = command_normalized.shape
+    if sequence_mask.shape != shape:
+        raise ValueError("position command sequence mask shape is invalid")
+    for value in (
+        context.gimbal_angle_rad,
+        context.gimbal_rate_rad_s,
+        context.servo_min_angle_rad,
+        context.servo_max_angle_rad,
+        context.servo_max_rate_rad_s,
+        context.servo_max_acceleration_rad_s2,
+        context.servo_position_gain_s_inv,
+        context.servo_position_tolerance_rad,
+        context.servo_position_quantization_rad,
+        context.servo_command_polarity,
+        context.servo_command_latency_s,
+        context.servo_rate_time_constant_s,
+        context.control_period_s,
+        context.integration_period_s,
+        context.camera_frame_period_s,
+    ):
+        if value.shape != shape:
+            raise ValueError("position sequence context shape is invalid")
+    if integration_period_override_s is not None and (
+        not math.isfinite(integration_period_override_s)
+        or integration_period_override_s <= 0.0
+    ):
+        raise ValueError(
+            "sequence integration-period override must be finite and positive"
+        )
+    for value, name in (
+        (context.servo_max_rate_rad_s, "maximum rate"),
+        (context.servo_max_acceleration_rad_s2, "maximum acceleration"),
+        (context.servo_position_gain_s_inv, "position gain"),
+        (context.control_period_s, "control period"),
+        (context.integration_period_s, "integration period"),
+        (context.camera_frame_period_s, "camera frame period"),
+    ):
+        if torch.any(value <= 0.0):
+            raise ValueError(f"servo {name} must be positive")
+
+    batch_size, time_count = shape
+    angle = context.gimbal_angle_rad[:, 0]
+    rate = context.gimbal_rate_rad_s[:, 0]
+    applied_position = (
+        angle
+        if initial_applied_position_rad is None
+        else initial_applied_position_rad
+    )
+    if applied_position.shape != (batch_size,):
+        raise ValueError("initial applied position shape is invalid")
+    elapsed = (
+        angle.new_zeros(batch_size)
+        if initial_time_s is None
+        else initial_time_s
+    )
+    if elapsed.shape != (batch_size,):
+        raise ValueError("initial sequence time shape is invalid")
+    frame_period = context.camera_frame_period_s[:, 0]
+    next_capture = (
+        torch.floor(elapsed / frame_period + 1e-7) + 1.0
+    ) * frame_period
+    pending_positions: list[torch.Tensor] = []
+    pending_arrivals: list[torch.Tensor] = []
+    output_angles = []
+    output_rates = []
+    output_applied = []
+    output_saturation = []
+    epsilon = 8.0 * torch.finfo(angle.dtype).eps
+
+    for time_index in range(time_count):
+        active_step = sequence_mask[:, time_index].bool()
+        command = torch.clamp(
+            command_normalized[:, time_index],
+            -1.0,
+            1.0,
+        )
+        travel = torch.where(
+            command >= 0.0,
+            context.servo_max_angle_rad[:, time_index],
+            -context.servo_min_angle_rad[:, time_index],
+        )
+        adapted = (
+            command
+            * travel
+            * context.servo_command_polarity[:, time_index]
+        )
+        quantum = context.servo_position_quantization_rad[:, time_index]
+        safe_quantum = quantum.clamp_min(torch.finfo(adapted.dtype).eps)
+        quantized = torch.round(adapted / safe_quantum) * safe_quantum
+        exact_adapted = torch.where(quantum > 0.0, quantized, adapted)
+        adapted = adapted + (exact_adapted - adapted).detach()
+        adapted = torch.maximum(
+            adapted,
+            context.servo_min_angle_rad[:, time_index],
+        )
+        adapted = torch.minimum(
+            adapted,
+            context.servo_max_angle_rad[:, time_index],
+        )
+        arrival = torch.where(
+            active_step,
+            elapsed + context.servo_command_latency_s[:, time_index],
+            torch.full_like(elapsed, math.inf),
+        )
+        pending_positions.append(adapted)
+        pending_arrivals.append(arrival)
+        duration = context.control_period_s[:, time_index]
+        end_time = torch.where(active_step, elapsed + duration, elapsed)
+        integration_period = (
+            torch.full_like(
+                context.integration_period_s[:, time_index],
+                integration_period_override_s,
+            )
+            if integration_period_override_s is not None
+            else context.integration_period_s[:, time_index]
+        )
+        minimum_integration = float(
+            torch.min(integration_period.detach()).cpu().item()
+        )
+        maximum_duration = float(torch.max(duration.detach()).cpu().item())
+        maximum_events = (
+            math.ceil(maximum_duration / minimum_integration)
+            + len(pending_arrivals)
+            + 4
+        )
+        saturation_integral = torch.zeros_like(angle)
+
+        for _ in range(maximum_events):
+            active = active_step & (elapsed < end_time - epsilon)
+            for pending_position, pending_arrival in zip(
+                pending_positions,
+                pending_arrivals,
+            ):
+                due = active & (pending_arrival <= elapsed + epsilon)
+                applied_position = torch.where(
+                    due,
+                    pending_position,
+                    applied_position,
+                )
+
+            next_time = torch.minimum(end_time, elapsed + integration_period)
+            for pending_arrival in pending_arrivals:
+                future_arrival = torch.where(
+                    pending_arrival > elapsed + epsilon,
+                    pending_arrival,
+                    torch.full_like(pending_arrival, math.inf),
+                )
+                next_time = torch.minimum(next_time, future_arrival)
+            next_time = torch.minimum(next_time, next_capture)
+            dt_s = torch.where(
+                active,
+                torch.clamp(next_time - elapsed, min=0.0),
+                torch.zeros_like(elapsed),
+            )
+
+            position_error = applied_position - angle
+            position_gain = context.servo_position_gain_s_inv[:, time_index]
+            desired_rate_unclipped = position_gain * position_error
+            desired_rate_unclipped = torch.where(
+                torch.abs(position_error)
+                <= context.servo_position_tolerance_rad[:, time_index],
+                torch.zeros_like(desired_rate_unclipped),
+                desired_rate_unclipped,
+            )
+            maximum_rate = context.servo_max_rate_rad_s[:, time_index]
+            desired_rate = torch.clamp(
+                desired_rate_unclipped,
+                -maximum_rate,
+                maximum_rate,
+            )
+            time_constant = context.servo_rate_time_constant_s[:, time_index]
+            acceleration_denominator = torch.where(
+                time_constant > 0.0,
+                time_constant,
+                dt_s.clamp_min(torch.finfo(dt_s.dtype).eps),
+            )
+            acceleration_unclipped = (
+                desired_rate - rate
+            ) / acceleration_denominator
+            maximum_acceleration = (
+                context.servo_max_acceleration_rad_s2[:, time_index]
+            )
+            acceleration = torch.clamp(
+                acceleration_unclipped,
+                -maximum_acceleration,
+                maximum_acceleration,
+            )
+            rate_unclipped = rate + acceleration * dt_s
+            next_rate = torch.clamp(
+                rate_unclipped,
+                -maximum_rate,
+                maximum_rate,
+            )
+            angle_unclipped = angle + next_rate * dt_s
+            minimum_angle = context.servo_min_angle_rad[:, time_index]
+            maximum_angle = context.servo_max_angle_rad[:, time_index]
+            next_angle = torch.maximum(angle_unclipped, minimum_angle)
+            next_angle = torch.minimum(next_angle, maximum_angle)
+            pushing_lower = (
+                (next_angle <= minimum_angle + epsilon)
+                & (next_rate < 0.0)
+                & (angle_unclipped < minimum_angle)
+            )
+            pushing_upper = (
+                (next_angle >= maximum_angle - epsilon)
+                & (next_rate > 0.0)
+                & (angle_unclipped > maximum_angle)
+            )
+            next_rate = torch.where(
+                pushing_lower | pushing_upper,
+                torch.zeros_like(next_rate),
+                next_rate,
+            )
+            travel_scale = torch.where(
+                angle_unclipped >= 0.0,
+                maximum_angle,
+                -minimum_angle,
+            )
+            saturation = (
+                torch.relu(
+                    torch.abs(desired_rate_unclipped) / maximum_rate - 1.0
+                ).square()
+                + torch.relu(
+                    torch.abs(acceleration_unclipped)
+                    / maximum_acceleration
+                    - 1.0
+                ).square()
+                + torch.relu(
+                    torch.abs(rate_unclipped) / maximum_rate - 1.0
+                ).square()
+                + torch.relu(
+                    torch.abs(angle_unclipped) / travel_scale - 1.0
+                ).square()
+            )
+            saturation_integral = saturation_integral + saturation * dt_s
+            angle = torch.where(active, next_angle, angle)
+            rate = torch.where(active, next_rate, rate)
+            elapsed = torch.where(active, next_time, elapsed)
+            capture_due = active & (next_capture <= elapsed + epsilon)
+            next_capture = torch.where(
+                capture_due,
+                next_capture + context.camera_frame_period_s[:, time_index],
+                next_capture,
+            )
+
+        for pending_position, pending_arrival in zip(
+            pending_positions,
+            pending_arrivals,
+        ):
+            due = active_step & (pending_arrival <= elapsed + epsilon)
+            applied_position = torch.where(
+                due,
+                pending_position,
+                applied_position,
+            )
+        output_angles.append(angle)
+        output_rates.append(rate)
+        output_applied.append(applied_position)
+        output_saturation.append(
+            torch.where(
+                active_step,
+                saturation_integral / duration,
+                torch.zeros_like(duration),
+            )
+        )
+
+    return GRUPositionPlantSequenceRollout(
+        angle_rad=torch.stack(output_angles, dim=1),
+        rate_rad_s=torch.stack(output_rates, dim=1),
+        applied_position_rad=torch.stack(output_applied, dim=1),
+        saturation_fraction=torch.stack(output_saturation, dim=1),
     )
 
 

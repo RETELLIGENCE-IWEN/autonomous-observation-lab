@@ -365,8 +365,21 @@ only 1,185 trainable parameters and keeps all state metrics exactly unchanged.
 Its direct-tracking arm reaches a 0.47% global gain but only 0.24% critical gain
 and substantially worsens command smoothness while approaching its configured
 residual bound. The evidence now points to the one-command 300 ms training
-rollout; the next phase is a smooth multi-command differentiable rollout rather
-than further scalar loss tuning.
+rollout. V10 implements the resulting eight-command recurrent rollout with a
+persistent latency queue and causal counterfactual image/servo observations:
+
+```bash
+aol-develop-gimbal-multi-command-policy
+```
+
+The [V10 experiment report](docs/research_tracks/predictive_gimbal_servoing/multi_command_counterfactual_v10_experiment.md)
+documents exact changing-command parity and three development arms. None passes
+the gate. Target and direct residuals barely change tracking; a privileged
+action bridge improves smoothness, teacher-action agreement, and saturation
+but shifts error from critical into ordinary states and regresses visibility.
+No checkpoint is promoted and the fresh test remains sealed. The next
+justified experiment is a privileged constrained command-sequence oracle with
+failure-focused policy distillation, rather than another scalar loss sweep.
 
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
