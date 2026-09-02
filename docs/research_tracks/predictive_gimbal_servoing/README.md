@@ -41,6 +41,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Counterfactual Servo-Plant Objective V8--V8.7](counterfactual_plant_v8_experiment.md)
 - [Multi-Command Counterfactual Policy V10](multi_command_counterfactual_v10_experiment.md)
 - [Privileged Constrained Sequence Oracle V11](privileged_sequence_oracle_v11_experiment.md)
+- [Sequence-Oracle Distillation V11.1/V11.2](sequence_distillation_v11_experiment.md)
 - [Belief-Guided Recovery Experiment](belief_recovery_experiment.md)
 - [O2 GRU Uncertainty Calibration Experiment](uncertainty_calibration_experiment.md)
 - [Contextual Calibration and Recovery Development/Test Protocol](contextual_calibration_and_recovery_protocol.md)

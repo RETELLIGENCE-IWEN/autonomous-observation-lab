@@ -76,6 +76,10 @@ from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
     PrivilegedSequenceOracleConfig,
     optimize_privileged_command_sequence,
 )
+from autonomous_observation_lab.gimbal_servoing.sequence_distillation import (
+    CausalHardwareConditionedPositionPolicy,
+    SequenceDistillationPolicyConfig,
+)
 
 
 def learning_scenario() -> ClosedLoopScenario:
@@ -800,6 +804,21 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
     )
     assert torch.any(
         direct.command_normalized[:, 0] != rollout.command_normalized[:, 0]
+    )
+
+    actor = CausalHardwareConditionedPositionPolicy(
+        SequenceDistillationPolicyConfig(hidden_dim=8, embedding_dim=8)
+    )
+    actor_commands = actor(logged, context)
+    actor_changed = actor(changed_logged, context)
+    torch.testing.assert_close(
+        actor_commands[:, :-1],
+        actor_changed[:, :-1],
+    )
+    actor_commands.sum().backward()
+    assert any(
+        parameter.grad is not None and torch.any(parameter.grad != 0.0)
+        for parameter in actor.parameters()
     )
 
 

@@ -395,6 +395,14 @@ episode-windows and falls back safely on the rest. This clears the ceiling gate
 for failure-focused causal policy distillation; it does not promote a deployable
 model or open the fresh test.
 
+V11.1/V11.2 then distill episode-start oracle sequences into a causal,
+hardware-conditioned recurrent position actor. Increasing teacher coverage
+from 48 to 192 cases cuts its global tracking regression from 5.74% to 3.02%,
+but both students still fail tracking and visibility while becoming smoother.
+The [distillation report](docs/research_tracks/predictive_gimbal_servoing/sequence_distillation_v11_experiment.md)
+therefore rejects further teacher-forced imitation and requires on-policy
+student-state aggregation next. No student checkpoint is promoted.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:
