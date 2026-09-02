@@ -44,9 +44,11 @@ from autonomous_observation_lab.gimbal_servoing.gru import (
     GRUTargetStateOutput,
     adaptive_position_surrogate_actions,
     angular_residual_rad,
+    differentiable_position_servo_step,
     differentiable_position_servo_rollout,
     differentiable_position_servo_sequence,
     gru_parameter_count,
+    initialize_differentiable_position_servo_state,
     load_gru_checkpoint,
     load_gru_position_residual_checkpoint,
     save_gru_checkpoint,
@@ -76,6 +78,8 @@ from autonomous_observation_lab.gimbal_servoing.failure_gated_policy import (
     FailureGatedCommandResidualPolicy,
     FailureGatedPositionCorrectionPolicy,
     FailureGatedPositionPolicyConfig,
+    HardwareConditionedResidualAuthorityCalibrator,
+    ResidualAuthorityCalibratorConfig,
 )
 from autonomous_observation_lab.gimbal_servoing.failure_gated_rollout import (
     rollout_failure_gated_position_policy,
@@ -97,6 +101,7 @@ from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
 from autonomous_observation_lab.gimbal_servoing.sequence_distillation import (
     CausalHardwareConditionedPositionPolicy,
     SequenceDistillationPolicyConfig,
+    normalized_hardware_features,
 )
 
 
@@ -615,6 +620,39 @@ def test_differentiable_position_sequence_preserves_command_queue():
         context,
         torch.ones(shape, dtype=torch.bool),
     )
+    streaming_state = initialize_differentiable_position_servo_state(context)
+    streaming_angles = []
+    streaming_rates = []
+    streaming_applied = []
+    streaming_saturation = []
+    for time_index in range(len(commands)):
+        streaming_state, saturation = differentiable_position_servo_step(
+            command[:, time_index],
+            context,
+            torch.ones(1, dtype=torch.bool),
+            time_index,
+            streaming_state,
+        )
+        streaming_angles.append(streaming_state.angle_rad)
+        streaming_rates.append(streaming_state.rate_rad_s)
+        streaming_applied.append(streaming_state.applied_position_rad)
+        streaming_saturation.append(saturation)
+    torch.testing.assert_close(
+        torch.stack(streaming_angles, dim=1),
+        rollout.angle_rad,
+    )
+    torch.testing.assert_close(
+        torch.stack(streaming_rates, dim=1),
+        rollout.rate_rad_s,
+    )
+    torch.testing.assert_close(
+        torch.stack(streaming_applied, dim=1),
+        rollout.applied_position_rad,
+    )
+    torch.testing.assert_close(
+        torch.stack(streaming_saturation, dim=1),
+        rollout.saturation_fraction,
+    )
 
     torch.testing.assert_close(
         rollout.angle_rad,
@@ -862,6 +900,41 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
     torch.testing.assert_close(
         deployable_rollout.residual_normalized,
         torch.zeros_like(deployable_rollout.residual_normalized),
+    )
+    calibrated_base = FailureGatedCommandResidualPolicy(
+        FailureGatedPositionPolicyConfig(hidden_dim=8, embedding_dim=8)
+    )
+    with torch.no_grad():
+        calibrated_base.residual_head[-1].bias.fill_(0.5)
+    feature = rollout.synthetic_features[:, 0]
+    hardware = normalized_hardware_features(context)[:, 0]
+    base_step = calibrated_base.forward_step(
+        feature,
+        hardware,
+        rollout.command_normalized[:, 0],
+    )
+    calibrator = HardwareConditionedResidualAuthorityCalibrator(
+        calibrated_base,
+        ResidualAuthorityCalibratorConfig(
+            hidden_dim=8,
+            initial_authority=1.0,
+            maximum_authority=1.5,
+        ),
+    )
+    calibrated_step = calibrator.forward_step(
+        feature,
+        hardware,
+        rollout.command_normalized[:, 0],
+    )
+    torch.testing.assert_close(calibrated_step[0], base_step[0])
+    torch.testing.assert_close(calibrated_step[1], base_step[1])
+    assert not any(
+        parameter.requires_grad
+        for parameter in calibrator.base_policy.parameters()
+    )
+    assert all(
+        parameter.requires_grad
+        for parameter in calibrator.authority_head.parameters()
     )
 
     actor = CausalHardwareConditionedPositionPolicy(

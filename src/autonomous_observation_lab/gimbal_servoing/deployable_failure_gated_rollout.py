@@ -9,15 +9,19 @@ import torch
 
 from .controllers import AdaptivePositionControllerConfig
 from .dataset import FEATURE_NAMES
-from .deployable_reference import deployable_position_commands_from_features
+from .deployable_reference import (
+    deployable_position_command_step,
+    initialize_deployable_reference_state,
+)
 from .failure_gated_policy import FailureGatedCommandResidualPolicy
 from .gru import (
     CausalTargetStateGRU,
     GRUAdaptivePositionLossContext,
     angular_residual_rad,
-    differentiable_position_servo_sequence,
+    differentiable_position_servo_step,
+    initialize_differentiable_position_servo_state,
 )
-from .multi_command_policy import _counterfactual_feature, _slice_context
+from .multi_command_policy import _counterfactual_feature
 from .sequence_distillation import normalized_hardware_features
 
 
@@ -113,6 +117,12 @@ def rollout_deployable_failure_gated_policy(
     )
     previous_position = torch.where(position_mode, previous_position, angle)
     initial_applied_position = angle
+    plant_state = initialize_differentiable_position_servo_state(
+        context,
+        initial_time_s=time_s[:, 0],
+        initial_applied_position_rad=initial_applied_position,
+    )
+    reference_state = None
     previous_synthetic = None
     angles_before: list[torch.Tensor] = []
     synthetic_features = []
@@ -142,17 +152,23 @@ def rollout_deployable_failure_gated_policy(
         )
         synthetic_features.append(feature)
         previous_synthetic = feature
-        feature_prefix = torch.stack(synthetic_features, dim=1)
-        base_sequence = deployable_position_commands_from_features(
-            base_model,
-            feature_prefix,
-            _slice_context(context, time_index + 1),
-            sequence_mask[:, : time_index + 1],
-            prediction_horizons_s=prediction_horizons_s,
-            adapter=adapter,
-            initial_hidden=base_initial_hidden,
+        if reference_state is None:
+            reference_state = initialize_deployable_reference_state(
+                feature,
+                initial_hidden=base_initial_hidden,
+            )
+        base_command, _risk, _arrival, _requested, reference_state = (
+            deployable_position_command_step(
+                base_model,
+                feature,
+                context,
+                time_index,
+                sequence_mask[:, time_index].bool(),
+                reference_state,
+                prediction_horizons_s=prediction_horizons_s,
+                adapter=adapter,
+            )
         )
-        base_command = base_sequence.command_normalized[:, -1]
         _command, residual, gate, step_evidence, correction_hidden = (
             policy.forward_step(
                 feature,
@@ -194,16 +210,16 @@ def rollout_deployable_failure_gated_policy(
         residuals.append(residual)
         gates.append(gate)
         evidence.append(step_evidence)
-        plant = differentiable_position_servo_sequence(
-            torch.stack(commands, dim=1),
-            _slice_context(context, time_index + 1),
-            sequence_mask[:, : time_index + 1],
-            initial_time_s=time_s[:, 0],
-            initial_applied_position_rad=initial_applied_position,
+        plant_state, step_saturation = differentiable_position_servo_step(
+            command,
+            context,
+            sequence_mask[:, time_index].bool(),
+            time_index,
+            plant_state,
             integration_period_override_s=integration_period_override_s,
         )
-        angle = plant.angle_rad[:, -1]
-        rate = plant.rate_rad_s[:, -1]
+        angle = plant_state.angle_rad
+        rate = plant_state.rate_rad_s
         previous_command = command
         previous_position = command * torch.where(
             command >= 0.0,
@@ -212,7 +228,7 @@ def rollout_deployable_failure_gated_policy(
         )
         output_angles.append(angle)
         output_rates.append(rate)
-        output_saturation.append(plant.saturation_fraction[:, -1])
+        output_saturation.append(step_saturation)
 
     angle_tensor = torch.stack(output_angles, dim=1)
     half_fov = 0.5 * context.selected_axis_fov_rad

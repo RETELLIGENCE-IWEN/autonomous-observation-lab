@@ -101,6 +101,9 @@ from autonomous_observation_lab.gimbal_servoing.deployable_residual_distillation
     DeployableResidualDistillationConfig,
     evaluate_deployable_residual_distillation_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.deployable_constrained_finetuning_experiment import (
+    DeployableConstrainedFinetuningConfig,
+)
 from autonomous_observation_lab.gimbal_servoing.sequence_distillation_experiment import (
     SequenceDistillationExperimentConfig,
     evaluate_sequence_distillation_experiment,
@@ -238,6 +241,16 @@ def test_control_aware_candidates_isolate_required_ablation_factors():
         and candidate.position_action_weight > 0.0
         for candidate in integrated[1:]
     )
+
+
+def test_deployable_constrained_finetuning_validates_research_arms():
+    config = DeployableConstrainedFinetuningConfig()
+    assert config.finetuning_episode_count >= config.training_episode_count
+    assert "full_residual" in config.trainable_policy_scopes
+    with pytest.raises(ValueError, match="constraint scope"):
+        replace(config, visibility_constraint_scopes=("unknown",))
+    with pytest.raises(ValueError, match="authority scales"):
+        replace(config, privileged_scenario_authority_scales=(-0.1,))
 
 
 def test_control_aware_development_keeps_test_closed(tmp_path):

@@ -463,6 +463,23 @@ delayed sequence effect, so no checkpoint is promoted. The next experiment is
 control-aware fine-tuning through the multi-command plant with an explicit
 critical-visibility constraint and ordinary-state trust region.
 
+V15 performs that constrained sequence-level fine-tuning:
+
+```bash
+aol-finetune-gimbal-deployable-constrained
+```
+
+The [V15 report](docs/research_tracks/predictive_gimbal_servoing/deployable_constrained_v15_experiment.md)
+tests mean, robust-margin, episode-CVaR, and worst-scenario primal-dual
+constraints as well as a small deployable hardware/evidence-conditioned
+authority calibrator. No learned arm passes the complete gate: states that
+reach visibility parity lose the required critical tracking gain. The miss is
+localized to `slow_servo`; `aggressive_motion` improves critical tracking by
+4.08% without a material visibility change. A privileged conditional scale
+screen preserves 2.54% global and 1.97% critical tracking improvement at
+numerical visibility parity, so state-consistent authority-oracle distillation
+is the next experiment. The fresh test remains sealed.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

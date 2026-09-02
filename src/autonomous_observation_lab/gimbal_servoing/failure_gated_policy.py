@@ -438,3 +438,91 @@ class FailureGatedCommandResidualPolicy(nn.Module):
             gate_probability=torch.stack(gates, dim=1),
             failure_evidence=torch.stack(evidence, dim=1),
         )
+
+
+@dataclass(frozen=True)
+class ResidualAuthorityCalibratorConfig:
+    hidden_dim: int = 16
+    initial_authority: float = 1.0
+    maximum_authority: float = 1.5
+
+    def __post_init__(self) -> None:
+        if self.hidden_dim <= 0:
+            raise ValueError("authority calibrator hidden dimension must be positive")
+        for name in ("initial_authority", "maximum_authority"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"authority calibrator {name} must be finite")
+        if not 0.0 < self.initial_authority < self.maximum_authority:
+            raise ValueError(
+                "initial authority must be between zero and maximum authority"
+            )
+
+
+class HardwareConditionedResidualAuthorityCalibrator(nn.Module):
+    """Calibrate a frozen recurrent residual using deployable failure context."""
+
+    def __init__(
+        self,
+        base_policy: FailureGatedCommandResidualPolicy,
+        config: ResidualAuthorityCalibratorConfig | None = None,
+    ):
+        super().__init__()
+        self.base_policy = base_policy
+        self.config = config or ResidualAuthorityCalibratorConfig()
+        for parameter in self.base_policy.parameters():
+            parameter.requires_grad_(False)
+        self.authority_head = nn.Sequential(
+            nn.Linear(
+                HARDWARE_FEATURE_COUNT + FAILURE_EVIDENCE_COUNT,
+                self.config.hidden_dim,
+            ),
+            nn.SiLU(),
+            nn.Linear(self.config.hidden_dim, 1),
+        )
+        final = self.authority_head[-1]
+        assert isinstance(final, nn.Linear)
+        nn.init.zeros_(final.weight)
+        initial_fraction = (
+            self.config.initial_authority / self.config.maximum_authority
+        )
+        nn.init.constant_(
+            final.bias,
+            math.log(initial_fraction / (1.0 - initial_fraction)),
+        )
+
+    def forward_step(
+        self,
+        feature: torch.Tensor,
+        hardware: torch.Tensor,
+        base_command_normalized: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        (
+            _base_corrected_command,
+            base_residual,
+            base_gate,
+            evidence,
+            hidden,
+        ) = self.base_policy.forward_step(
+            feature,
+            hardware,
+            base_command_normalized,
+            hidden,
+        )
+        authority = self.config.maximum_authority * torch.sigmoid(
+            self.authority_head(torch.cat((hardware, evidence), dim=-1)).squeeze(-1)
+        )
+        residual = authority * base_residual
+        command = torch.clamp(
+            base_command_normalized + residual,
+            -1.0,
+            1.0,
+        )
+        effective_gate = torch.clamp(base_gate * authority, 0.0, 1.0)
+        return command, residual, effective_gate, evidence, hidden
