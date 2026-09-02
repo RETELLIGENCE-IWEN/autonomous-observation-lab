@@ -381,6 +381,20 @@ No checkpoint is promoted and the fresh test remains sealed. The next
 justified experiment is a privileged constrained command-sequence oracle with
 failure-focused policy distillation, rather than another scalar loss sweep.
 
+That sequence-feasibility gate is implemented as V11:
+
+```bash
+aol-screen-gimbal-sequence-oracle
+```
+
+The [V11 oracle report](docs/research_tracks/predictive_gimbal_servoing/privileged_sequence_oracle_v11_experiment.md)
+shows that constrained shooting improves global and critical tracking by 1.04%
+and 2.67% relative to the privileged position baseline, while also improving
+visibility, smoothness, and saturation. The oracle changes only 41% of tested
+episode-windows and falls back safely on the rest. This clears the ceiling gate
+for failure-focused causal policy distillation; it does not promote a deployable
+model or open the fresh test.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

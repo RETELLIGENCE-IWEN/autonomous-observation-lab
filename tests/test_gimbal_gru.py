@@ -72,6 +72,10 @@ from autonomous_observation_lab.gimbal_servoing.multi_command_policy import (
     recurrent_policy_input_dim,
     rollout_counterfactual_window,
 )
+from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
+    PrivilegedSequenceOracleConfig,
+    optimize_privileged_command_sequence,
+)
 
 
 def learning_scenario() -> ClosedLoopScenario:
@@ -612,6 +616,64 @@ def test_differentiable_position_sequence_preserves_command_queue():
     assert command.grad is not None
     assert torch.isfinite(command.grad).all()
     assert torch.count_nonzero(command.grad).item() >= 2
+
+
+def test_privileged_sequence_oracle_improves_a_feasible_focus_segment():
+    shape = (1, 10)
+
+    def values(number: float) -> torch.Tensor:
+        return torch.full(shape, number, dtype=torch.float64)
+
+    context = GRUAdaptivePositionLossContext(
+        teacher_action_normalized=values(0.0),
+        mask=torch.ones(shape, dtype=torch.bool),
+        gimbal_angle_rad=values(0.0),
+        gimbal_rate_rad_s=values(0.0),
+        control_dt_s=values(0.04),
+        selected_axis_fov_rad=values(math.radians(60.0)),
+        servo_min_angle_rad=values(-1.0),
+        servo_max_angle_rad=values(1.0),
+        servo_max_rate_rad_s=values(10.0),
+        servo_max_acceleration_rad_s2=values(1000.0),
+        servo_position_gain_s_inv=values(5.0),
+        servo_position_tolerance_rad=values(0.0),
+        servo_position_quantization_rad=values(0.0),
+        servo_command_polarity=values(1.0),
+        servo_command_latency_s=values(0.01),
+        servo_rate_time_constant_s=values(0.03),
+        control_period_s=values(0.04),
+        integration_period_s=values(0.001),
+        camera_frame_period_s=values(1.0 / 30.0),
+    )
+    base = values(0.05)
+    result = optimize_privileged_command_sequence(
+        base,
+        values(0.30),
+        context,
+        torch.ones(shape, dtype=torch.bool),
+        torch.zeros(1, dtype=torch.float64),
+        torch.zeros(1, dtype=torch.float64),
+        config=PrivilegedSequenceOracleConfig(
+            focus_start_index=2,
+            focus_steps=8,
+            optimization_iterations=20,
+            learning_rate=0.15,
+            maximum_command_residual=0.50,
+            maximum_smoothness_regression_fraction=100.0,
+            maximum_smoothness_regression_absolute_mse=0.10,
+            blend_fractions=(0.0, 0.25, 0.5, 0.75, 1.0),
+        ),
+    )
+
+    assert result.selected_metrics["tracking_mse"].item() < (
+        result.base_metrics["tracking_mse"].item()
+    )
+    torch.testing.assert_close(
+        result.selected_command_normalized[:, :2],
+        base[:, :2],
+    )
+    assert torch.all(torch.abs(result.selected_command_normalized) <= 1.0)
+    assert result.selected_blend_fraction.item() > 0.0
 
 
 def test_counterfactual_window_is_causal_and_updates_servo_features():

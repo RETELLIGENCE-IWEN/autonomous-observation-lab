@@ -86,6 +86,13 @@ from autonomous_observation_lab.gimbal_servoing.multi_command_experiment import 
     MultiCommandExperimentConfig,
     evaluate_multi_command_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
+    PrivilegedSequenceOracleConfig,
+)
+from autonomous_observation_lab.gimbal_servoing.sequence_oracle_experiment import (
+    SequenceOracleExperimentConfig,
+    evaluate_sequence_oracle_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -723,6 +730,28 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
     ]
     assert len(multi_command["exact_epochs"]) == 1
     json.dumps(multi_command, allow_nan=False)
+
+    sequence_oracle = evaluate_sequence_oracle_experiment(
+        validation_path=validation_path,
+        config=SequenceOracleExperimentConfig(
+            focus_start_indices=(0,),
+            focus_steps=2,
+            batch_size=1,
+            maximum_episode_count=1,
+            minimum_episode_count=1,
+            oracle=PrivilegedSequenceOracleConfig(
+                focus_start_index=0,
+                focus_steps=2,
+                optimization_iterations=1,
+                blend_fractions=(0.0, 1.0),
+            ),
+        ),
+    )
+    assert sequence_oracle["dataset"]["fresh_test"] == {"opened": False}
+    assert sequence_oracle["oracle_scope"][
+        "replayed_from_episode_start"
+    ]
+    json.dumps(sequence_oracle, allow_nan=False)
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):

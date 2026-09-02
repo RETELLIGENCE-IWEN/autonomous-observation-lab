@@ -1263,6 +1263,7 @@ def differentiable_position_servo_sequence(
     ) * frame_period
     pending_positions: list[torch.Tensor] = []
     pending_arrivals: list[torch.Tensor] = []
+    pending_active: list[torch.Tensor] = []
     output_angles = []
     output_rates = []
     output_applied = []
@@ -1306,6 +1307,7 @@ def differentiable_position_servo_sequence(
         )
         pending_positions.append(adapted)
         pending_arrivals.append(arrival)
+        pending_active.append(active_step)
         duration = context.control_period_s[:, time_index]
         end_time = torch.where(active_step, elapsed + duration, elapsed)
         integration_period = (
@@ -1329,11 +1331,16 @@ def differentiable_position_servo_sequence(
 
         for _ in range(maximum_events):
             active = active_step & (elapsed < end_time - epsilon)
-            for pending_position, pending_arrival in zip(
+            for pending_position, pending_arrival, issued in zip(
                 pending_positions,
                 pending_arrivals,
+                pending_active,
             ):
-                due = active & (pending_arrival <= elapsed + epsilon)
+                due = (
+                    active
+                    & issued
+                    & (pending_arrival <= elapsed + epsilon)
+                )
                 applied_position = torch.where(
                     due,
                     pending_position,
@@ -1445,16 +1452,41 @@ def differentiable_position_servo_sequence(
                 next_capture,
             )
 
-        for pending_position, pending_arrival in zip(
+        for pending_position, pending_arrival, issued in zip(
             pending_positions,
             pending_arrivals,
+            pending_active,
         ):
-            due = active_step & (pending_arrival <= elapsed + epsilon)
+            due = (
+                active_step
+                & issued
+                & (pending_arrival <= elapsed + epsilon)
+            )
             applied_position = torch.where(
                 due,
                 pending_position,
                 applied_position,
             )
+        keep = [
+            not bool(
+                torch.all(
+                    (~issued) | (pending_arrival <= elapsed + epsilon)
+                ).detach()
+            )
+            for pending_arrival, issued in zip(
+                pending_arrivals,
+                pending_active,
+            )
+        ]
+        pending_positions = [
+            value for value, retain in zip(pending_positions, keep) if retain
+        ]
+        pending_arrivals = [
+            value for value, retain in zip(pending_arrivals, keep) if retain
+        ]
+        pending_active = [
+            value for value, retain in zip(pending_active, keep) if retain
+        ]
         output_angles.append(angle)
         output_rates.append(rate)
         output_applied.append(applied_position)
