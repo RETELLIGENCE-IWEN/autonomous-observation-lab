@@ -419,6 +419,22 @@ smoothness/saturation. Global tracking and visibility nevertheless regress
 The next experiment must retain ordinary-state behavior while applying learned
 corrections only where the reference is failing.
 
+V13 implements that retention experiment with a frozen base actor, deployable
+hardware-relative failure evidence, a bounded recurrent gate, and
+state-consistent replay of oracle-selected sequences:
+
+```bash
+aol-develop-gimbal-failure-gated-policy
+```
+
+The [V13 report](docs/research_tracks/predictive_gimbal_servoing/failure_gated_v13_experiment.md)
+finds that the constrained oracle improves the frozen actor's global tracking
+by 4.07%, but its ceiling is still 4.57% worse than the original reference.
+Trust-region arms can trade global and critical behavior but cannot cross that
+ceiling. V13 is therefore unpromoted. The next screen must start from the
+deployable analytical/midpoint-GRU V2.1 controller directly, then authorize
+distillation only if its constrained sequence oracle passes first.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

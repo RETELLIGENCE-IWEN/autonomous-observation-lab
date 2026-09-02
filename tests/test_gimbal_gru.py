@@ -72,7 +72,15 @@ from autonomous_observation_lab.gimbal_servoing.multi_command_policy import (
     recurrent_policy_input_dim,
     rollout_counterfactual_window,
 )
+from autonomous_observation_lab.gimbal_servoing.failure_gated_policy import (
+    FailureGatedPositionCorrectionPolicy,
+    FailureGatedPositionPolicyConfig,
+)
+from autonomous_observation_lab.gimbal_servoing.failure_gated_rollout import (
+    rollout_failure_gated_position_policy,
+)
 from autonomous_observation_lab.gimbal_servoing.on_policy_distillation import (
+    rollout_counterfactual_position_commands,
     rollout_counterfactual_position_policy,
 )
 from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
@@ -842,6 +850,51 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
         step_count,
     )
     assert torch.all(torch.isfinite(actor_rollout.tracking_error_normalized))
+
+    forced_rollout = rollout_counterfactual_position_commands(
+        actor_rollout.command_normalized,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+    )
+    torch.testing.assert_close(
+        forced_rollout.gimbal_angle_rad,
+        actor_rollout.gimbal_angle_rad,
+    )
+    torch.testing.assert_close(
+        forced_rollout.synthetic_features,
+        actor_rollout.synthetic_features,
+    )
+
+    gated = FailureGatedPositionCorrectionPolicy(
+        actor,
+        FailureGatedPositionPolicyConfig(hidden_dim=8, embedding_dim=8),
+    )
+    gated_rollout = rollout_failure_gated_position_policy(
+        gated,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+    )
+    torch.testing.assert_close(
+        gated_rollout.command_normalized,
+        actor_rollout.command_normalized,
+    )
+    torch.testing.assert_close(
+        gated_rollout.residual_normalized,
+        torch.zeros_like(gated_rollout.residual_normalized),
+    )
+    assert gated_rollout.failure_evidence.shape == (
+        dataset.episode_count,
+        step_count,
+        6,
+    )
 
 
 def test_control_aware_loss_penalizes_inconsistent_prediction_heads():

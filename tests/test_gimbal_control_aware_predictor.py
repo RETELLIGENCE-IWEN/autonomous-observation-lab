@@ -101,6 +101,10 @@ from autonomous_observation_lab.gimbal_servoing.on_policy_distillation_experimen
     OnPolicyDistillationExperimentConfig,
     evaluate_on_policy_distillation_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.failure_gated_experiment import (
+    FailureGatedExperimentConfig,
+    evaluate_failure_gated_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -810,6 +814,35 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
         "geometry_dependent_observations_are_counterfactual"
     ]
     json.dumps(on_policy, allow_nan=False)
+
+    failure_gated = evaluate_failure_gated_experiment(
+        train_path=train_path,
+        validation_path=validation_path,
+        config=FailureGatedExperimentConfig(
+            sequence_steps=2,
+            training_oracle_episode_count=1,
+            validation_oracle_episode_count=1,
+            oracle_batch_size=1,
+            rollout_batch_size=1,
+            base_epochs=1,
+            correction_epochs=1,
+            selection_epoch_interval=1,
+            batch_size=1,
+            ordinary_trust_region_weights=(1.0,),
+            oracle=PrivilegedSequenceOracleConfig(
+                focus_start_index=0,
+                focus_steps=2,
+                optimization_iterations=1,
+                blend_fractions=(0.0, 1.0),
+            ),
+        ),
+    )
+    assert failure_gated["datasets"]["fresh_test"] == {"opened": False}
+    assert failure_gated["architecture"][
+        "sequence_labels_and_observations_are_state_consistent"
+    ]
+    assert len(failure_gated["arms"]) == 1
+    json.dumps(failure_gated, allow_nan=False)
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):
