@@ -70,6 +70,58 @@ class CausalHardwareConditionedPositionPolicy(nn.Module):
             nn.Linear(self.config.hidden_dim, 1),
         )
 
+    def forward_step(
+        self,
+        feature: torch.Tensor,
+        hardware: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+        *,
+        previous_command_normalized: torch.Tensor | None = None,
+        minimum_angle_rad: torch.Tensor | None = None,
+        maximum_angle_rad: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Issue one causal command while preserving recurrent policy state."""
+
+        if feature.ndim != 2 or feature.shape[-1] != len(FEATURE_NAMES):
+            raise ValueError(
+                "distillation step feature must have shape [batch, feature]"
+            )
+        batch_size = feature.shape[0]
+        if hardware.shape != (batch_size, HARDWARE_FEATURE_COUNT):
+            raise ValueError("distillation step hardware shape is invalid")
+        if hidden is None:
+            hidden = feature.new_zeros(batch_size, self.config.hidden_dim)
+        if hidden.shape != (batch_size, self.config.hidden_dim):
+            raise ValueError("distillation step hidden state shape is invalid")
+        step_feature = feature
+        if previous_command_normalized is not None:
+            if previous_command_normalized.shape != (batch_size,):
+                raise ValueError("previous distillation command shape is invalid")
+            if minimum_angle_rad is None or maximum_angle_rad is None:
+                raise ValueError(
+                    "servo travel is required with a previous command"
+                )
+            if minimum_angle_rad.shape != (batch_size,) or (
+                maximum_angle_rad.shape != (batch_size,)
+            ):
+                raise ValueError("distillation step servo-travel shape is invalid")
+            step_feature = feature.clone()
+            step_feature[
+                :, _FEATURE_INDEX["previous_action_normalized"]
+            ] = previous_command_normalized
+            previous_position = previous_command_normalized * torch.where(
+                previous_command_normalized >= 0.0,
+                maximum_angle_rad,
+                -minimum_angle_rad,
+            )
+            step_feature[
+                :, _FEATURE_INDEX["previous_position_command_rad"]
+            ] = previous_position
+        inputs = torch.cat((step_feature, hardware), dim=-1)
+        hidden = self.recurrent(self.encoder(inputs), hidden)
+        command = torch.tanh(self.head(hidden).squeeze(-1))
+        return command, hidden
+
     def forward(
         self,
         logged_features: torch.Tensor,
@@ -97,21 +149,16 @@ class CausalHardwareConditionedPositionPolicy(nn.Module):
         hidden = logged_features.new_zeros(batch_size, self.config.hidden_dim)
         commands = []
         for time_index in range(time_count):
-            feature = logged_features[:, time_index].clone()
-            feature[:, _FEATURE_INDEX["previous_action_normalized"]] = previous
             minimum = context.servo_min_angle_rad[:, time_index]
             maximum = context.servo_max_angle_rad[:, time_index]
-            previous_position = previous * torch.where(
-                previous >= 0.0,
-                maximum,
-                -minimum,
+            command, hidden = self.forward_step(
+                logged_features[:, time_index],
+                hardware[:, time_index],
+                hidden,
+                previous_command_normalized=previous,
+                minimum_angle_rad=minimum,
+                maximum_angle_rad=maximum,
             )
-            feature[:, _FEATURE_INDEX["previous_position_command_rad"]] = (
-                previous_position
-            )
-            inputs = torch.cat((feature, hardware[:, time_index]), dim=-1)
-            hidden = self.recurrent(self.encoder(inputs), hidden)
-            command = torch.tanh(self.head(hidden).squeeze(-1))
             commands.append(command)
             previous = command
         return torch.stack(commands, dim=1)

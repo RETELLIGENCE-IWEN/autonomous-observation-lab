@@ -72,6 +72,9 @@ from autonomous_observation_lab.gimbal_servoing.multi_command_policy import (
     recurrent_policy_input_dim,
     rollout_counterfactual_window,
 )
+from autonomous_observation_lab.gimbal_servoing.on_policy_distillation import (
+    rollout_counterfactual_position_policy,
+)
 from autonomous_observation_lab.gimbal_servoing.sequence_oracle import (
     PrivilegedSequenceOracleConfig,
     optimize_privileged_command_sequence,
@@ -820,6 +823,25 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
         parameter.grad is not None and torch.any(parameter.grad != 0.0)
         for parameter in actor.parameters()
     )
+
+    actor_rollout = rollout_counterfactual_position_policy(
+        actor,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+    )
+    torch.testing.assert_close(
+        actor_rollout.synthetic_features[:, 1:, angle_index],
+        actor_rollout.gimbal_angle_rad[:, :-1],
+    )
+    assert actor_rollout.command_normalized.shape == (
+        dataset.episode_count,
+        step_count,
+    )
+    assert torch.all(torch.isfinite(actor_rollout.tracking_error_normalized))
 
 
 def test_control_aware_loss_penalizes_inconsistent_prediction_heads():

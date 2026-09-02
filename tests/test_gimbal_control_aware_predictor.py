@@ -97,6 +97,10 @@ from autonomous_observation_lab.gimbal_servoing.sequence_distillation_experiment
     SequenceDistillationExperimentConfig,
     evaluate_sequence_distillation_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.on_policy_distillation_experiment import (
+    OnPolicyDistillationExperimentConfig,
+    evaluate_on_policy_distillation_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.control_criticality import (
     ControlCriticalityConfig,
 )
@@ -777,6 +781,35 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
     )
     assert distillation["datasets"]["fresh_test"] == {"opened": False}
     json.dumps(distillation, allow_nan=False)
+
+    on_policy = evaluate_on_policy_distillation_experiment(
+        train_path=train_path,
+        validation_path=validation_path,
+        config=OnPolicyDistillationExperimentConfig(
+            sequence_steps=2,
+            training_oracle_episode_count=1,
+            validation_oracle_episode_count=1,
+            oracle_batch_size=1,
+            rollout_batch_size=1,
+            initial_epochs=1,
+            aggregation_rounds=1,
+            aggregation_epochs=1,
+            selection_epoch_interval=1,
+            batch_size=1,
+            oracle=PrivilegedSequenceOracleConfig(
+                focus_start_index=0,
+                focus_steps=2,
+                optimization_iterations=1,
+                blend_fractions=(0.0, 1.0),
+            ),
+        ),
+    )
+    assert on_policy["datasets"]["fresh_test"] == {"opened": False}
+    assert len(on_policy["aggregation"]) == 1
+    assert on_policy["architecture"][
+        "geometry_dependent_observations_are_counterfactual"
+    ]
+    json.dumps(on_policy, allow_nan=False)
 
 
 def test_midpoint_adapter_replication_is_seed_matched_and_test_closed(tmp_path):

@@ -403,6 +403,22 @@ The [distillation report](docs/research_tracks/predictive_gimbal_servoing/sequen
 therefore rejects further teacher-forced imitation and requires on-policy
 student-state aggregation next. No student checkpoint is promoted.
 
+V12 implements that closed-loop aggregation with persistent recurrent state,
+counterfactual camera/servo observations, exact latency-queue replay, and
+constrained-oracle relabeling:
+
+```bash
+aol-aggregate-gimbal-sequence-oracle
+```
+
+The [V12 report](docs/research_tracks/predictive_gimbal_servoing/on_policy_distillation_v12_experiment.md)
+shows that two aggregation rounds turn the teacher-forced actor's 4.37%
+critical-tracking regression into a 1.21% improvement and greatly improve
+smoothness/saturation. Global tracking and visibility nevertheless regress
+10.35%/10.83%, so the model is not promoted and the fresh test stays sealed.
+The next experiment must retain ordinary-state behavior while applying learned
+corrections only where the reference is failing.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:
