@@ -435,6 +435,19 @@ ceiling. V13 is therefore unpromoted. The next screen must start from the
 deployable analytical/midpoint-GRU V2.1 controller directly, then authorize
 distillation only if its constrained sequence oracle passes first.
 
+That ceiling-first test is V14:
+
+```bash
+aol-screen-gimbal-deployable-sequence-oracle
+```
+
+The [V14 report](docs/research_tracks/predictive_gimbal_servoing/deployable_sequence_oracle_v14_experiment.md)
+shows that constrained sequences around the frozen midpoint-GRU/V2.1 controller
+improve global/critical tracking by 4.60%/2.56%, visibility by 4.53%/0.03%,
+smoothness by 20.49%/42.33%, and saturation by 69.66%/64.51%. All eight ceiling
+checks pass. State-consistent, failure-gated residual distillation around this
+deployable reference is now authorized; the fresh test remains sealed.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:

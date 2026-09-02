@@ -93,6 +93,10 @@ from autonomous_observation_lab.gimbal_servoing.sequence_oracle_experiment impor
     SequenceOracleExperimentConfig,
     evaluate_sequence_oracle_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.deployable_sequence_oracle_experiment import (
+    DeployableSequenceOracleExperimentConfig,
+    evaluate_deployable_sequence_oracle_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.sequence_distillation_experiment import (
     SequenceDistillationExperimentConfig,
     evaluate_sequence_distillation_experiment,
@@ -764,6 +768,32 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
         "replayed_from_episode_start"
     ]
     json.dumps(sequence_oracle, allow_nan=False)
+
+    deployable_oracle = evaluate_deployable_sequence_oracle_experiment(
+        validation_path=validation_path,
+        base_checkpoint=base_checkpoint,
+        config=DeployableSequenceOracleExperimentConfig(
+            focus_start_index=0,
+            focus_steps=2,
+            batch_size=1,
+            maximum_episode_count=1,
+            minimum_episode_count=1,
+            oracle=PrivilegedSequenceOracleConfig(
+                focus_start_index=0,
+                focus_steps=2,
+                optimization_iterations=1,
+                blend_fractions=(0.0, 1.0),
+            ),
+        ),
+    )
+    assert deployable_oracle["dataset"]["fresh_test"] == {"opened": False}
+    assert deployable_oracle["reference_scope"][
+        "policy_inputs"
+    ] == "deployable_o2_only"
+    assert deployable_oracle["diagnostics"][
+        "plant_replay_maximum_angle_error_rad"
+    ] < 1e-7
+    json.dumps(deployable_oracle, allow_nan=False)
 
     distillation = evaluate_sequence_distillation_experiment(
         train_path=train_path,

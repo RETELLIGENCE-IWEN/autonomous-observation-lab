@@ -1,0 +1,441 @@
+{
+  "base_checkpoint": {
+    "metadata": {
+      "candidate": "midpoint_state_reference",
+      "experiment": "gimbal_midpoint_adapter_v7_replication_v1",
+      "test_opened": false,
+      "train_sha256": "da25df22053c802c4640dad692fe7e7c4fe73942667384543aaf1fa99534fafb",
+      "training_seed": 29,
+      "validation_sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+    },
+    "path": "artifacts/gimbal_midpoint_adapter_replication_checkpoints/gimbal_v7_midpoint_state_reference_seed_29.pt",
+    "sha256": "9e8177445c68e43453bf45fbb88beaaa9be2e573d2452e2a89dca689b6f0f11b"
+  },
+  "candidate": {
+    "critical": {
+      "command_residual_rmse_normalized": 0.14955561394204744,
+      "sample_count": 32,
+      "saturation_rmse_normalized": 0.4092532584811385,
+      "smoothness_rmse_normalized": 0.046182587599390874,
+      "tracking_rmse_normalized": 0.822593275118257,
+      "visibility_rmse_normalized": 0.1323858659447838
+    },
+    "global": {
+      "command_residual_rmse_normalized": 0.14388577456229457,
+      "sample_count": 768,
+      "saturation_rmse_normalized": 0.21205466304225604,
+      "smoothness_rmse_normalized": 0.04509260724554604,
+      "tracking_rmse_normalized": 0.9866631370129042,
+      "visibility_rmse_normalized": 0.6720288595995353
+    }
+  },
+  "config": {
+    "batch_size": 8,
+    "behavior_name": "privileged_oracle_position",
+    "criticality": {
+      "acceleration_full_capacity_fraction": 0.8,
+      "acceleration_onset_capacity_fraction": 0.2,
+      "acceleration_weight": 2.0,
+      "critical_weight_threshold": 5.0,
+      "detector_gap_weight": 1.0,
+      "joint_capacity_visibility_weight": 2.0,
+      "maximum_label_weight": 10.0,
+      "mechanically_reachable_only": true,
+      "normalize_mean_weight": true,
+      "rate_full_capacity_fraction": 0.9,
+      "rate_onset_capacity_fraction": 0.35,
+      "rate_weight": 1.0,
+      "reversal_weight": 3.0,
+      "visibility_full_fov_fraction": 0.9,
+      "visibility_onset_fov_fraction": 0.45,
+      "visibility_weight": 2.0,
+      "weighting_strength": 1.0
+    },
+    "device": "cpu",
+    "focus_start_index": 0,
+    "focus_steps": 16,
+    "maximum_episode_count": 48,
+    "minimum_episode_count": 24,
+    "minimum_tracking_improvement_fraction": 0.005,
+    "oracle": {
+      "blend_fractions": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+      ],
+      "focus_start_index": 0,
+      "focus_steps": 16,
+      "gradient_clip_norm": 5.0,
+      "learning_rate": 0.05,
+      "maximum_command_residual": 0.4,
+      "maximum_saturation_regression_absolute_mean": 0.0,
+      "maximum_saturation_regression_fraction": 0.05,
+      "maximum_smoothness_regression_absolute_mse": 0.0,
+      "maximum_smoothness_regression_fraction": 0.0,
+      "maximum_visibility_regression_absolute_mse": 0.0,
+      "maximum_visibility_regression_fraction": 0.0,
+      "optimization_iterations": 24,
+      "residual_weight": 0.005,
+      "saturation_weight": 0.01,
+      "smoothness_weight": 0.1,
+      "terminal_tracking_multiplier": 2.0,
+      "tracking_weight": 1.0,
+      "training_integration_period_s": 0.01,
+      "visibility_margin_fraction": 0.85,
+      "visibility_weight": 2.0
+    },
+    "zero_policy_embedding_dim": 8,
+    "zero_policy_hidden_dim": 8
+  },
+  "dataset": {
+    "criticality": {
+      "by_scenario": {
+        "aggressive_motion": {
+          "critical_label_count": 18654,
+          "critical_label_fraction": 0.38161286363078434,
+          "effective_weight_on_critical_fraction": 0.6377944982939139,
+          "valid_label_count": 48882
+        },
+        "dropout_noise": {
+          "critical_label_count": 4738,
+          "critical_label_fraction": 0.10348141353252086,
+          "effective_weight_on_critical_fraction": 0.26382010544011897,
+          "valid_label_count": 45786
+        },
+        "high_latency": {
+          "critical_label_count": 5885,
+          "critical_label_fraction": 0.12967124977965802,
+          "effective_weight_on_critical_fraction": 0.31051756378424067,
+          "valid_label_count": 45384
+        },
+        "nominal_combined": {
+          "critical_label_count": 5012,
+          "critical_label_fraction": 0.10795209787197381,
+          "effective_weight_on_critical_fraction": 0.274970361298064,
+          "valid_label_count": 46428
+        },
+        "slow_servo": {
+          "critical_label_count": 8481,
+          "critical_label_fraction": 0.19181707151580948,
+          "effective_weight_on_critical_fraction": 0.4149786803018339,
+          "valid_label_count": 44214
+        },
+        "travel_limit_recovery": {
+          "critical_label_count": 1722,
+          "critical_label_fraction": 0.0384357841167805,
+          "effective_weight_on_critical_fraction": 0.1582928396873459,
+          "valid_label_count": 44802
+        }
+      },
+      "component_active_fractions": {
+        "acceleration_risk": 0.5652060283996864,
+        "detector_gap": 0.19868165055028023,
+        "rate_risk": 0.4611682202282429,
+        "reversal": 0.1597917937102535,
+        "visibility_risk": 0.4023506693382118
+      },
+      "configuration": {
+        "acceleration_full_capacity_fraction": 0.8,
+        "acceleration_onset_capacity_fraction": 0.2,
+        "acceleration_weight": 2.0,
+        "critical_weight_threshold": 5.0,
+        "detector_gap_weight": 1.0,
+        "joint_capacity_visibility_weight": 2.0,
+        "maximum_label_weight": 10.0,
+        "mechanically_reachable_only": true,
+        "normalize_mean_weight": true,
+        "rate_full_capacity_fraction": 0.9,
+        "rate_onset_capacity_fraction": 0.35,
+        "rate_weight": 1.0,
+        "reversal_weight": 3.0,
+        "visibility_full_fov_fraction": 0.9,
+        "visibility_onset_fov_fraction": 0.45,
+        "visibility_weight": 2.0,
+        "weighting_strength": 1.0
+      },
+      "episode_count": 288,
+      "overall": {
+        "critical_label_count": 44492,
+        "critical_label_fraction": 0.1614978075906728,
+        "effective_weight_on_critical_fraction": 0.3931490392386551,
+        "valid_label_count": 275496
+      }
+    },
+    "fresh_test": {
+      "opened": false
+    },
+    "path": "artifacts/gimbal_midpoint_adapter_validation.npz",
+    "selected_behavior": "privileged_oracle_position",
+    "selected_episode_count": 48,
+    "sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+  },
+  "diagnostics": {
+    "evaluated_episode_windows": 48,
+    "improved_episode_fraction": 0.9375,
+    "mean_selected_blend_fraction": 0.6562500017074248,
+    "plant_replay_maximum_angle_error_rad": 0.0,
+    "reference_to_logged_privileged_action_rmse_normalized": 0.4102638489504285,
+    "zero_blend_fraction": 0.0625
+  },
+  "experiment": "gimbal_deployable_sequence_oracle_v14_development_v1",
+  "gate": {
+    "checks": {
+      "critical_saturation": true,
+      "critical_smoothness": true,
+      "critical_tracking": true,
+      "critical_visibility": true,
+      "global_saturation": true,
+      "global_smoothness": true,
+      "global_tracking": true,
+      "global_visibility": true
+    },
+    "passed": true,
+    "relative_changes": {
+      "critical_saturation_rmse_normalized": -0.6450735347989855,
+      "critical_smoothness_rmse_normalized": -0.4232520900426632,
+      "critical_tracking_rmse_normalized": -0.025550984389122178,
+      "critical_visibility_rmse_normalized": -0.0002948664308277671,
+      "global_saturation_rmse_normalized": -0.6966396698392694,
+      "global_smoothness_rmse_normalized": -0.204931559442885,
+      "global_tracking_rmse_normalized": -0.046014558861006805,
+      "global_visibility_rmse_normalized": -0.0452691981093839
+    }
+  },
+  "oracle_scope": {
+    "commands_before_focus_frozen": true,
+    "exact_blend_selection": true,
+    "future_target_bearing_is_privileged": true,
+    "reference_fallback_always_available": true,
+    "replayed_from_episode_start": true
+  },
+  "recommendation": "authorize_state_consistent_gated_distillation",
+  "reference": {
+    "critical": {
+      "command_residual_rmse_normalized": 0.0,
+      "sample_count": 32,
+      "saturation_rmse_normalized": 1.1530649264189297,
+      "smoothness_rmse_normalized": 0.08007413083266672,
+      "tracking_rmse_normalized": 0.8441624568757728,
+      "visibility_rmse_normalized": 0.1324249136064116
+    },
+    "global": {
+      "command_residual_rmse_normalized": 0.0,
+      "sample_count": 768,
+      "saturation_rmse_normalized": 0.6990190936629792,
+      "smoothness_rmse_normalized": 0.05671537813015072,
+      "tracking_rmse_normalized": 1.0342538727162294,
+      "visibility_rmse_normalized": 0.7038935564545973
+    }
+  },
+  "reference_scope": {
+    "counterfactual_observation_feedback": true,
+    "persistent_command_latency_queue": true,
+    "policy_inputs": "deployable_o2_only",
+    "position_adapter": "v2_1_hardware_aware",
+    "recurrent_state_from_episode_start": true,
+    "state_predictor": "frozen_hard_midpoint_gru",
+    "trainable_reference_parameters": 0
+  },
+  "runs": [
+    {
+      "episode_indices": [
+        5,
+        11,
+        17,
+        23,
+        29,
+        35,
+        41,
+        47
+      ],
+      "improved_episode_count": 8,
+      "mean_selected_blend_fraction": 0.8000000715255737,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 1.7189931869506836,
+        "residual_rms": 0.23865006864070892,
+        "saturation_mean": 0.12692080438137054,
+        "smoothness_mse": 0.0035110791213810444,
+        "tracking_mse": 0.9162976145744324,
+        "visibility_mse": 0.3753163814544678
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 2.2332684993743896,
+        "residual_rms": 0.0,
+        "saturation_mean": 1.4343160390853882,
+        "smoothness_mse": 0.004706661682575941,
+        "tracking_mse": 1.1616313457489014,
+        "visibility_mse": 0.48956796526908875
+      }
+    },
+    {
+      "episode_indices": [
+        53,
+        59,
+        65,
+        71,
+        77,
+        83,
+        89,
+        95
+      ],
+      "improved_episode_count": 6,
+      "mean_selected_blend_fraction": 0.7124999761581421,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 0.24735985696315765,
+        "residual_rms": 0.1810605376958847,
+        "saturation_mean": 0.06794779002666473,
+        "smoothness_mse": 0.002554104197770357,
+        "tracking_mse": 0.2249741405248642,
+        "visibility_mse": 0.008882124908268452
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 0.33960604667663574,
+        "residual_rms": 0.0,
+        "saturation_mean": 0.14265699684619904,
+        "smoothness_mse": 0.001813444891013205,
+        "tracking_mse": 0.29687440395355225,
+        "visibility_mse": 0.015528232790529728
+      }
+    },
+    {
+      "episode_indices": [
+        101,
+        107,
+        113,
+        119,
+        125,
+        131,
+        137,
+        143
+      ],
+      "improved_episode_count": 8,
+      "mean_selected_blend_fraction": 0.5625,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 6.365747928619385,
+        "residual_rms": 0.22341324388980865,
+        "saturation_mean": 0.09700031578540802,
+        "smoothness_mse": 0.0036386677529662848,
+        "tracking_mse": 2.903782844543457,
+        "visibility_mse": 1.656541347503662
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 7.3352274894714355,
+        "residual_rms": 0.0,
+        "saturation_mean": 0.36834025382995605,
+        "smoothness_mse": 0.003091223072260618,
+        "tracking_mse": 3.2839787006378174,
+        "visibility_mse": 1.926044225692749
+      }
+    },
+    {
+      "episode_indices": [
+        149,
+        155,
+        161,
+        167,
+        173,
+        179,
+        185,
+        191
+      ],
+      "improved_episode_count": 7,
+      "mean_selected_blend_fraction": 0.5,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 0.34493669867515564,
+        "residual_rms": 0.23312026262283325,
+        "saturation_mean": 0.12881529331207275,
+        "smoothness_mse": 0.0037498315796256065,
+        "tracking_mse": 0.2928982079029083,
+        "visibility_mse": 0.01957566663622856
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 0.5409573912620544,
+        "residual_rms": 0.0,
+        "saturation_mean": 0.3844371736049652,
+        "smoothness_mse": 0.0020559486001729965,
+        "tracking_mse": 0.4214782416820526,
+        "visibility_mse": 0.04540826007723808
+      }
+    },
+    {
+      "episode_indices": [
+        197,
+        203,
+        209,
+        215,
+        221,
+        227,
+        233,
+        239
+      ],
+      "improved_episode_count": 8,
+      "mean_selected_blend_fraction": 0.7124999761581421,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 0.11844140291213989,
+        "residual_rms": 0.18095824122428894,
+        "saturation_mean": 0.0773930475115776,
+        "smoothness_mse": 0.004070213530212641,
+        "tracking_mse": 0.10853633284568787,
+        "visibility_mse": 0.0035665472969412804
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 0.1670096516609192,
+        "residual_rms": 0.0,
+        "saturation_mean": 0.7031434774398804,
+        "smoothness_mse": 0.0046749715693295,
+        "tracking_mse": 0.14502646028995514,
+        "visibility_mse": 0.0035614510998129845
+      }
+    },
+    {
+      "episode_indices": [
+        245,
+        251,
+        257,
+        263,
+        269,
+        275,
+        281,
+        287
+      ],
+      "improved_episode_count": 8,
+      "mean_selected_blend_fraction": 0.6500000357627869,
+      "optimization_final": {
+        "iteration": 24,
+        "loss": 1.7864112854003906,
+        "residual_rms": 0.20381855964660645,
+        "saturation_mean": 0.06440655887126923,
+        "smoothness_mse": 0.004296456929296255,
+        "tracking_mse": 0.9284504652023315,
+        "visibility_mse": 0.4087545871734619
+      },
+      "optimization_initial": {
+        "iteration": 1,
+        "loss": 2.154268503189087,
+        "residual_rms": 0.0,
+        "saturation_mean": 0.05768376216292381,
+        "smoothness_mse": 0.0029575545340776443,
+        "tracking_mse": 1.1076085567474365,
+        "visibility_mse": 0.49414122104644775
+      }
+    }
+  ]
+}
