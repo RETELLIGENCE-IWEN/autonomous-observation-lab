@@ -104,6 +104,10 @@ from autonomous_observation_lab.gimbal_servoing.deployable_residual_distillation
 from autonomous_observation_lab.gimbal_servoing.deployable_constrained_finetuning_experiment import (
     DeployableConstrainedFinetuningConfig,
 )
+from autonomous_observation_lab.gimbal_servoing.deployable_authority_distillation_experiment import (
+    DeployableAuthorityDistillationConfig,
+    evaluate_deployable_authority_distillation_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.sequence_distillation_experiment import (
     SequenceDistillationExperimentConfig,
     evaluate_sequence_distillation_experiment,
@@ -251,6 +255,15 @@ def test_deployable_constrained_finetuning_validates_research_arms():
         replace(config, visibility_constraint_scopes=("unknown",))
     with pytest.raises(ValueError, match="authority scales"):
         replace(config, privileged_scenario_authority_scales=(-0.1,))
+
+
+def test_deployable_authority_distillation_validates_oracle_grid():
+    config = DeployableAuthorityDistillationConfig()
+    assert config.initial_distillation_batch_size == 16
+    with pytest.raises(ValueError, match="begin with zero"):
+        replace(config, authority_scales=(0.1, 1.0))
+    with pytest.raises(ValueError, match="strictly increasing"):
+        replace(config, authority_scales=(0.0, 0.5, 0.5, 1.0))
 
 
 def test_control_aware_development_keeps_test_closed(tmp_path):
@@ -848,6 +861,47 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
         "reference_command_reconstruction_maximum_error"
     ] < 1e-7
     json.dumps(deployable_distillation, allow_nan=False)
+
+    authority_distillation = (
+        evaluate_deployable_authority_distillation_experiment(
+            train_path=train_path,
+            validation_path=validation_path,
+            base_checkpoint=base_checkpoint,
+            checkpoint_directory=tmp_path / "deployable_authority_outputs",
+            config=DeployableAuthorityDistillationConfig(
+                sequence_steps=2,
+                initial_distillation_episode_count=1,
+                authority_training_episode_count=1,
+                validation_episode_count=1,
+                oracle_batch_size=1,
+                rollout_batch_size=1,
+                initial_distillation_batch_size=1,
+                initial_distillation_epochs=1,
+                authority_scales=(0.0, 1.0),
+                router_epochs=1,
+                selection_epoch_interval=1,
+                router_batch_size=1,
+                router_learning_rates=(1e-3,),
+                unsafe_episode_weights=(1.0,),
+                oracle=PrivilegedSequenceOracleConfig(
+                    focus_start_index=0,
+                    focus_steps=2,
+                    optimization_iterations=1,
+                    blend_fractions=(0.0, 1.0),
+                ),
+            ),
+        )
+    )
+    assert authority_distillation["datasets"]["fresh_test"] == {
+        "opened": False
+    }
+    assert authority_distillation["architecture"][
+        "state_consistent_authority_replay"
+    ]
+    assert authority_distillation["authority_oracle"]["training"][
+        "maximum_tensor_replay_error"
+    ] < 1e-7
+    json.dumps(authority_distillation, allow_nan=False)
 
     distillation = evaluate_sequence_distillation_experiment(
         train_path=train_path,

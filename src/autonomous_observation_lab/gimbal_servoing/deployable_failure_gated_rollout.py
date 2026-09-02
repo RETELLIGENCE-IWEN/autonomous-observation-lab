@@ -56,7 +56,7 @@ def rollout_deployable_failure_gated_policy(
     prediction_horizons_s: tuple[float, ...],
     adapter: AdaptivePositionControllerConfig,
     warmup_features: torch.Tensor | None = None,
-    residual_scale: float = 1.0,
+    residual_scale: float | torch.Tensor = 1.0,
     visibility_shield_strength: float = 0.0,
     integration_period_override_s: float | None = None,
     visibility_margin_fraction: float = 0.85,
@@ -86,7 +86,23 @@ def rollout_deployable_failure_gated_policy(
             )
     if not 0.0 < visibility_margin_fraction <= 1.0:
         raise ValueError("visibility margin fraction must be in (0, 1]")
-    if not math.isfinite(residual_scale) or not 0.0 <= residual_scale <= 1.0:
+    if isinstance(residual_scale, torch.Tensor):
+        if residual_scale.shape not in {
+            (batch_size,),
+            (batch_size, step_count),
+        }:
+            raise ValueError("deployable gated residual-scale shape is invalid")
+        if torch.any(~torch.isfinite(residual_scale)) or torch.any(
+            (residual_scale < 0.0) | (residual_scale > 1.0)
+        ):
+            raise ValueError("deployable gated residual scale must be in [0, 1]")
+        residual_scale = residual_scale.to(
+            device=logged_features.device,
+            dtype=logged_features.dtype,
+        )
+    elif not math.isfinite(residual_scale) or not (
+        0.0 <= residual_scale <= 1.0
+    ):
         raise ValueError("deployable gated residual scale must be in [0, 1]")
     if not math.isfinite(visibility_shield_strength) or not (
         0.0 <= visibility_shield_strength <= 1.0
@@ -177,7 +193,13 @@ def rollout_deployable_failure_gated_policy(
                 correction_hidden,
             )
         )
-        residual = residual_scale * residual
+        step_residual_scale = (
+            residual_scale[:, time_index]
+            if isinstance(residual_scale, torch.Tensor)
+            and residual_scale.ndim == 2
+            else residual_scale
+        )
+        residual = step_residual_scale * residual
         minimum = context.servo_min_angle_rad[:, time_index]
         maximum = context.servo_max_angle_rad[:, time_index]
         base_position = base_command * torch.where(

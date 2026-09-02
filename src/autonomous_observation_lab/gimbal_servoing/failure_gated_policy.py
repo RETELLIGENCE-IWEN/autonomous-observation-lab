@@ -490,6 +490,21 @@ class HardwareConditionedResidualAuthorityCalibrator(nn.Module):
             math.log(initial_fraction / (1.0 - initial_fraction)),
         )
 
+    def authority(
+        self,
+        hardware: torch.Tensor,
+        evidence: torch.Tensor,
+    ) -> torch.Tensor:
+        if hardware.ndim < 2 or hardware.shape[-1] != HARDWARE_FEATURE_COUNT:
+            raise ValueError("authority calibrator hardware shape is invalid")
+        if evidence.shape != hardware.shape[:-1] + (FAILURE_EVIDENCE_COUNT,):
+            raise ValueError("authority calibrator evidence shape is invalid")
+        return self.config.maximum_authority * torch.sigmoid(
+            self.authority_head(
+                torch.cat((hardware, evidence), dim=-1)
+            ).squeeze(-1)
+        )
+
     def forward_step(
         self,
         feature: torch.Tensor,
@@ -515,9 +530,7 @@ class HardwareConditionedResidualAuthorityCalibrator(nn.Module):
             base_command_normalized,
             hidden,
         )
-        authority = self.config.maximum_authority * torch.sigmoid(
-            self.authority_head(torch.cat((hardware, evidence), dim=-1)).squeeze(-1)
-        )
+        authority = self.authority(hardware, evidence)
         residual = authority * base_residual
         command = torch.clamp(
             base_command_normalized + residual,

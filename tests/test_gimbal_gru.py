@@ -901,6 +901,73 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
         deployable_rollout.residual_normalized,
         torch.zeros_like(deployable_rollout.residual_normalized),
     )
+    with torch.no_grad():
+        deployable_gated.residual_head[-1].bias.fill_(0.5)
+    scalar_authority_rollout = rollout_deployable_failure_gated_policy(
+        model,
+        deployable_gated,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        warmup_features=warmup,
+        residual_scale=1.0,
+    )
+    episode_authority_rollout = rollout_deployable_failure_gated_policy(
+        model,
+        deployable_gated,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        warmup_features=warmup,
+        residual_scale=torch.ones(dataset.episode_count),
+    )
+    for field in fields(scalar_authority_rollout):
+        torch.testing.assert_close(
+            getattr(episode_authority_rollout, field.name),
+            getattr(scalar_authority_rollout, field.name),
+        )
+    zero_step_authority_rollout = rollout_deployable_failure_gated_policy(
+        model,
+        deployable_gated,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        warmup_features=warmup,
+        residual_scale=torch.zeros(dataset.episode_count, step_count),
+    )
+    torch.testing.assert_close(
+        zero_step_authority_rollout.residual_normalized,
+        torch.zeros_like(zero_step_authority_rollout.residual_normalized),
+    )
+    with pytest.raises(ValueError, match="residual-scale shape"):
+        rollout_deployable_failure_gated_policy(
+            model,
+            deployable_gated,
+            logged,
+            target_bearing,
+            time_s,
+            capture_source,
+            context,
+            window.sequence_mask,
+            prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+            adapter=adapter,
+            residual_scale=torch.ones(step_count),
+        )
     calibrated_base = FailureGatedCommandResidualPolicy(
         FailureGatedPositionPolicyConfig(hidden_dim=8, embedding_dim=8)
     )
