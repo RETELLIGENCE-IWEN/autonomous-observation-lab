@@ -97,6 +97,10 @@ from autonomous_observation_lab.gimbal_servoing.deployable_sequence_oracle_exper
     DeployableSequenceOracleExperimentConfig,
     evaluate_deployable_sequence_oracle_experiment,
 )
+from autonomous_observation_lab.gimbal_servoing.deployable_residual_distillation_experiment import (
+    DeployableResidualDistillationConfig,
+    evaluate_deployable_residual_distillation_experiment,
+)
 from autonomous_observation_lab.gimbal_servoing.sequence_distillation_experiment import (
     SequenceDistillationExperimentConfig,
     evaluate_sequence_distillation_experiment,
@@ -794,6 +798,43 @@ def test_counterfactual_seed_diagnostic_keeps_test_closed(tmp_path):
         "plant_replay_maximum_angle_error_rad"
     ] < 1e-7
     json.dumps(deployable_oracle, allow_nan=False)
+
+    deployable_distillation = (
+        evaluate_deployable_residual_distillation_experiment(
+            train_path=train_path,
+            validation_path=validation_path,
+            base_checkpoint=base_checkpoint,
+            checkpoint_directory=tmp_path / "deployable_residual_outputs",
+            config=DeployableResidualDistillationConfig(
+                sequence_steps=2,
+                training_episode_count=1,
+                validation_episode_count=1,
+                oracle_batch_size=1,
+                rollout_batch_size=1,
+                epochs=1,
+                selection_epoch_interval=1,
+                batch_size=1,
+                ordinary_trust_region_weights=(1.0,),
+                deployment_residual_scales=(1.0,),
+                oracle=PrivilegedSequenceOracleConfig(
+                    focus_start_index=0,
+                    focus_steps=2,
+                    optimization_iterations=1,
+                    blend_fractions=(0.0, 1.0),
+                ),
+            ),
+        )
+    )
+    assert deployable_distillation["datasets"]["fresh_test"] == {
+        "opened": False
+    }
+    assert deployable_distillation["architecture"][
+        "base_midpoint_gru_frozen"
+    ]
+    assert deployable_distillation["oracle_training_data"][
+        "reference_command_reconstruction_maximum_error"
+    ] < 1e-7
+    json.dumps(deployable_distillation, allow_nan=False)
 
     distillation = evaluate_sequence_distillation_experiment(
         train_path=train_path,

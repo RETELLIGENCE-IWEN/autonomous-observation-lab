@@ -73,11 +73,18 @@ from autonomous_observation_lab.gimbal_servoing.multi_command_policy import (
     rollout_counterfactual_window,
 )
 from autonomous_observation_lab.gimbal_servoing.failure_gated_policy import (
+    FailureGatedCommandResidualPolicy,
     FailureGatedPositionCorrectionPolicy,
     FailureGatedPositionPolicyConfig,
 )
 from autonomous_observation_lab.gimbal_servoing.failure_gated_rollout import (
     rollout_failure_gated_position_policy,
+)
+from autonomous_observation_lab.gimbal_servoing.deployable_reference import (
+    deployable_position_commands_from_features,
+)
+from autonomous_observation_lab.gimbal_servoing.deployable_failure_gated_rollout import (
+    rollout_deployable_failure_gated_policy,
 )
 from autonomous_observation_lab.gimbal_servoing.on_policy_distillation import (
     rollout_counterfactual_position_commands,
@@ -815,6 +822,46 @@ def test_counterfactual_window_is_causal_and_updates_servo_features():
     )
     assert torch.any(
         direct.command_normalized[:, 0] != rollout.command_normalized[:, 0]
+    )
+
+    with torch.no_grad():
+        warmed_hidden = model(warmup).hidden
+    reconstructed_reference = deployable_position_commands_from_features(
+        model,
+        rollout.synthetic_features,
+        context,
+        window.sequence_mask,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        initial_hidden=warmed_hidden,
+    )
+    torch.testing.assert_close(
+        reconstructed_reference.command_normalized,
+        rollout.command_normalized,
+    )
+    deployable_gated = FailureGatedCommandResidualPolicy(
+        FailureGatedPositionPolicyConfig(hidden_dim=8, embedding_dim=8)
+    )
+    deployable_rollout = rollout_deployable_failure_gated_policy(
+        model,
+        deployable_gated,
+        logged,
+        target_bearing,
+        time_s,
+        capture_source,
+        context,
+        window.sequence_mask,
+        prediction_horizons_s=dataset.manifest.prediction_horizons_s,
+        adapter=adapter,
+        warmup_features=warmup,
+    )
+    torch.testing.assert_close(
+        deployable_rollout.command_normalized,
+        rollout.command_normalized,
+    )
+    torch.testing.assert_close(
+        deployable_rollout.residual_normalized,
+        torch.zeros_like(deployable_rollout.residual_normalized),
     )
 
     actor = CausalHardwareConditionedPositionPolicy(

@@ -1,0 +1,3066 @@
+{
+  "architecture": {
+    "base_midpoint_gru_frozen": true,
+    "direct_command_residual_is_bounded": true,
+    "exact_counterfactual_selection": true,
+    "gate_inputs_are_deployable": true,
+    "hardware_conditioned": true,
+    "oracle_labels_are_state_consistent": true,
+    "reference_retention_records": true,
+    "v2_1_position_adapter_frozen": true
+  },
+  "arms": [
+    {
+      "checkpoint_candidates": [
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5717223542340957,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.13993667996495263,
+              "critical_smoothness_rmse_normalized": -0.1115204458159289,
+              "critical_tracking_rmse_normalized": 0.012397540147854214,
+              "critical_visibility_rmse_normalized": 0.015350969670817838,
+              "global_saturation_rmse_normalized": -0.14320408841266385,
+              "global_smoothness_rmse_normalized": -0.13143514305743143,
+              "global_tracking_rmse_normalized": 0.0016002780442754272,
+              "global_visibility_rmse_normalized": 0.0012370830956314194
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.12641841173171997,
+          "mean_absolute_residual_normalized": 0.03852798417210579,
+          "mean_gate_probability": 0.4232254922389984,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9917088953745338,
+              "smoothness_rmse_normalized": 0.07114422468323482,
+              "tracking_rmse_normalized": 0.8546279537790966,
+              "visibility_rmse_normalized": 0.1344577617610458
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5989167129872558,
+              "smoothness_rmse_normalized": 0.049260984886336935,
+              "tracking_rmse_normalized": 1.035908935214427,
+              "visibility_rmse_normalized": 0.7047643412375464
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5870107830775377,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.13993386524519247,
+              "critical_smoothness_rmse_normalized": -0.10352867656169007,
+              "critical_tracking_rmse_normalized": 0.011684374428881261,
+              "critical_visibility_rmse_normalized": 0.015151091968036434,
+              "global_saturation_rmse_normalized": -0.14130334733494931,
+              "global_smoothness_rmse_normalized": -0.13053113270799865,
+              "global_tracking_rmse_normalized": 0.0015301410971801932,
+              "global_visibility_rmse_normalized": 0.0012368027420990302
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.12641841173171997,
+          "mean_absolute_residual_normalized": 0.03818220645189285,
+          "mean_gate_probability": 0.423196941614151,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9917121409293191,
+              "smoothness_rmse_normalized": 0.07178415862967467,
+              "tracking_rmse_normalized": 0.8540259260825236,
+              "visibility_rmse_normalized": 0.13443129297405026
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6002453673180119,
+              "smoothness_rmse_normalized": 0.049312256175757116,
+              "tracking_rmse_normalized": 1.0358363958074628,
+              "visibility_rmse_normalized": 0.7047641438984986
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5863652907888075,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.13902717090109828,
+              "critical_smoothness_rmse_normalized": -0.0852018504615959,
+              "critical_tracking_rmse_normalized": 0.011104065720435319,
+              "critical_visibility_rmse_normalized": 0.01499371485947476,
+              "global_saturation_rmse_normalized": -0.13963201743570208,
+              "global_smoothness_rmse_normalized": -0.12861571669026495,
+              "global_tracking_rmse_normalized": 0.0014626328921367726,
+              "global_visibility_rmse_normalized": 0.001236562439008937
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.12641841173171997,
+          "mean_absolute_residual_normalized": 0.03789263591170311,
+          "mean_gate_probability": 0.4231768548488617,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9927576184255428,
+              "smoothness_rmse_normalized": 0.07325166323082788,
+              "tracking_rmse_normalized": 0.8535360512809839,
+              "visibility_rmse_normalized": 0.13441045232446042
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6014136588516632,
+              "smoothness_rmse_normalized": 0.04942088972078997,
+              "tracking_rmse_normalized": 1.0357665751870637,
+              "visibility_rmse_normalized": 0.7047639747506995
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.585932872502046,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.21067022439765304,
+              "critical_smoothness_rmse_normalized": -0.11970886960417704,
+              "critical_tracking_rmse_normalized": 0.018073913508085848,
+              "critical_visibility_rmse_normalized": 0.026375006233491094,
+              "global_saturation_rmse_normalized": -0.22457151471098113,
+              "global_smoothness_rmse_normalized": -0.1692195634894259,
+              "global_tracking_rmse_normalized": -0.00012995188528741597,
+              "global_visibility_rmse_normalized": -0.0025098033568787814
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.17171265184879303,
+          "mean_absolute_residual_normalized": 0.05346941947937012,
+          "mean_gate_probability": 0.42596232891082764,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9101485223401153,
+              "smoothness_rmse_normalized": 0.07048854379665813,
+              "tracking_rmse_normalized": 0.8594197348308684,
+              "visibility_rmse_normalized": 0.1359176188213779
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.542039327318436,
+              "smoothness_rmse_normalized": 0.04711802716825538,
+              "tracking_rmse_normalized": 1.034119438263099,
+              "visibility_rmse_normalized": 0.7021269319695729
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.586809325045544,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.21064415568606532,
+              "critical_smoothness_rmse_normalized": -0.0963586243533121,
+              "critical_tracking_rmse_normalized": 0.016817767471640765,
+              "critical_visibility_rmse_normalized": 0.025722625507329955,
+              "global_saturation_rmse_normalized": -0.22146284871061783,
+              "global_smoothness_rmse_normalized": -0.166311160270615,
+              "global_tracking_rmse_normalized": -0.00027983732532999017,
+              "global_visibility_rmse_normalized": -0.0025108485818990944
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.17171265184879303,
+          "mean_absolute_residual_normalized": 0.052826572209596634,
+          "mean_gate_probability": 0.4258669316768646,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9101785812585348,
+              "smoothness_rmse_normalized": 0.07235829430100345,
+              "tracking_rmse_normalized": 0.8583593435574779,
+              "visibility_rmse_normalized": 0.13583122736179803
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5442123442499285,
+              "smoothness_rmse_normalized": 0.04728297835855514,
+              "tracking_rmse_normalized": 1.03396441867095,
+              "visibility_rmse_normalized": 0.7021261962424056
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5856448601452904,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.20195057905604163,
+              "critical_smoothness_rmse_normalized": -0.047294093107122404,
+              "critical_tracking_rmse_normalized": 0.016114124827719456,
+              "critical_visibility_rmse_normalized": 0.02530719208818555,
+              "global_saturation_rmse_normalized": -0.21722076797758583,
+              "global_smoothness_rmse_normalized": -0.1607257967202782,
+              "global_tracking_rmse_normalized": -0.00035958226755272715,
+              "global_visibility_rmse_normalized": -0.0025114917978406037
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.17171265184879303,
+          "mean_absolute_residual_normalized": 0.05234532058238983,
+          "mean_gate_probability": 0.4258076250553131,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9202028400262071,
+              "smoothness_rmse_normalized": 0.07628709380856459,
+              "tracking_rmse_normalized": 0.8577653548829515,
+              "visibility_rmse_normalized": 0.13577621362825426
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5471776397356961,
+              "smoothness_rmse_normalized": 0.047599754368128404,
+              "tracking_rmse_normalized": 1.033881942158116,
+              "visibility_rmse_normalized": 0.7021257434868425
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5853116724862875,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.15417716610908194,
+              "critical_smoothness_rmse_normalized": -0.10902982408180928,
+              "critical_tracking_rmse_normalized": 0.00765458276245079,
+              "critical_visibility_rmse_normalized": 0.009690102143683266,
+              "global_saturation_rmse_normalized": -0.09273301046657845,
+              "global_smoothness_rmse_normalized": -0.10234472098793246,
+              "global_tracking_rmse_normalized": 0.00011099184021290398,
+              "global_visibility_rmse_normalized": -0.005769476054033662
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.19904525578022003,
+          "mean_absolute_residual_normalized": 0.09164640307426453,
+          "mean_gate_probability": 0.8308825492858887,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9752886894959534,
+              "smoothness_rmse_normalized": 0.07134365904435062,
+              "tracking_rmse_normalized": 0.8506241274120779,
+              "visibility_rmse_normalized": 0.13370812188275716
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6341969608217622,
+              "smoothness_rmse_normalized": 0.050910859193878145,
+              "tracking_rmse_normalized": 1.034368635236783,
+              "visibility_rmse_normalized": 0.6998324693294581
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.570641366505332,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.15417716610908194,
+              "critical_smoothness_rmse_normalized": -0.10902982408180928,
+              "critical_tracking_rmse_normalized": 0.00765458276245079,
+              "critical_visibility_rmse_normalized": 0.009690102143683266,
+              "global_saturation_rmse_normalized": -0.08937720247145198,
+              "global_smoothness_rmse_normalized": -0.10158351752789985,
+              "global_tracking_rmse_normalized": 4.353642035370697e-05,
+              "global_visibility_rmse_normalized": -0.005769476054033662
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.19904525578022003,
+          "mean_absolute_residual_normalized": 0.09111287444829941,
+          "mean_gate_probability": 0.830796480178833,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9752886894959534,
+              "smoothness_rmse_normalized": 0.07134365904435062,
+              "tracking_rmse_normalized": 0.8506241274120779,
+              "visibility_rmse_normalized": 0.13370812188275716
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6365427347297329,
+              "smoothness_rmse_normalized": 0.050954031136468694,
+              "tracking_rmse_normalized": 1.0342988692096635,
+              "visibility_rmse_normalized": 0.6998324693294581
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5705993754115513,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.15417716610908194,
+              "critical_smoothness_rmse_normalized": -0.10902982408180928,
+              "critical_tracking_rmse_normalized": 0.00765458276245079,
+              "critical_visibility_rmse_normalized": 0.009690102143683266,
+              "global_saturation_rmse_normalized": -0.08605249036773022,
+              "global_smoothness_rmse_normalized": -0.10019702428328026,
+              "global_tracking_rmse_normalized": -1.0252879852234997e-05,
+              "global_visibility_rmse_normalized": -0.005769476054033662
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.19904525578022003,
+          "mean_absolute_residual_normalized": 0.09066220372915268,
+          "mean_gate_probability": 0.8307426571846008,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9752886894959534,
+              "smoothness_rmse_normalized": 0.07134365904435062,
+              "tracking_rmse_normalized": 0.8506241274120779,
+              "visibility_rmse_normalized": 0.13370812188275716
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6388667720154628,
+              "smoothness_rmse_normalized": 0.051032666626060846,
+              "tracking_rmse_normalized": 1.034243237419294,
+              "visibility_rmse_normalized": 0.6998324693294581
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.5705748475429986,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.33558820394440936,
+              "critical_smoothness_rmse_normalized": -0.24134743868859476,
+              "critical_tracking_rmse_normalized": 0.01908707223600148,
+              "critical_visibility_rmse_normalized": 0.019504031806223843,
+              "global_saturation_rmse_normalized": -0.08545630036018492,
+              "global_smoothness_rmse_normalized": -0.03344714901198431,
+              "global_tracking_rmse_normalized": -0.01932708791211657,
+              "global_visibility_rmse_normalized": -0.03817004853219985
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25762274861335754,
+          "mean_absolute_residual_normalized": 0.12687848508358002,
+          "mean_gate_probability": 0.8905852437019348,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7661099746856425,
+              "smoothness_rmse_normalized": 0.06074844156432682,
+              "tracking_rmse_normalized": 0.8602750053507529,
+              "visibility_rmse_normalized": 0.13500773064457608
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6392835202221313,
+              "smoothness_rmse_normalized": 0.05481841108788358,
+              "tracking_rmse_normalized": 1.0142647265815592,
+              "visibility_rmse_normalized": 0.6770259148142244
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.516556543317355,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3347135095050139,
+              "critical_smoothness_rmse_normalized": -0.23507510426103284,
+              "critical_tracking_rmse_normalized": 0.018066396042186517,
+              "critical_visibility_rmse_normalized": 0.019073920854334014,
+              "global_saturation_rmse_normalized": -0.08854540051850013,
+              "global_smoothness_rmse_normalized": -0.032764909500338835,
+              "global_tracking_rmse_normalized": -0.019570345791969257,
+              "global_visibility_rmse_normalized": -0.03817067390352091
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25762274861335754,
+          "mean_absolute_residual_normalized": 0.12586522102355957,
+          "mean_gate_probability": 0.8904510140419006,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7671185542123775,
+              "smoothness_rmse_normalized": 0.06125069326803953,
+              "tracking_rmse_normalized": 0.8594133888686901,
+              "visibility_rmse_normalized": 0.13495077324006524
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6371241801880747,
+              "smoothness_rmse_normalized": 0.05485710456022868,
+              "tracking_rmse_normalized": 1.0140131361848466,
+              "visibility_rmse_normalized": 0.6770254746193748
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5153610423571244,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3286784145656516,
+              "critical_smoothness_rmse_normalized": -0.21181035157531425,
+              "critical_tracking_rmse_normalized": 0.017459968590137764,
+              "critical_visibility_rmse_normalized": 0.01877594110232006,
+              "global_saturation_rmse_normalized": -0.08277019486336668,
+              "global_smoothness_rmse_normalized": -0.028342823506207093,
+              "global_tracking_rmse_normalized": -0.019747078042422372,
+              "global_visibility_rmse_normalized": -0.038171174200870794
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25762274861335754,
+          "mean_absolute_residual_normalized": 0.12503758072853088,
+          "mean_gate_probability": 0.8903417587280273,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7740774108411563,
+              "smoothness_rmse_normalized": 0.0631135980298634,
+              "tracking_rmse_normalized": 0.858901465605439,
+              "visibility_rmse_normalized": 0.13491131329793418
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.641161159287788,
+              "smoothness_rmse_normalized": 0.05510790484253553,
+              "tracking_rmse_normalized": 1.0138303501758985,
+              "visibility_rmse_normalized": 0.6770251224632889
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.5148384491839018,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.014236632521095638,
+              "critical_smoothness_rmse_normalized": -0.1282962534535076,
+              "critical_tracking_rmse_normalized": -4.847212336112072e-05,
+              "critical_visibility_rmse_normalized": 0.0013234278098144259,
+              "global_saturation_rmse_normalized": -0.04728854940639726,
+              "global_smoothness_rmse_normalized": -0.16397957820263076,
+              "global_tracking_rmse_normalized": -0.013219428152324575,
+              "global_visibility_rmse_normalized": -0.0239005341488856
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.1881903111934662,
+          "mean_absolute_residual_normalized": 0.06438877433538437,
+          "mean_gate_probability": 0.7574806809425354,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1366492181335535,
+              "smoothness_rmse_normalized": 0.06980091653147136,
+              "tracking_rmse_normalized": 0.8441214979865381,
+              "visibility_rmse_normalized": 0.13260016577898712
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6659635074095218,
+              "smoothness_rmse_normalized": 0.047415214918777635,
+              "tracking_rmse_normalized": 1.020581597150697,
+              "visibility_rmse_normalized": 0.6870701341843689
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.522424943283067,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.02497320869111508,
+              "critical_smoothness_rmse_normalized": -0.12451671147640786,
+              "critical_tracking_rmse_normalized": -0.00027250324639460644,
+              "critical_visibility_rmse_normalized": 0.0013209880631428472,
+              "global_saturation_rmse_normalized": -0.0466837593907532,
+              "global_smoothness_rmse_normalized": -0.16004436308944658,
+              "global_tracking_rmse_normalized": -0.013267954495519985,
+              "global_visibility_rmse_normalized": -0.023900616312738654
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.1881903111934662,
+          "mean_absolute_residual_normalized": 0.0635758489370346,
+          "mean_gate_probability": 0.7570107579231262,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1242692481410643,
+              "smoothness_rmse_normalized": 0.07010356005585211,
+              "tracking_rmse_normalized": 0.8439323793323847,
+              "visibility_rmse_normalized": 0.13259984269575134
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6663862671861716,
+              "smoothness_rmse_normalized": 0.04763840213463786,
+              "tracking_rmse_normalized": 1.0205314085938333,
+              "visibility_rmse_normalized": 0.6870700763497614
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.522241684908154,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.03375643252242666,
+              "critical_smoothness_rmse_normalized": -0.11884732042116197,
+              "critical_tracking_rmse_normalized": -0.00046026627395467923,
+              "critical_visibility_rmse_normalized": 0.0013186543868510814,
+              "global_saturation_rmse_normalized": -0.045672409634560984,
+              "global_smoothness_rmse_normalized": -0.15640668599805863,
+              "global_tracking_rmse_normalized": -0.013304812017223777,
+              "global_visibility_rmse_normalized": -0.023900616312738654
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.1881903111934662,
+          "mean_absolute_residual_normalized": 0.0630577877163887,
+          "mean_gate_probability": 0.7566032409667969,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.114141620324984,
+              "smoothness_rmse_normalized": 0.07055753159537947,
+              "tracking_rmse_normalized": 0.843773876841342,
+              "visibility_rmse_normalized": 0.1325995336588762
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6670932199895958,
+              "smoothness_rmse_normalized": 0.04784471436888024,
+              "tracking_rmse_normalized": 1.020493288560423,
+              "visibility_rmse_normalized": 0.6870700763497614
+            }
+          },
+          "residual_scale": 0.75,
+          "selection_score": 3.522117542215362,
+          "visibility_shield_strength": 1.0
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3236749225609302,
+              "critical_smoothness_rmse_normalized": -0.21291285782410685,
+              "critical_tracking_rmse_normalized": -0.016829124324093225,
+              "critical_visibility_rmse_normalized": 0.003023228946368084,
+              "global_saturation_rmse_normalized": -0.11503146082636295,
+              "global_smoothness_rmse_normalized": -0.12713049771700524,
+              "global_tracking_rmse_normalized": -0.02535997131210066,
+              "global_visibility_rmse_normalized": -0.043124407605410364
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25788819789886475,
+          "mean_absolute_residual_normalized": 0.11735460162162781,
+          "mean_gate_probability": 0.8280847668647766,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7798467622521843,
+              "smoothness_rmse_normalized": 0.06302531580444877,
+              "tracking_rmse_normalized": 0.8299559020771526,
+              "visibility_rmse_normalized": 0.13282526179316043
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6186099179640883,
+              "smoothness_rmse_normalized": 0.04950512447748067,
+              "tracking_rmse_normalized": 1.0080251937498061,
+              "visibility_rmse_normalized": 0.6735385733369291
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.4681479092949723,
+          "visibility_shield_strength": 0.0
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.36055515142754857,
+              "critical_smoothness_rmse_normalized": -0.19716856603910993,
+              "critical_tracking_rmse_normalized": -0.017054767619025468,
+              "critical_visibility_rmse_normalized": 0.0030211639712929284,
+              "global_saturation_rmse_normalized": -0.11891742210066003,
+              "global_smoothness_rmse_normalized": -0.1250908078563362,
+              "global_tracking_rmse_normalized": -0.02547081460372358,
+              "global_visibility_rmse_normalized": -0.043124407605410364
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25788819789886475,
+          "mean_absolute_residual_normalized": 0.115409255027771,
+          "mean_gate_probability": 0.8277141451835632,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7373214618719941,
+              "smoothness_rmse_normalized": 0.06428602622480152,
+              "tracking_rmse_normalized": 0.8297654224880737,
+              "visibility_rmse_normalized": 0.13282498833901993
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.615893556784346,
+              "smoothness_rmse_normalized": 0.04962080626059232,
+              "tracking_rmse_normalized": 1.0079105536496407,
+              "visibility_rmse_normalized": 0.6735385733369291
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.4679527183059955,
+          "visibility_shield_strength": 0.5
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3690096312067783,
+              "critical_smoothness_rmse_normalized": -0.17723905959348796,
+              "critical_tracking_rmse_normalized": -0.0169455981248422,
+              "critical_visibility_rmse_normalized": 0.0030190460437224953,
+              "global_saturation_rmse_normalized": -0.13489647624167955,
+              "global_smoothness_rmse_normalized": -0.1212996203804626,
+              "global_tracking_rmse_normalized": -0.025588227713087774,
+              "global_visibility_rmse_normalized": -0.043124407605410364
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25788819789886475,
+          "mean_absolute_residual_normalized": 0.1134457066655159,
+          "mean_gate_probability": 0.8271898627281189,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7275728973099282,
+              "smoothness_rmse_normalized": 0.06588186405552729,
+              "tracking_rmse_normalized": 0.8298575792720732,
+              "visibility_rmse_normalized": 0.13282470787265
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6047238926282055,
+              "smoothness_rmse_normalized": 0.04983582489444274,
+              "tracking_rmse_normalized": 1.0077891186902384,
+              "visibility_rmse_normalized": 0.6735385733369291
+            }
+          },
+          "residual_scale": 1.0,
+          "selection_score": 3.4679922682027486,
+          "visibility_shield_strength": 1.0
+        }
+      ],
+      "gate": {
+        "checks": {
+          "critical_saturation": true,
+          "critical_smoothness": true,
+          "critical_tracking": true,
+          "critical_visibility": false,
+          "global_saturation": true,
+          "global_smoothness": true,
+          "global_tracking": true,
+          "global_visibility": true
+        },
+        "passed": false,
+        "relative_changes": {
+          "critical_saturation_rmse_normalized": -0.36055515142754857,
+          "critical_smoothness_rmse_normalized": -0.19716856603910993,
+          "critical_tracking_rmse_normalized": -0.017054767619025468,
+          "critical_visibility_rmse_normalized": 0.0030211639712929284,
+          "global_saturation_rmse_normalized": -0.11891742210066003,
+          "global_smoothness_rmse_normalized": -0.1250908078563362,
+          "global_tracking_rmse_normalized": -0.02547081460372358,
+          "global_visibility_rmse_normalized": -0.043124407605410364
+        }
+      },
+      "maximum_absolute_residual_normalized": 0.25788819789886475,
+      "mean_absolute_residual_normalized": 0.115409255027771,
+      "mean_gate_probability": 0.8277141451835632,
+      "metrics": {
+        "critical": {
+          "sample_count": 32,
+          "saturation_rmse_normalized": 0.7373214618719941,
+          "smoothness_rmse_normalized": 0.06428602622480152,
+          "tracking_rmse_normalized": 0.8297654224880737,
+          "visibility_rmse_normalized": 0.13282498833901993
+        },
+        "global": {
+          "sample_count": 768,
+          "saturation_rmse_normalized": 0.615893556784346,
+          "smoothness_rmse_normalized": 0.04962080626059232,
+          "tracking_rmse_normalized": 1.0079105536496407,
+          "visibility_rmse_normalized": 0.6735385733369291
+        }
+      },
+      "ordinary_trust_region_weight": 0.25,
+      "selected_epoch": 30,
+      "selected_residual_scale": 1.0,
+      "selected_visibility_shield_strength": 0.5,
+      "selection_score": 3.4679527183059955,
+      "training_history": [
+        {
+          "action": 0.02037983896055569,
+          "epoch": 1,
+          "gate": 0.9379702483614286,
+          "loss": 0.25487738971908885,
+          "residual": 1.9112759175765603e-05,
+          "trust": 1.9179653014012032e-05
+        },
+        {
+          "action": 0.02017062654097875,
+          "epoch": 2,
+          "gate": 0.7079203749696413,
+          "loss": 0.19725612799326578,
+          "residual": 0.00040554242817355163,
+          "trust": 0.00040540434414045495
+        },
+        {
+          "action": 0.019849642412737012,
+          "epoch": 3,
+          "gate": 0.6893252581357956,
+          "loss": 0.19223366801937422,
+          "residual": 0.00020281165598134976,
+          "trust": 0.00020273740483389702
+        },
+        {
+          "action": 0.019764444208703935,
+          "epoch": 4,
+          "gate": 0.6907646581530571,
+          "loss": 0.19256649414698282,
+          "residual": 0.00042741515547580394,
+          "trust": 0.0004264444032742176
+        },
+        {
+          "action": 0.01975991006474942,
+          "epoch": 5,
+          "gate": 0.6882624924182892,
+          "loss": 0.1918737137069305,
+          "residual": 0.0001863476669920298,
+          "trust": 0.00018527186087643108
+        },
+        {
+          "action": 0.019758881612991292,
+          "epoch": 6,
+          "gate": 0.688401552538077,
+          "loss": 0.1919941051552693,
+          "residual": 0.0005274916153818291,
+          "trust": 0.0005182450416517289
+        },
+        {
+          "action": 0.01870152730649958,
+          "epoch": 7,
+          "gate": 0.6891019890705744,
+          "loss": 0.19111328944563866,
+          "residual": 0.0005622935829402801,
+          "trust": 0.0005225639063913453
+        },
+        {
+          "action": 0.015345412752746293,
+          "epoch": 8,
+          "gate": 0.6872008815407753,
+          "loss": 0.18747929483652115,
+          "residual": 0.0016739926977606956,
+          "trust": 0.00126769439035949
+        },
+        {
+          "action": 0.01287726720329374,
+          "epoch": 9,
+          "gate": 0.6798299898703893,
+          "loss": 0.18362039824326834,
+          "residual": 0.004054026464776446,
+          "trust": 0.0029803771127869063
+        },
+        {
+          "action": 0.011808424411962429,
+          "epoch": 10,
+          "gate": 0.6689765974879265,
+          "loss": 0.17999392996231714,
+          "residual": 0.005258784348067517,
+          "trust": 0.003555061038544712
+        },
+        {
+          "action": 0.011526180276026329,
+          "epoch": 11,
+          "gate": 0.6558240801095963,
+          "loss": 0.17622306818763414,
+          "residual": 0.004814361978787929,
+          "trust": 0.0027708960503029325
+        },
+        {
+          "action": 0.012338219064986333,
+          "epoch": 12,
+          "gate": 0.6090243682265282,
+          "loss": 0.16516600797573724,
+          "residual": 0.004488346666524497,
+          "trust": 0.002107246841963691
+        },
+        {
+          "action": 0.011708820258112004,
+          "epoch": 13,
+          "gate": 0.5694533127049605,
+          "loss": 0.15472557426740727,
+          "residual": 0.0049772377727398025,
+          "trust": 0.0024146225672060004
+        },
+        {
+          "action": 0.011210431228391826,
+          "epoch": 14,
+          "gate": 0.5040477588772774,
+          "loss": 0.13763776669899622,
+          "residual": 0.003937352300757387,
+          "trust": 0.0015040936571798131
+        },
+        {
+          "action": 0.009620816873696944,
+          "epoch": 15,
+          "gate": 0.46088284626603127,
+          "loss": 0.12531824223697186,
+          "residual": 0.005342947804213812,
+          "trust": 0.001693135922929893
+        },
+        {
+          "action": 0.008891336328815669,
+          "epoch": 16,
+          "gate": 0.4311158669491609,
+          "loss": 0.11706335283815861,
+          "residual": 0.005285337965081756,
+          "trust": 0.001360788837094636
+        },
+        {
+          "action": 0.009256786259356886,
+          "epoch": 17,
+          "gate": 0.4204380636413892,
+          "loss": 0.11490752858420213,
+          "residual": 0.006378481669041018,
+          "trust": 0.001909774856661291
+        },
+        {
+          "action": 0.008465909486403689,
+          "epoch": 18,
+          "gate": 0.39102303485075635,
+          "loss": 0.10661928060775001,
+          "residual": 0.006161864303673307,
+          "trust": 0.001343978408840485
+        },
+        {
+          "action": 0.007519869056219856,
+          "epoch": 19,
+          "gate": 0.3583137318491936,
+          "loss": 0.0974540519528091,
+          "residual": 0.00568232136235262,
+          "trust": 0.001195712509797886
+        },
+        {
+          "action": 0.008010458065352092,
+          "epoch": 20,
+          "gate": 0.41019539535045624,
+          "loss": 0.11104048353930314,
+          "residual": 0.006700665956789938,
+          "trust": 0.0016566831272939453
+        },
+        {
+          "action": 0.008634363883174956,
+          "epoch": 21,
+          "gate": 0.3676537734766801,
+          "loss": 0.1008985317312181,
+          "residual": 0.006058540112765816,
+          "trust": 0.0011605567936688506
+        },
+        {
+          "action": 0.0077706071800397085,
+          "epoch": 22,
+          "gate": 0.3407487416019042,
+          "loss": 0.09331736185898383,
+          "residual": 0.005724927497794852,
+          "trust": 0.0012092828073946293
+        },
+        {
+          "action": 0.0067393851253048824,
+          "epoch": 23,
+          "gate": 0.3195584410180648,
+          "loss": 0.08696333443125089,
+          "residual": 0.006338304350113806,
+          "trust": 0.0010838285197678488
+        },
+        {
+          "action": 0.006259593462649112,
+          "epoch": 24,
+          "gate": 0.3023217556377252,
+          "loss": 0.08221694206198056,
+          "residual": 0.006382309429075879,
+          "trust": 0.001252341027187261
+        },
+        {
+          "action": 0.00687663970165886,
+          "epoch": 25,
+          "gate": 0.32343851526578266,
+          "loss": 0.0879896110855043,
+          "residual": 0.005990075374332567,
+          "trust": 0.0007737689053707678
+        },
+        {
+          "action": 0.006064481523935683,
+          "epoch": 26,
+          "gate": 0.3018502437820037,
+          "loss": 0.08188185623536508,
+          "residual": 0.007036409437811623,
+          "trust": 0.0011377984192222357
+        },
+        {
+          "action": 0.005729970003206593,
+          "epoch": 27,
+          "gate": 0.2755036223679781,
+          "loss": 0.0748505590793987,
+          "residual": 0.005705718227545731,
+          "trust": 0.0007505083164384511
+        },
+        {
+          "action": 0.005619383397667359,
+          "epoch": 28,
+          "gate": 0.2638236805796623,
+          "loss": 0.07187554240226746,
+          "residual": 0.007166835993605976,
+          "trust": 0.0009142814718264466
+        },
+        {
+          "action": 0.005924912179276968,
+          "epoch": 29,
+          "gate": 0.2735357250397404,
+          "loss": 0.0746299351255099,
+          "residual": 0.007266376322756211,
+          "trust": 0.0009937095689262303
+        },
+        {
+          "action": 0.006242404109798372,
+          "epoch": 30,
+          "gate": 0.24342717664937177,
+          "loss": 0.06737157919754584,
+          "residual": 0.006795807033389186,
+          "trust": 0.0008176943168412739
+        }
+      ]
+    }
+  ],
+  "base_checkpoint": {
+    "metadata": {
+      "candidate": "midpoint_state_reference",
+      "experiment": "gimbal_midpoint_adapter_v7_replication_v1",
+      "test_opened": false,
+      "train_sha256": "da25df22053c802c4640dad692fe7e7c4fe73942667384543aaf1fa99534fafb",
+      "training_seed": 29,
+      "validation_sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+    },
+    "path": "artifacts/gimbal_midpoint_adapter_replication_checkpoints/gimbal_v7_midpoint_state_reference_seed_29.pt",
+    "sha256": "9e8177445c68e43453bf45fbb88beaaa9be2e573d2452e2a89dca689b6f0f11b"
+  },
+  "checkpoint": null,
+  "config": {
+    "batch_size": 16,
+    "behavior_name": "privileged_oracle_position",
+    "correction_label_threshold": 0.005,
+    "correction_policy": {
+      "embedding_dim": 48,
+      "evidence": {
+        "body_rate_full_fraction": 0.9,
+        "body_rate_onset_fraction": 0.35,
+        "measurement_age_full_frames": 5.0,
+        "measurement_age_onset_frames": 1.5,
+        "servo_rate_full_fraction": 0.9,
+        "servo_rate_onset_fraction": 0.35,
+        "travel_full_fraction": 0.98,
+        "travel_onset_fraction": 0.75,
+        "visibility_full_fraction": 0.9,
+        "visibility_onset_fraction": 0.45
+      },
+      "hidden_dim": 48,
+      "initial_gate_bias": -2.0,
+      "maximum_residual_magnitude": 0.4
+    },
+    "critical_weight": 1.0,
+    "criticality": {
+      "acceleration_full_capacity_fraction": 0.8,
+      "acceleration_onset_capacity_fraction": 0.2,
+      "acceleration_weight": 2.0,
+      "critical_weight_threshold": 5.0,
+      "detector_gap_weight": 1.0,
+      "joint_capacity_visibility_weight": 2.0,
+      "maximum_label_weight": 10.0,
+      "mechanically_reachable_only": true,
+      "normalize_mean_weight": true,
+      "rate_full_capacity_fraction": 0.9,
+      "rate_onset_capacity_fraction": 0.35,
+      "rate_weight": 1.0,
+      "reversal_weight": 3.0,
+      "visibility_full_fov_fraction": 0.9,
+      "visibility_onset_fov_fraction": 0.45,
+      "visibility_weight": 2.0,
+      "weighting_strength": 1.0
+    },
+    "deployment_residual_scales": [
+      0.75,
+      1.0
+    ],
+    "device": "cpu",
+    "disagreement_weight": 4.0,
+    "epochs": 30,
+    "gate_classification_weight": 0.25,
+    "gradient_clip_norm": 5.0,
+    "learning_rate": 0.001,
+    "maximum_saturation_regression_fraction": 0.05,
+    "minimum_tracking_improvement_fraction": 0.005,
+    "optimization_seed": 29,
+    "oracle": {
+      "blend_fractions": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+      ],
+      "focus_start_index": 0,
+      "focus_steps": 16,
+      "gradient_clip_norm": 5.0,
+      "learning_rate": 0.05,
+      "maximum_command_residual": 0.4,
+      "maximum_saturation_regression_absolute_mean": 0.0,
+      "maximum_saturation_regression_fraction": 0.05,
+      "maximum_smoothness_regression_absolute_mse": 0.0,
+      "maximum_smoothness_regression_fraction": 0.0,
+      "maximum_visibility_regression_absolute_mse": 0.0,
+      "maximum_visibility_regression_fraction": 0.0,
+      "optimization_iterations": 24,
+      "residual_weight": 0.005,
+      "saturation_weight": 0.01,
+      "smoothness_weight": 0.1,
+      "terminal_tracking_multiplier": 2.0,
+      "tracking_weight": 1.0,
+      "training_integration_period_s": 0.01,
+      "visibility_margin_fraction": 0.85,
+      "visibility_weight": 2.0
+    },
+    "oracle_batch_size": 8,
+    "ordinary_trust_region_weights": [
+      0.25
+    ],
+    "residual_magnitude_weight": 0.01,
+    "retention_weight": 0.25,
+    "rollout_batch_size": 16,
+    "selection_epoch_interval": 10,
+    "sequence_steps": 16,
+    "training_episode_count": 192,
+    "validation_episode_count": 48,
+    "visibility_shield_strengths": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "weight_decay": 1e-05
+  },
+  "datasets": {
+    "fresh_test": {
+      "opened": false
+    },
+    "train": {
+      "path": "artifacts/gimbal_control_aware_train.npz",
+      "sha256": "da25df22053c802c4640dad692fe7e7c4fe73942667384543aaf1fa99534fafb"
+    },
+    "validation": {
+      "path": "artifacts/gimbal_midpoint_adapter_validation.npz",
+      "sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+    }
+  },
+  "experiment": "gimbal_deployable_residual_distillation_v14_1_development_v1",
+  "oracle_training_data": {
+    "correction_gate_positive_fraction": 0.8828125,
+    "episode_count": 192,
+    "nonzero_blend_fraction": 0.90625,
+    "reference_command_reconstruction_maximum_error": 4.842877388000488e-07,
+    "selected_command_delta_mae_normalized": 0.12346117943525314,
+    "selected_command_delta_max_normalized": 0.33449846506118774,
+    "training_record_count": 384
+  },
+  "recommendation": "do_not_promote_deployable_gated_residual",
+  "reference": {
+    "critical": {
+      "sample_count": 32,
+      "saturation_rmse_normalized": 1.1530649805343656,
+      "smoothness_rmse_normalized": 0.08007412702768339,
+      "tracking_rmse_normalized": 0.8441624163313194,
+      "visibility_rmse_normalized": 0.13242491096909842
+    },
+    "global": {
+      "sample_count": 768,
+      "saturation_rmse_normalized": 0.6990191069862571,
+      "smoothness_rmse_normalized": 0.05671537881435857,
+      "tracking_rmse_normalized": 1.0342538414996676,
+      "visibility_rmse_normalized": 0.7038935664054226
+    }
+  },
+  "selected": {
+    "checkpoint_candidates": [
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5717223542340957,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": false
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.13993667996495263,
+            "critical_smoothness_rmse_normalized": -0.1115204458159289,
+            "critical_tracking_rmse_normalized": 0.012397540147854214,
+            "critical_visibility_rmse_normalized": 0.015350969670817838,
+            "global_saturation_rmse_normalized": -0.14320408841266385,
+            "global_smoothness_rmse_normalized": -0.13143514305743143,
+            "global_tracking_rmse_normalized": 0.0016002780442754272,
+            "global_visibility_rmse_normalized": 0.0012370830956314194
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.12641841173171997,
+        "mean_absolute_residual_normalized": 0.03852798417210579,
+        "mean_gate_probability": 0.4232254922389984,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9917088953745338,
+            "smoothness_rmse_normalized": 0.07114422468323482,
+            "tracking_rmse_normalized": 0.8546279537790966,
+            "visibility_rmse_normalized": 0.1344577617610458
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.5989167129872558,
+            "smoothness_rmse_normalized": 0.049260984886336935,
+            "tracking_rmse_normalized": 1.035908935214427,
+            "visibility_rmse_normalized": 0.7047643412375464
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5870107830775377,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": false
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.13993386524519247,
+            "critical_smoothness_rmse_normalized": -0.10352867656169007,
+            "critical_tracking_rmse_normalized": 0.011684374428881261,
+            "critical_visibility_rmse_normalized": 0.015151091968036434,
+            "global_saturation_rmse_normalized": -0.14130334733494931,
+            "global_smoothness_rmse_normalized": -0.13053113270799865,
+            "global_tracking_rmse_normalized": 0.0015301410971801932,
+            "global_visibility_rmse_normalized": 0.0012368027420990302
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.12641841173171997,
+        "mean_absolute_residual_normalized": 0.03818220645189285,
+        "mean_gate_probability": 0.423196941614151,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9917121409293191,
+            "smoothness_rmse_normalized": 0.07178415862967467,
+            "tracking_rmse_normalized": 0.8540259260825236,
+            "visibility_rmse_normalized": 0.13443129297405026
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6002453673180119,
+            "smoothness_rmse_normalized": 0.049312256175757116,
+            "tracking_rmse_normalized": 1.0358363958074628,
+            "visibility_rmse_normalized": 0.7047641438984986
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5863652907888075,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": false
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.13902717090109828,
+            "critical_smoothness_rmse_normalized": -0.0852018504615959,
+            "critical_tracking_rmse_normalized": 0.011104065720435319,
+            "critical_visibility_rmse_normalized": 0.01499371485947476,
+            "global_saturation_rmse_normalized": -0.13963201743570208,
+            "global_smoothness_rmse_normalized": -0.12861571669026495,
+            "global_tracking_rmse_normalized": 0.0014626328921367726,
+            "global_visibility_rmse_normalized": 0.001236562439008937
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.12641841173171997,
+        "mean_absolute_residual_normalized": 0.03789263591170311,
+        "mean_gate_probability": 0.4231768548488617,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9927576184255428,
+            "smoothness_rmse_normalized": 0.07325166323082788,
+            "tracking_rmse_normalized": 0.8535360512809839,
+            "visibility_rmse_normalized": 0.13441045232446042
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6014136588516632,
+            "smoothness_rmse_normalized": 0.04942088972078997,
+            "tracking_rmse_normalized": 1.0357665751870637,
+            "visibility_rmse_normalized": 0.7047639747506995
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.585932872502046,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.21067022439765304,
+            "critical_smoothness_rmse_normalized": -0.11970886960417704,
+            "critical_tracking_rmse_normalized": 0.018073913508085848,
+            "critical_visibility_rmse_normalized": 0.026375006233491094,
+            "global_saturation_rmse_normalized": -0.22457151471098113,
+            "global_smoothness_rmse_normalized": -0.1692195634894259,
+            "global_tracking_rmse_normalized": -0.00012995188528741597,
+            "global_visibility_rmse_normalized": -0.0025098033568787814
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.17171265184879303,
+        "mean_absolute_residual_normalized": 0.05346941947937012,
+        "mean_gate_probability": 0.42596232891082764,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9101485223401153,
+            "smoothness_rmse_normalized": 0.07048854379665813,
+            "tracking_rmse_normalized": 0.8594197348308684,
+            "visibility_rmse_normalized": 0.1359176188213779
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.542039327318436,
+            "smoothness_rmse_normalized": 0.04711802716825538,
+            "tracking_rmse_normalized": 1.034119438263099,
+            "visibility_rmse_normalized": 0.7021269319695729
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.586809325045544,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.21064415568606532,
+            "critical_smoothness_rmse_normalized": -0.0963586243533121,
+            "critical_tracking_rmse_normalized": 0.016817767471640765,
+            "critical_visibility_rmse_normalized": 0.025722625507329955,
+            "global_saturation_rmse_normalized": -0.22146284871061783,
+            "global_smoothness_rmse_normalized": -0.166311160270615,
+            "global_tracking_rmse_normalized": -0.00027983732532999017,
+            "global_visibility_rmse_normalized": -0.0025108485818990944
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.17171265184879303,
+        "mean_absolute_residual_normalized": 0.052826572209596634,
+        "mean_gate_probability": 0.4258669316768646,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9101785812585348,
+            "smoothness_rmse_normalized": 0.07235829430100345,
+            "tracking_rmse_normalized": 0.8583593435574779,
+            "visibility_rmse_normalized": 0.13583122736179803
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.5442123442499285,
+            "smoothness_rmse_normalized": 0.04728297835855514,
+            "tracking_rmse_normalized": 1.03396441867095,
+            "visibility_rmse_normalized": 0.7021261962424056
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5856448601452904,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.20195057905604163,
+            "critical_smoothness_rmse_normalized": -0.047294093107122404,
+            "critical_tracking_rmse_normalized": 0.016114124827719456,
+            "critical_visibility_rmse_normalized": 0.02530719208818555,
+            "global_saturation_rmse_normalized": -0.21722076797758583,
+            "global_smoothness_rmse_normalized": -0.1607257967202782,
+            "global_tracking_rmse_normalized": -0.00035958226755272715,
+            "global_visibility_rmse_normalized": -0.0025114917978406037
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.17171265184879303,
+        "mean_absolute_residual_normalized": 0.05234532058238983,
+        "mean_gate_probability": 0.4258076250553131,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9202028400262071,
+            "smoothness_rmse_normalized": 0.07628709380856459,
+            "tracking_rmse_normalized": 0.8577653548829515,
+            "visibility_rmse_normalized": 0.13577621362825426
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.5471776397356961,
+            "smoothness_rmse_normalized": 0.047599754368128404,
+            "tracking_rmse_normalized": 1.033881942158116,
+            "visibility_rmse_normalized": 0.7021257434868425
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5853116724862875,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.15417716610908194,
+            "critical_smoothness_rmse_normalized": -0.10902982408180928,
+            "critical_tracking_rmse_normalized": 0.00765458276245079,
+            "critical_visibility_rmse_normalized": 0.009690102143683266,
+            "global_saturation_rmse_normalized": -0.09273301046657845,
+            "global_smoothness_rmse_normalized": -0.10234472098793246,
+            "global_tracking_rmse_normalized": 0.00011099184021290398,
+            "global_visibility_rmse_normalized": -0.005769476054033662
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.19904525578022003,
+        "mean_absolute_residual_normalized": 0.09164640307426453,
+        "mean_gate_probability": 0.8308825492858887,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9752886894959534,
+            "smoothness_rmse_normalized": 0.07134365904435062,
+            "tracking_rmse_normalized": 0.8506241274120779,
+            "visibility_rmse_normalized": 0.13370812188275716
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6341969608217622,
+            "smoothness_rmse_normalized": 0.050910859193878145,
+            "tracking_rmse_normalized": 1.034368635236783,
+            "visibility_rmse_normalized": 0.6998324693294581
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.570641366505332,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.15417716610908194,
+            "critical_smoothness_rmse_normalized": -0.10902982408180928,
+            "critical_tracking_rmse_normalized": 0.00765458276245079,
+            "critical_visibility_rmse_normalized": 0.009690102143683266,
+            "global_saturation_rmse_normalized": -0.08937720247145198,
+            "global_smoothness_rmse_normalized": -0.10158351752789985,
+            "global_tracking_rmse_normalized": 4.353642035370697e-05,
+            "global_visibility_rmse_normalized": -0.005769476054033662
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.19904525578022003,
+        "mean_absolute_residual_normalized": 0.09111287444829941,
+        "mean_gate_probability": 0.830796480178833,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9752886894959534,
+            "smoothness_rmse_normalized": 0.07134365904435062,
+            "tracking_rmse_normalized": 0.8506241274120779,
+            "visibility_rmse_normalized": 0.13370812188275716
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6365427347297329,
+            "smoothness_rmse_normalized": 0.050954031136468694,
+            "tracking_rmse_normalized": 1.0342988692096635,
+            "visibility_rmse_normalized": 0.6998324693294581
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5705993754115513,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.15417716610908194,
+            "critical_smoothness_rmse_normalized": -0.10902982408180928,
+            "critical_tracking_rmse_normalized": 0.00765458276245079,
+            "critical_visibility_rmse_normalized": 0.009690102143683266,
+            "global_saturation_rmse_normalized": -0.08605249036773022,
+            "global_smoothness_rmse_normalized": -0.10019702428328026,
+            "global_tracking_rmse_normalized": -1.0252879852234997e-05,
+            "global_visibility_rmse_normalized": -0.005769476054033662
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.19904525578022003,
+        "mean_absolute_residual_normalized": 0.09066220372915268,
+        "mean_gate_probability": 0.8307426571846008,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9752886894959534,
+            "smoothness_rmse_normalized": 0.07134365904435062,
+            "tracking_rmse_normalized": 0.8506241274120779,
+            "visibility_rmse_normalized": 0.13370812188275716
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6388667720154628,
+            "smoothness_rmse_normalized": 0.051032666626060846,
+            "tracking_rmse_normalized": 1.034243237419294,
+            "visibility_rmse_normalized": 0.6998324693294581
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.5705748475429986,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.33558820394440936,
+            "critical_smoothness_rmse_normalized": -0.24134743868859476,
+            "critical_tracking_rmse_normalized": 0.01908707223600148,
+            "critical_visibility_rmse_normalized": 0.019504031806223843,
+            "global_saturation_rmse_normalized": -0.08545630036018492,
+            "global_smoothness_rmse_normalized": -0.03344714901198431,
+            "global_tracking_rmse_normalized": -0.01932708791211657,
+            "global_visibility_rmse_normalized": -0.03817004853219985
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25762274861335754,
+        "mean_absolute_residual_normalized": 0.12687848508358002,
+        "mean_gate_probability": 0.8905852437019348,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7661099746856425,
+            "smoothness_rmse_normalized": 0.06074844156432682,
+            "tracking_rmse_normalized": 0.8602750053507529,
+            "visibility_rmse_normalized": 0.13500773064457608
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6392835202221313,
+            "smoothness_rmse_normalized": 0.05481841108788358,
+            "tracking_rmse_normalized": 1.0142647265815592,
+            "visibility_rmse_normalized": 0.6770259148142244
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.516556543317355,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3347135095050139,
+            "critical_smoothness_rmse_normalized": -0.23507510426103284,
+            "critical_tracking_rmse_normalized": 0.018066396042186517,
+            "critical_visibility_rmse_normalized": 0.019073920854334014,
+            "global_saturation_rmse_normalized": -0.08854540051850013,
+            "global_smoothness_rmse_normalized": -0.032764909500338835,
+            "global_tracking_rmse_normalized": -0.019570345791969257,
+            "global_visibility_rmse_normalized": -0.03817067390352091
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25762274861335754,
+        "mean_absolute_residual_normalized": 0.12586522102355957,
+        "mean_gate_probability": 0.8904510140419006,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7671185542123775,
+            "smoothness_rmse_normalized": 0.06125069326803953,
+            "tracking_rmse_normalized": 0.8594133888686901,
+            "visibility_rmse_normalized": 0.13495077324006524
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6371241801880747,
+            "smoothness_rmse_normalized": 0.05485710456022868,
+            "tracking_rmse_normalized": 1.0140131361848466,
+            "visibility_rmse_normalized": 0.6770254746193748
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5153610423571244,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3286784145656516,
+            "critical_smoothness_rmse_normalized": -0.21181035157531425,
+            "critical_tracking_rmse_normalized": 0.017459968590137764,
+            "critical_visibility_rmse_normalized": 0.01877594110232006,
+            "global_saturation_rmse_normalized": -0.08277019486336668,
+            "global_smoothness_rmse_normalized": -0.028342823506207093,
+            "global_tracking_rmse_normalized": -0.019747078042422372,
+            "global_visibility_rmse_normalized": -0.038171174200870794
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25762274861335754,
+        "mean_absolute_residual_normalized": 0.12503758072853088,
+        "mean_gate_probability": 0.8903417587280273,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7740774108411563,
+            "smoothness_rmse_normalized": 0.0631135980298634,
+            "tracking_rmse_normalized": 0.858901465605439,
+            "visibility_rmse_normalized": 0.13491131329793418
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.641161159287788,
+            "smoothness_rmse_normalized": 0.05510790484253553,
+            "tracking_rmse_normalized": 1.0138303501758985,
+            "visibility_rmse_normalized": 0.6770251224632889
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.5148384491839018,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.014236632521095638,
+            "critical_smoothness_rmse_normalized": -0.1282962534535076,
+            "critical_tracking_rmse_normalized": -4.847212336112072e-05,
+            "critical_visibility_rmse_normalized": 0.0013234278098144259,
+            "global_saturation_rmse_normalized": -0.04728854940639726,
+            "global_smoothness_rmse_normalized": -0.16397957820263076,
+            "global_tracking_rmse_normalized": -0.013219428152324575,
+            "global_visibility_rmse_normalized": -0.0239005341488856
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.1881903111934662,
+        "mean_absolute_residual_normalized": 0.06438877433538437,
+        "mean_gate_probability": 0.7574806809425354,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1366492181335535,
+            "smoothness_rmse_normalized": 0.06980091653147136,
+            "tracking_rmse_normalized": 0.8441214979865381,
+            "visibility_rmse_normalized": 0.13260016577898712
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6659635074095218,
+            "smoothness_rmse_normalized": 0.047415214918777635,
+            "tracking_rmse_normalized": 1.020581597150697,
+            "visibility_rmse_normalized": 0.6870701341843689
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.522424943283067,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.02497320869111508,
+            "critical_smoothness_rmse_normalized": -0.12451671147640786,
+            "critical_tracking_rmse_normalized": -0.00027250324639460644,
+            "critical_visibility_rmse_normalized": 0.0013209880631428472,
+            "global_saturation_rmse_normalized": -0.0466837593907532,
+            "global_smoothness_rmse_normalized": -0.16004436308944658,
+            "global_tracking_rmse_normalized": -0.013267954495519985,
+            "global_visibility_rmse_normalized": -0.023900616312738654
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.1881903111934662,
+        "mean_absolute_residual_normalized": 0.0635758489370346,
+        "mean_gate_probability": 0.7570107579231262,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1242692481410643,
+            "smoothness_rmse_normalized": 0.07010356005585211,
+            "tracking_rmse_normalized": 0.8439323793323847,
+            "visibility_rmse_normalized": 0.13259984269575134
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6663862671861716,
+            "smoothness_rmse_normalized": 0.04763840213463786,
+            "tracking_rmse_normalized": 1.0205314085938333,
+            "visibility_rmse_normalized": 0.6870700763497614
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.522241684908154,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.03375643252242666,
+            "critical_smoothness_rmse_normalized": -0.11884732042116197,
+            "critical_tracking_rmse_normalized": -0.00046026627395467923,
+            "critical_visibility_rmse_normalized": 0.0013186543868510814,
+            "global_saturation_rmse_normalized": -0.045672409634560984,
+            "global_smoothness_rmse_normalized": -0.15640668599805863,
+            "global_tracking_rmse_normalized": -0.013304812017223777,
+            "global_visibility_rmse_normalized": -0.023900616312738654
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.1881903111934662,
+        "mean_absolute_residual_normalized": 0.0630577877163887,
+        "mean_gate_probability": 0.7566032409667969,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.114141620324984,
+            "smoothness_rmse_normalized": 0.07055753159537947,
+            "tracking_rmse_normalized": 0.843773876841342,
+            "visibility_rmse_normalized": 0.1325995336588762
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6670932199895958,
+            "smoothness_rmse_normalized": 0.04784471436888024,
+            "tracking_rmse_normalized": 1.020493288560423,
+            "visibility_rmse_normalized": 0.6870700763497614
+          }
+        },
+        "residual_scale": 0.75,
+        "selection_score": 3.522117542215362,
+        "visibility_shield_strength": 1.0
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": true,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3236749225609302,
+            "critical_smoothness_rmse_normalized": -0.21291285782410685,
+            "critical_tracking_rmse_normalized": -0.016829124324093225,
+            "critical_visibility_rmse_normalized": 0.003023228946368084,
+            "global_saturation_rmse_normalized": -0.11503146082636295,
+            "global_smoothness_rmse_normalized": -0.12713049771700524,
+            "global_tracking_rmse_normalized": -0.02535997131210066,
+            "global_visibility_rmse_normalized": -0.043124407605410364
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25788819789886475,
+        "mean_absolute_residual_normalized": 0.11735460162162781,
+        "mean_gate_probability": 0.8280847668647766,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7798467622521843,
+            "smoothness_rmse_normalized": 0.06302531580444877,
+            "tracking_rmse_normalized": 0.8299559020771526,
+            "visibility_rmse_normalized": 0.13282526179316043
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6186099179640883,
+            "smoothness_rmse_normalized": 0.04950512447748067,
+            "tracking_rmse_normalized": 1.0080251937498061,
+            "visibility_rmse_normalized": 0.6735385733369291
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.4681479092949723,
+        "visibility_shield_strength": 0.0
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": true,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.36055515142754857,
+            "critical_smoothness_rmse_normalized": -0.19716856603910993,
+            "critical_tracking_rmse_normalized": -0.017054767619025468,
+            "critical_visibility_rmse_normalized": 0.0030211639712929284,
+            "global_saturation_rmse_normalized": -0.11891742210066003,
+            "global_smoothness_rmse_normalized": -0.1250908078563362,
+            "global_tracking_rmse_normalized": -0.02547081460372358,
+            "global_visibility_rmse_normalized": -0.043124407605410364
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25788819789886475,
+        "mean_absolute_residual_normalized": 0.115409255027771,
+        "mean_gate_probability": 0.8277141451835632,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7373214618719941,
+            "smoothness_rmse_normalized": 0.06428602622480152,
+            "tracking_rmse_normalized": 0.8297654224880737,
+            "visibility_rmse_normalized": 0.13282498833901993
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.615893556784346,
+            "smoothness_rmse_normalized": 0.04962080626059232,
+            "tracking_rmse_normalized": 1.0079105536496407,
+            "visibility_rmse_normalized": 0.6735385733369291
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.4679527183059955,
+        "visibility_shield_strength": 0.5
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": true,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3690096312067783,
+            "critical_smoothness_rmse_normalized": -0.17723905959348796,
+            "critical_tracking_rmse_normalized": -0.0169455981248422,
+            "critical_visibility_rmse_normalized": 0.0030190460437224953,
+            "global_saturation_rmse_normalized": -0.13489647624167955,
+            "global_smoothness_rmse_normalized": -0.1212996203804626,
+            "global_tracking_rmse_normalized": -0.025588227713087774,
+            "global_visibility_rmse_normalized": -0.043124407605410364
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25788819789886475,
+        "mean_absolute_residual_normalized": 0.1134457066655159,
+        "mean_gate_probability": 0.8271898627281189,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7275728973099282,
+            "smoothness_rmse_normalized": 0.06588186405552729,
+            "tracking_rmse_normalized": 0.8298575792720732,
+            "visibility_rmse_normalized": 0.13282470787265
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6047238926282055,
+            "smoothness_rmse_normalized": 0.04983582489444274,
+            "tracking_rmse_normalized": 1.0077891186902384,
+            "visibility_rmse_normalized": 0.6735385733369291
+          }
+        },
+        "residual_scale": 1.0,
+        "selection_score": 3.4679922682027486,
+        "visibility_shield_strength": 1.0
+      }
+    ],
+    "gate": {
+      "checks": {
+        "critical_saturation": true,
+        "critical_smoothness": true,
+        "critical_tracking": true,
+        "critical_visibility": false,
+        "global_saturation": true,
+        "global_smoothness": true,
+        "global_tracking": true,
+        "global_visibility": true
+      },
+      "passed": false,
+      "relative_changes": {
+        "critical_saturation_rmse_normalized": -0.36055515142754857,
+        "critical_smoothness_rmse_normalized": -0.19716856603910993,
+        "critical_tracking_rmse_normalized": -0.017054767619025468,
+        "critical_visibility_rmse_normalized": 0.0030211639712929284,
+        "global_saturation_rmse_normalized": -0.11891742210066003,
+        "global_smoothness_rmse_normalized": -0.1250908078563362,
+        "global_tracking_rmse_normalized": -0.02547081460372358,
+        "global_visibility_rmse_normalized": -0.043124407605410364
+      }
+    },
+    "maximum_absolute_residual_normalized": 0.25788819789886475,
+    "mean_absolute_residual_normalized": 0.115409255027771,
+    "mean_gate_probability": 0.8277141451835632,
+    "metrics": {
+      "critical": {
+        "sample_count": 32,
+        "saturation_rmse_normalized": 0.7373214618719941,
+        "smoothness_rmse_normalized": 0.06428602622480152,
+        "tracking_rmse_normalized": 0.8297654224880737,
+        "visibility_rmse_normalized": 0.13282498833901993
+      },
+      "global": {
+        "sample_count": 768,
+        "saturation_rmse_normalized": 0.615893556784346,
+        "smoothness_rmse_normalized": 0.04962080626059232,
+        "tracking_rmse_normalized": 1.0079105536496407,
+        "visibility_rmse_normalized": 0.6735385733369291
+      }
+    },
+    "ordinary_trust_region_weight": 0.25,
+    "selected_epoch": 30,
+    "selected_residual_scale": 1.0,
+    "selected_visibility_shield_strength": 0.5,
+    "selection_score": 3.4679527183059955,
+    "training_history": [
+      {
+        "action": 0.02037983896055569,
+        "epoch": 1,
+        "gate": 0.9379702483614286,
+        "loss": 0.25487738971908885,
+        "residual": 1.9112759175765603e-05,
+        "trust": 1.9179653014012032e-05
+      },
+      {
+        "action": 0.02017062654097875,
+        "epoch": 2,
+        "gate": 0.7079203749696413,
+        "loss": 0.19725612799326578,
+        "residual": 0.00040554242817355163,
+        "trust": 0.00040540434414045495
+      },
+      {
+        "action": 0.019849642412737012,
+        "epoch": 3,
+        "gate": 0.6893252581357956,
+        "loss": 0.19223366801937422,
+        "residual": 0.00020281165598134976,
+        "trust": 0.00020273740483389702
+      },
+      {
+        "action": 0.019764444208703935,
+        "epoch": 4,
+        "gate": 0.6907646581530571,
+        "loss": 0.19256649414698282,
+        "residual": 0.00042741515547580394,
+        "trust": 0.0004264444032742176
+      },
+      {
+        "action": 0.01975991006474942,
+        "epoch": 5,
+        "gate": 0.6882624924182892,
+        "loss": 0.1918737137069305,
+        "residual": 0.0001863476669920298,
+        "trust": 0.00018527186087643108
+      },
+      {
+        "action": 0.019758881612991292,
+        "epoch": 6,
+        "gate": 0.688401552538077,
+        "loss": 0.1919941051552693,
+        "residual": 0.0005274916153818291,
+        "trust": 0.0005182450416517289
+      },
+      {
+        "action": 0.01870152730649958,
+        "epoch": 7,
+        "gate": 0.6891019890705744,
+        "loss": 0.19111328944563866,
+        "residual": 0.0005622935829402801,
+        "trust": 0.0005225639063913453
+      },
+      {
+        "action": 0.015345412752746293,
+        "epoch": 8,
+        "gate": 0.6872008815407753,
+        "loss": 0.18747929483652115,
+        "residual": 0.0016739926977606956,
+        "trust": 0.00126769439035949
+      },
+      {
+        "action": 0.01287726720329374,
+        "epoch": 9,
+        "gate": 0.6798299898703893,
+        "loss": 0.18362039824326834,
+        "residual": 0.004054026464776446,
+        "trust": 0.0029803771127869063
+      },
+      {
+        "action": 0.011808424411962429,
+        "epoch": 10,
+        "gate": 0.6689765974879265,
+        "loss": 0.17999392996231714,
+        "residual": 0.005258784348067517,
+        "trust": 0.003555061038544712
+      },
+      {
+        "action": 0.011526180276026329,
+        "epoch": 11,
+        "gate": 0.6558240801095963,
+        "loss": 0.17622306818763414,
+        "residual": 0.004814361978787929,
+        "trust": 0.0027708960503029325
+      },
+      {
+        "action": 0.012338219064986333,
+        "epoch": 12,
+        "gate": 0.6090243682265282,
+        "loss": 0.16516600797573724,
+        "residual": 0.004488346666524497,
+        "trust": 0.002107246841963691
+      },
+      {
+        "action": 0.011708820258112004,
+        "epoch": 13,
+        "gate": 0.5694533127049605,
+        "loss": 0.15472557426740727,
+        "residual": 0.0049772377727398025,
+        "trust": 0.0024146225672060004
+      },
+      {
+        "action": 0.011210431228391826,
+        "epoch": 14,
+        "gate": 0.5040477588772774,
+        "loss": 0.13763776669899622,
+        "residual": 0.003937352300757387,
+        "trust": 0.0015040936571798131
+      },
+      {
+        "action": 0.009620816873696944,
+        "epoch": 15,
+        "gate": 0.46088284626603127,
+        "loss": 0.12531824223697186,
+        "residual": 0.005342947804213812,
+        "trust": 0.001693135922929893
+      },
+      {
+        "action": 0.008891336328815669,
+        "epoch": 16,
+        "gate": 0.4311158669491609,
+        "loss": 0.11706335283815861,
+        "residual": 0.005285337965081756,
+        "trust": 0.001360788837094636
+      },
+      {
+        "action": 0.009256786259356886,
+        "epoch": 17,
+        "gate": 0.4204380636413892,
+        "loss": 0.11490752858420213,
+        "residual": 0.006378481669041018,
+        "trust": 0.001909774856661291
+      },
+      {
+        "action": 0.008465909486403689,
+        "epoch": 18,
+        "gate": 0.39102303485075635,
+        "loss": 0.10661928060775001,
+        "residual": 0.006161864303673307,
+        "trust": 0.001343978408840485
+      },
+      {
+        "action": 0.007519869056219856,
+        "epoch": 19,
+        "gate": 0.3583137318491936,
+        "loss": 0.0974540519528091,
+        "residual": 0.00568232136235262,
+        "trust": 0.001195712509797886
+      },
+      {
+        "action": 0.008010458065352092,
+        "epoch": 20,
+        "gate": 0.41019539535045624,
+        "loss": 0.11104048353930314,
+        "residual": 0.006700665956789938,
+        "trust": 0.0016566831272939453
+      },
+      {
+        "action": 0.008634363883174956,
+        "epoch": 21,
+        "gate": 0.3676537734766801,
+        "loss": 0.1008985317312181,
+        "residual": 0.006058540112765816,
+        "trust": 0.0011605567936688506
+      },
+      {
+        "action": 0.0077706071800397085,
+        "epoch": 22,
+        "gate": 0.3407487416019042,
+        "loss": 0.09331736185898383,
+        "residual": 0.005724927497794852,
+        "trust": 0.0012092828073946293
+      },
+      {
+        "action": 0.0067393851253048824,
+        "epoch": 23,
+        "gate": 0.3195584410180648,
+        "loss": 0.08696333443125089,
+        "residual": 0.006338304350113806,
+        "trust": 0.0010838285197678488
+      },
+      {
+        "action": 0.006259593462649112,
+        "epoch": 24,
+        "gate": 0.3023217556377252,
+        "loss": 0.08221694206198056,
+        "residual": 0.006382309429075879,
+        "trust": 0.001252341027187261
+      },
+      {
+        "action": 0.00687663970165886,
+        "epoch": 25,
+        "gate": 0.32343851526578266,
+        "loss": 0.0879896110855043,
+        "residual": 0.005990075374332567,
+        "trust": 0.0007737689053707678
+      },
+      {
+        "action": 0.006064481523935683,
+        "epoch": 26,
+        "gate": 0.3018502437820037,
+        "loss": 0.08188185623536508,
+        "residual": 0.007036409437811623,
+        "trust": 0.0011377984192222357
+      },
+      {
+        "action": 0.005729970003206593,
+        "epoch": 27,
+        "gate": 0.2755036223679781,
+        "loss": 0.0748505590793987,
+        "residual": 0.005705718227545731,
+        "trust": 0.0007505083164384511
+      },
+      {
+        "action": 0.005619383397667359,
+        "epoch": 28,
+        "gate": 0.2638236805796623,
+        "loss": 0.07187554240226746,
+        "residual": 0.007166835993605976,
+        "trust": 0.0009142814718264466
+      },
+      {
+        "action": 0.005924912179276968,
+        "epoch": 29,
+        "gate": 0.2735357250397404,
+        "loss": 0.0746299351255099,
+        "residual": 0.007266376322756211,
+        "trust": 0.0009937095689262303
+      },
+      {
+        "action": 0.006242404109798372,
+        "epoch": 30,
+        "gate": 0.24342717664937177,
+        "loss": 0.06737157919754584,
+        "residual": 0.006795807033389186,
+        "trust": 0.0008176943168412739
+      }
+    ]
+  },
+  "selected_arm_index": 0
+}

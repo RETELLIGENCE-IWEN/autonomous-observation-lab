@@ -1,0 +1,3581 @@
+{
+  "architecture": {
+    "base_midpoint_gru_frozen": true,
+    "direct_command_residual_is_bounded": true,
+    "exact_counterfactual_selection": true,
+    "gate_inputs_are_deployable": true,
+    "hardware_conditioned": true,
+    "oracle_labels_are_state_consistent": true,
+    "reference_retention_records": true,
+    "v2_1_position_adapter_frozen": true
+  },
+  "arms": [
+    {
+      "checkpoint_candidates": [
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "selection_score": 3.5717223542340957
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.21067022439765304,
+              "critical_smoothness_rmse_normalized": -0.11970886960417704,
+              "critical_tracking_rmse_normalized": 0.018073913508085848,
+              "critical_visibility_rmse_normalized": 0.026375006233491094,
+              "global_saturation_rmse_normalized": -0.22457151471098113,
+              "global_smoothness_rmse_normalized": -0.1692195634894259,
+              "global_tracking_rmse_normalized": -0.00012995188528741597,
+              "global_visibility_rmse_normalized": -0.0025098033568787814
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.17171265184879303,
+          "mean_absolute_residual_normalized": 0.05346941947937012,
+          "mean_gate_probability": 0.42596232891082764,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9101485223401153,
+              "smoothness_rmse_normalized": 0.07048854379665813,
+              "tracking_rmse_normalized": 0.8594197348308684,
+              "visibility_rmse_normalized": 0.1359176188213779
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.542039327318436,
+              "smoothness_rmse_normalized": 0.04711802716825538,
+              "tracking_rmse_normalized": 1.034119438263099,
+              "visibility_rmse_normalized": 0.7021269319695729
+            }
+          },
+          "selection_score": 3.586809325045544
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.33558820394440936,
+              "critical_smoothness_rmse_normalized": -0.24134743868859476,
+              "critical_tracking_rmse_normalized": 0.01908707223600148,
+              "critical_visibility_rmse_normalized": 0.019504031806223843,
+              "global_saturation_rmse_normalized": -0.08545630036018492,
+              "global_smoothness_rmse_normalized": -0.03344714901198431,
+              "global_tracking_rmse_normalized": -0.01932708791211657,
+              "global_visibility_rmse_normalized": -0.03817004853219985
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25762274861335754,
+          "mean_absolute_residual_normalized": 0.12687848508358002,
+          "mean_gate_probability": 0.8905852437019348,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7661099746856425,
+              "smoothness_rmse_normalized": 0.06074844156432682,
+              "tracking_rmse_normalized": 0.8602750053507529,
+              "visibility_rmse_normalized": 0.13500773064457608
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6392835202221313,
+              "smoothness_rmse_normalized": 0.05481841108788358,
+              "tracking_rmse_normalized": 1.0142647265815592,
+              "visibility_rmse_normalized": 0.6770259148142244
+            }
+          },
+          "selection_score": 3.516556543317355
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3236749225609302,
+              "critical_smoothness_rmse_normalized": -0.21291285782410685,
+              "critical_tracking_rmse_normalized": -0.016829124324093225,
+              "critical_visibility_rmse_normalized": 0.003023228946368084,
+              "global_saturation_rmse_normalized": -0.11503146082636295,
+              "global_smoothness_rmse_normalized": -0.12713049771700524,
+              "global_tracking_rmse_normalized": -0.02535997131210066,
+              "global_visibility_rmse_normalized": -0.043124407605410364
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.25788819789886475,
+          "mean_absolute_residual_normalized": 0.11735460162162781,
+          "mean_gate_probability": 0.8280847668647766,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7798467622521843,
+              "smoothness_rmse_normalized": 0.06302531580444877,
+              "tracking_rmse_normalized": 0.8299559020771526,
+              "visibility_rmse_normalized": 0.13282526179316043
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6186099179640883,
+              "smoothness_rmse_normalized": 0.04950512447748067,
+              "tracking_rmse_normalized": 1.0080251937498061,
+              "visibility_rmse_normalized": 0.6735385733369291
+            }
+          },
+          "selection_score": 3.4681479092949723
+        },
+        {
+          "epoch": 40,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.07897100977902916,
+              "critical_smoothness_rmse_normalized": -0.16458561361445523,
+              "critical_tracking_rmse_normalized": -0.0010472532024689007,
+              "critical_visibility_rmse_normalized": 0.0011448862990410813,
+              "global_saturation_rmse_normalized": -0.020803801290877888,
+              "global_smoothness_rmse_normalized": -0.10748874155814814,
+              "global_tracking_rmse_normalized": -0.010128034670209174,
+              "global_visibility_rmse_normalized": -0.020145310650239723
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2773548662662506,
+          "mean_absolute_residual_normalized": 0.08656363934278488,
+          "mean_gate_probability": 0.5922840237617493,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.0620062746807302,
+              "smoothness_rmse_normalized": 0.06689507769619028,
+              "tracking_rmse_normalized": 0.8432783645374126,
+              "visibility_rmse_normalized": 0.13257652243531867
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6844768523859881,
+              "smoothness_rmse_normalized": 0.05061911411860951,
+              "tracking_rmse_normalized": 1.023778882735162,
+              "visibility_rmse_normalized": 0.6897134118454802
+            }
+          },
+          "selection_score": 3.5302333035395117
+        },
+        {
+          "epoch": 50,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.43809699811965686,
+              "critical_smoothness_rmse_normalized": -0.34413519597071285,
+              "critical_tracking_rmse_normalized": -0.019515019871462758,
+              "critical_visibility_rmse_normalized": 0.0038899313386313583,
+              "global_saturation_rmse_normalized": -0.043422672927135975,
+              "global_smoothness_rmse_normalized": -0.14850508844369537,
+              "global_tracking_rmse_normalized": -0.0024812907724751643,
+              "global_visibility_rmse_normalized": -0.0077769273541346
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.24188348650932312,
+          "mean_absolute_residual_normalized": 0.09199821203947067,
+          "mean_gate_probability": 0.7171887755393982,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.6479106739253595,
+              "smoothness_rmse_normalized": 0.05251780163082781,
+              "tracking_rmse_normalized": 0.8276885700018717,
+              "visibility_rmse_normalized": 0.1329400347802926
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6686658289337742,
+              "smoothness_rmse_normalized": 0.04829285646741457,
+              "tracking_rmse_normalized": 1.0316875569863575,
+              "visibility_rmse_normalized": 0.6984194372744449
+            }
+          },
+          "selection_score": 3.538862795196866
+        },
+        {
+          "epoch": 60,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.3457088626117575,
+              "critical_smoothness_rmse_normalized": -0.3212154136837493,
+              "critical_tracking_rmse_normalized": -0.002604973875246497,
+              "critical_visibility_rmse_normalized": 0.0038310493385629307,
+              "global_saturation_rmse_normalized": -0.11477148747544774,
+              "global_smoothness_rmse_normalized": -0.12533148185681775,
+              "global_tracking_rmse_normalized": 0.011394585053911443,
+              "global_visibility_rmse_normalized": 0.012321143857010775
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2485784888267517,
+          "mean_absolute_residual_normalized": 0.05292392894625664,
+          "mean_gate_probability": 0.32012656331062317,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.7544401975963818,
+              "smoothness_rmse_normalized": 0.05435308318912098,
+              "tracking_rmse_normalized": 0.8419633952903114,
+              "visibility_rmse_normalized": 0.13293223733667583
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6187916443036853,
+              "smoothness_rmse_normalized": 0.04960715634348424,
+              "tracking_rmse_normalized": 1.0460387348639701,
+              "visibility_rmse_normalized": 0.7125663402971281
+            }
+          },
+          "selection_score": 3.5955832258181863
+        }
+      ],
+      "gate": {
+        "checks": {
+          "critical_saturation": true,
+          "critical_smoothness": true,
+          "critical_tracking": true,
+          "critical_visibility": false,
+          "global_saturation": true,
+          "global_smoothness": true,
+          "global_tracking": true,
+          "global_visibility": true
+        },
+        "passed": false,
+        "relative_changes": {
+          "critical_saturation_rmse_normalized": -0.3236749225609302,
+          "critical_smoothness_rmse_normalized": -0.21291285782410685,
+          "critical_tracking_rmse_normalized": -0.016829124324093225,
+          "critical_visibility_rmse_normalized": 0.003023228946368084,
+          "global_saturation_rmse_normalized": -0.11503146082636295,
+          "global_smoothness_rmse_normalized": -0.12713049771700524,
+          "global_tracking_rmse_normalized": -0.02535997131210066,
+          "global_visibility_rmse_normalized": -0.043124407605410364
+        }
+      },
+      "maximum_absolute_residual_normalized": 0.25788819789886475,
+      "mean_absolute_residual_normalized": 0.11735460162162781,
+      "mean_gate_probability": 0.8280847668647766,
+      "metrics": {
+        "critical": {
+          "sample_count": 32,
+          "saturation_rmse_normalized": 0.7798467622521843,
+          "smoothness_rmse_normalized": 0.06302531580444877,
+          "tracking_rmse_normalized": 0.8299559020771526,
+          "visibility_rmse_normalized": 0.13282526179316043
+        },
+        "global": {
+          "sample_count": 768,
+          "saturation_rmse_normalized": 0.6186099179640883,
+          "smoothness_rmse_normalized": 0.04950512447748067,
+          "tracking_rmse_normalized": 1.0080251937498061,
+          "visibility_rmse_normalized": 0.6735385733369291
+        }
+      },
+      "ordinary_trust_region_weight": 0.25,
+      "selected_epoch": 30,
+      "selection_score": 3.4681479092949723,
+      "training_history": [
+        {
+          "action": 0.02037983896055569,
+          "epoch": 1,
+          "gate": 0.9379702483614286,
+          "loss": 0.25487738971908885,
+          "residual": 1.9112759175765603e-05,
+          "trust": 1.9179653014012032e-05
+        },
+        {
+          "action": 0.02017062654097875,
+          "epoch": 2,
+          "gate": 0.7079203749696413,
+          "loss": 0.19725612799326578,
+          "residual": 0.00040554242817355163,
+          "trust": 0.00040540434414045495
+        },
+        {
+          "action": 0.019849642412737012,
+          "epoch": 3,
+          "gate": 0.6893252581357956,
+          "loss": 0.19223366801937422,
+          "residual": 0.00020281165598134976,
+          "trust": 0.00020273740483389702
+        },
+        {
+          "action": 0.019764444208703935,
+          "epoch": 4,
+          "gate": 0.6907646581530571,
+          "loss": 0.19256649414698282,
+          "residual": 0.00042741515547580394,
+          "trust": 0.0004264444032742176
+        },
+        {
+          "action": 0.01975991006474942,
+          "epoch": 5,
+          "gate": 0.6882624924182892,
+          "loss": 0.1918737137069305,
+          "residual": 0.0001863476669920298,
+          "trust": 0.00018527186087643108
+        },
+        {
+          "action": 0.019758881612991292,
+          "epoch": 6,
+          "gate": 0.688401552538077,
+          "loss": 0.1919941051552693,
+          "residual": 0.0005274916153818291,
+          "trust": 0.0005182450416517289
+        },
+        {
+          "action": 0.01870152730649958,
+          "epoch": 7,
+          "gate": 0.6891019890705744,
+          "loss": 0.19111328944563866,
+          "residual": 0.0005622935829402801,
+          "trust": 0.0005225639063913453
+        },
+        {
+          "action": 0.015345412752746293,
+          "epoch": 8,
+          "gate": 0.6872008815407753,
+          "loss": 0.18747929483652115,
+          "residual": 0.0016739926977606956,
+          "trust": 0.00126769439035949
+        },
+        {
+          "action": 0.01287726720329374,
+          "epoch": 9,
+          "gate": 0.6798299898703893,
+          "loss": 0.18362039824326834,
+          "residual": 0.004054026464776446,
+          "trust": 0.0029803771127869063
+        },
+        {
+          "action": 0.011808424411962429,
+          "epoch": 10,
+          "gate": 0.6689765974879265,
+          "loss": 0.17999392996231714,
+          "residual": 0.005258784348067517,
+          "trust": 0.003555061038544712
+        },
+        {
+          "action": 0.011526180276026329,
+          "epoch": 11,
+          "gate": 0.6558240801095963,
+          "loss": 0.17622306818763414,
+          "residual": 0.004814361978787929,
+          "trust": 0.0027708960503029325
+        },
+        {
+          "action": 0.012338219064986333,
+          "epoch": 12,
+          "gate": 0.6090243682265282,
+          "loss": 0.16516600797573724,
+          "residual": 0.004488346666524497,
+          "trust": 0.002107246841963691
+        },
+        {
+          "action": 0.011708820258112004,
+          "epoch": 13,
+          "gate": 0.5694533127049605,
+          "loss": 0.15472557426740727,
+          "residual": 0.0049772377727398025,
+          "trust": 0.0024146225672060004
+        },
+        {
+          "action": 0.011210431228391826,
+          "epoch": 14,
+          "gate": 0.5040477588772774,
+          "loss": 0.13763776669899622,
+          "residual": 0.003937352300757387,
+          "trust": 0.0015040936571798131
+        },
+        {
+          "action": 0.009620816873696944,
+          "epoch": 15,
+          "gate": 0.46088284626603127,
+          "loss": 0.12531824223697186,
+          "residual": 0.005342947804213812,
+          "trust": 0.001693135922929893
+        },
+        {
+          "action": 0.008891336328815669,
+          "epoch": 16,
+          "gate": 0.4311158669491609,
+          "loss": 0.11706335283815861,
+          "residual": 0.005285337965081756,
+          "trust": 0.001360788837094636
+        },
+        {
+          "action": 0.009256786259356886,
+          "epoch": 17,
+          "gate": 0.4204380636413892,
+          "loss": 0.11490752858420213,
+          "residual": 0.006378481669041018,
+          "trust": 0.001909774856661291
+        },
+        {
+          "action": 0.008465909486403689,
+          "epoch": 18,
+          "gate": 0.39102303485075635,
+          "loss": 0.10661928060775001,
+          "residual": 0.006161864303673307,
+          "trust": 0.001343978408840485
+        },
+        {
+          "action": 0.007519869056219856,
+          "epoch": 19,
+          "gate": 0.3583137318491936,
+          "loss": 0.0974540519528091,
+          "residual": 0.00568232136235262,
+          "trust": 0.001195712509797886
+        },
+        {
+          "action": 0.008010458065352092,
+          "epoch": 20,
+          "gate": 0.41019539535045624,
+          "loss": 0.11104048353930314,
+          "residual": 0.006700665956789938,
+          "trust": 0.0016566831272939453
+        },
+        {
+          "action": 0.008634363883174956,
+          "epoch": 21,
+          "gate": 0.3676537734766801,
+          "loss": 0.1008985317312181,
+          "residual": 0.006058540112765816,
+          "trust": 0.0011605567936688506
+        },
+        {
+          "action": 0.0077706071800397085,
+          "epoch": 22,
+          "gate": 0.3407487416019042,
+          "loss": 0.09331736185898383,
+          "residual": 0.005724927497794852,
+          "trust": 0.0012092828073946293
+        },
+        {
+          "action": 0.0067393851253048824,
+          "epoch": 23,
+          "gate": 0.3195584410180648,
+          "loss": 0.08696333443125089,
+          "residual": 0.006338304350113806,
+          "trust": 0.0010838285197678488
+        },
+        {
+          "action": 0.006259593462649112,
+          "epoch": 24,
+          "gate": 0.3023217556377252,
+          "loss": 0.08221694206198056,
+          "residual": 0.006382309429075879,
+          "trust": 0.001252341027187261
+        },
+        {
+          "action": 0.00687663970165886,
+          "epoch": 25,
+          "gate": 0.32343851526578266,
+          "loss": 0.0879896110855043,
+          "residual": 0.005990075374332567,
+          "trust": 0.0007737689053707678
+        },
+        {
+          "action": 0.006064481523935683,
+          "epoch": 26,
+          "gate": 0.3018502437820037,
+          "loss": 0.08188185623536508,
+          "residual": 0.007036409437811623,
+          "trust": 0.0011377984192222357
+        },
+        {
+          "action": 0.005729970003206593,
+          "epoch": 27,
+          "gate": 0.2755036223679781,
+          "loss": 0.0748505590793987,
+          "residual": 0.005705718227545731,
+          "trust": 0.0007505083164384511
+        },
+        {
+          "action": 0.005619383397667359,
+          "epoch": 28,
+          "gate": 0.2638236805796623,
+          "loss": 0.07187554240226746,
+          "residual": 0.007166835993605976,
+          "trust": 0.0009142814718264466
+        },
+        {
+          "action": 0.005924912179276968,
+          "epoch": 29,
+          "gate": 0.2735357250397404,
+          "loss": 0.0746299351255099,
+          "residual": 0.007266376322756211,
+          "trust": 0.0009937095689262303
+        },
+        {
+          "action": 0.006242404109798372,
+          "epoch": 30,
+          "gate": 0.24342717664937177,
+          "loss": 0.06737157919754584,
+          "residual": 0.006795807033389186,
+          "trust": 0.0008176943168412739
+        },
+        {
+          "action": 0.005427970623713918,
+          "epoch": 31,
+          "gate": 0.26971980060140294,
+          "loss": 0.07312395935878158,
+          "residual": 0.006358245028726135,
+          "trust": 0.0008098234284261707
+        },
+        {
+          "action": 0.006412415231655662,
+          "epoch": 32,
+          "gate": 0.28818875302871066,
+          "loss": 0.0787939284928143,
+          "residual": 0.006960337622634445,
+          "trust": 0.0010588876878803906
+        },
+        {
+          "action": 0.005909344661631621,
+          "epoch": 33,
+          "gate": 0.23830877430737019,
+          "loss": 0.06575698172673583,
+          "residual": 0.006475847262966757,
+          "trust": 0.0008227387431058256
+        },
+        {
+          "action": 0.005439817682296659,
+          "epoch": 34,
+          "gate": 0.23606122036774954,
+          "loss": 0.06472751094649236,
+          "residual": 0.006966252859759455,
+          "trust": 0.0008108992933557602
+        },
+        {
+          "action": 0.005573284404817969,
+          "epoch": 35,
+          "gate": 0.266013886158665,
+          "loss": 0.07235888345167041,
+          "residual": 0.006499621085822582,
+          "trust": 0.0008685273448160539
+        },
+        {
+          "action": 0.004896371508948505,
+          "epoch": 36,
+          "gate": 0.21825104393064976,
+          "loss": 0.05974821816198528,
+          "residual": 0.007536950443560879,
+          "trust": 0.0008548618582911635
+        },
+        {
+          "action": 0.004935583220988822,
+          "epoch": 37,
+          "gate": 0.22475997048119703,
+          "loss": 0.06135578049967686,
+          "residual": 0.006409829831682146,
+          "trust": 0.0006644247890411256
+        },
+        {
+          "action": 0.004691882078380634,
+          "epoch": 38,
+          "gate": 0.21752422085652748,
+          "loss": 0.05929761317869028,
+          "residual": 0.007152235513785854,
+          "trust": 0.0006126109171115482
+        },
+        {
+          "action": 0.004411497036926448,
+          "epoch": 39,
+          "gate": 0.20619147519270578,
+          "loss": 0.056227601443727813,
+          "residual": 0.0072751275729388,
+          "trust": 0.0007819366437615827
+        },
+        {
+          "action": 0.004565112030832097,
+          "epoch": 40,
+          "gate": 0.19434795745958885,
+          "loss": 0.05340262843916813,
+          "residual": 0.006696601543808356,
+          "trust": 0.0007342440136805332
+        },
+        {
+          "action": 0.004610323890422781,
+          "epoch": 41,
+          "gate": 0.1963615513717135,
+          "loss": 0.0539305677327017,
+          "residual": 0.00770156760700047,
+          "trust": 0.0006113608663630051
+        },
+        {
+          "action": 0.004649287759093568,
+          "epoch": 42,
+          "gate": 0.1906689265742898,
+          "loss": 0.05253724412371715,
+          "residual": 0.006386957364156842,
+          "trust": 0.0006274196287752906
+        },
+        {
+          "action": 0.0044488738155147685,
+          "epoch": 43,
+          "gate": 0.18832687505831322,
+          "loss": 0.05178232972199718,
+          "residual": 0.007238409190904349,
+          "trust": 0.0007174110093425649
+        },
+        {
+          "action": 0.004194122026092373,
+          "epoch": 44,
+          "gate": 0.17952765679607788,
+          "loss": 0.049311766788984336,
+          "residual": 0.0072525208233855665,
+          "trust": 0.0006528209972505769
+        },
+        {
+          "action": 0.004279312711635915,
+          "epoch": 45,
+          "gate": 0.16621637934197983,
+          "loss": 0.0460439194769909,
+          "residual": 0.006720983394188806,
+          "trust": 0.0005732084294625869
+        },
+        {
+          "action": 0.004008876412020375,
+          "epoch": 46,
+          "gate": 0.1818893365561962,
+          "loss": 0.049718363055338465,
+          "residual": 0.0071587705266817165,
+          "trust": 0.0006622602959396318
+        },
+        {
+          "action": 0.003922346300290276,
+          "epoch": 47,
+          "gate": 0.16642104865362248,
+          "loss": 0.045759470745300256,
+          "residual": 0.007286043420511608,
+          "trust": 0.0006360074354840132
+        },
+        {
+          "action": 0.004237147727205108,
+          "epoch": 48,
+          "gate": 0.19246320612728596,
+          "loss": 0.052644375866899885,
+          "residual": 0.007529256108682603,
+          "trust": 0.000864535296689913
+        },
+        {
+          "action": 0.004410502971344006,
+          "epoch": 49,
+          "gate": 0.20264978210131326,
+          "loss": 0.05532114525946478,
+          "residual": 0.006776290955410029,
+          "trust": 0.000721736968747185
+        },
+        {
+          "action": 0.004467332478573856,
+          "epoch": 50,
+          "gate": 0.18155275471508503,
+          "loss": 0.05008203249114255,
+          "residual": 0.007324014693343391,
+          "trust": 0.0006130820729595143
+        },
+        {
+          "action": 0.004014961964761217,
+          "epoch": 51,
+          "gate": 0.16864070513596138,
+          "loss": 0.04638665650660793,
+          "residual": 0.006921640539076179,
+          "trust": 0.0005692057178142326
+        },
+        {
+          "action": 0.003682351224900534,
+          "epoch": 52,
+          "gate": 0.1500640461842219,
+          "loss": 0.041422212263569236,
+          "residual": 0.00731904348746563,
+          "trust": 0.0006026336371481497
+        },
+        {
+          "action": 0.0037259817375646285,
+          "epoch": 53,
+          "gate": 0.16119190522780022,
+          "loss": 0.04423265717923641,
+          "residual": 0.006651773049573724,
+          "trust": 0.0005687255276522288
+        },
+        {
+          "action": 0.0040939363922613365,
+          "epoch": 54,
+          "gate": 0.15412253141403198,
+          "loss": 0.04285164852626622,
+          "residual": 0.00787099706940353,
+          "trust": 0.0005934773798799142
+        },
+        {
+          "action": 0.0037273526346931853,
+          "epoch": 55,
+          "gate": 0.1588001623749733,
+          "loss": 0.043639394687488675,
+          "residual": 0.007194581422178696,
+          "trust": 0.0005602254216986088
+        },
+        {
+          "action": 0.004111321099723379,
+          "epoch": 56,
+          "gate": 0.1648673495898644,
+          "loss": 0.045555515525241695,
+          "residual": 0.007263861615986873,
+          "trust": 0.0006188722460744126
+        },
+        {
+          "action": 0.003850627389814084,
+          "epoch": 57,
+          "gate": 0.14638270437717438,
+          "loss": 0.04065080227640768,
+          "residual": 0.0071643907091735555,
+          "trust": 0.0005314189505346197
+        },
+        {
+          "action": 0.0037588267490112535,
+          "epoch": 58,
+          "gate": 0.14603266989191374,
+          "loss": 0.040467743296176195,
+          "residual": 0.007047732603192951,
+          "trust": 0.0005210879159373386
+        },
+        {
+          "action": 0.003635552765141862,
+          "epoch": 59,
+          "gate": 0.13655174865076938,
+          "loss": 0.037976997128377356,
+          "residual": 0.007507968131297578,
+          "trust": 0.0005137080770509783
+        },
+        {
+          "action": 0.003581067081540823,
+          "epoch": 60,
+          "gate": 0.15629626251757145,
+          "loss": 0.04289188771508634,
+          "residual": 0.007169992954004556,
+          "trust": 0.0006602191867083699
+        }
+      ]
+    },
+    {
+      "checkpoint_candidates": [
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "selection_score": 3.5717223542340957
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.13348218577741078,
+              "critical_smoothness_rmse_normalized": -0.12189385736210578,
+              "critical_tracking_rmse_normalized": 0.012643547976827874,
+              "critical_visibility_rmse_normalized": 0.016020307447330406,
+              "global_saturation_rmse_normalized": -0.14214359864924664,
+              "global_smoothness_rmse_normalized": -0.1250164070383838,
+              "global_tracking_rmse_normalized": 0.001962085902562416,
+              "global_visibility_rmse_normalized": 0.0023732318398379526
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.13920553028583527,
+          "mean_absolute_residual_normalized": 0.033499736338853836,
+          "mean_gate_probability": 0.42344269156455994,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9991513465892509,
+              "smoothness_rmse_normalized": 0.07031358280937582,
+              "tracking_rmse_normalized": 0.8548356243424393,
+              "visibility_rmse_normalized": 0.13454639875650873
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5996580155946478,
+              "smoothness_rmse_normalized": 0.04962502593116659,
+              "tracking_rmse_normalized": 1.036283136381745,
+              "visibility_rmse_normalized": 0.705564069029073
+            }
+          },
+          "selection_score": 3.5893301373253483
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.21575200461853317,
+              "critical_smoothness_rmse_normalized": -0.1361884273011107,
+              "critical_tracking_rmse_normalized": 0.0042194460726787675,
+              "critical_visibility_rmse_normalized": 0.003159031435455928,
+              "global_saturation_rmse_normalized": -0.00011568795609784299,
+              "global_smoothness_rmse_normalized": -0.010542515134885022,
+              "global_tracking_rmse_normalized": -0.01394011475176371,
+              "global_visibility_rmse_normalized": -0.027178748434707245
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.24994809925556183,
+          "mean_absolute_residual_normalized": 0.09285798668861389,
+          "mean_gate_probability": 0.7060728669166565,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.9042888995286462,
+              "smoothness_rmse_normalized": 0.06916895760027383,
+              "tracking_rmse_normalized": 0.8477243141236116,
+              "visibility_rmse_normalized": 0.13284324542568726
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6989382388944966,
+              "smoothness_rmse_normalized": 0.05611745607482746,
+              "tracking_rmse_normalized": 1.0198362242667098,
+              "visibility_rmse_normalized": 0.6847626202392807
+            }
+          },
+          "selection_score": 3.522290293476712
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.05463753598414145,
+              "critical_smoothness_rmse_normalized": -0.1400797741260008,
+              "critical_tracking_rmse_normalized": 0.0003428763157760084,
+              "critical_visibility_rmse_normalized": 0.0008816837223637464,
+              "global_saturation_rmse_normalized": -0.08387224811229121,
+              "global_smoothness_rmse_normalized": -0.09883207504303715,
+              "global_tracking_rmse_normalized": -0.006180453840179956,
+              "global_visibility_rmse_normalized": -0.015148852156942283
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2460872381925583,
+          "mean_absolute_residual_normalized": 0.08989060670137405,
+          "mean_gate_probability": 0.7129551768302917,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.0900643511683659,
+              "smoothness_rmse_normalized": 0.0688573614003088,
+              "tracking_rmse_normalized": 0.8444518596305476,
+              "visibility_rmse_normalized": 0.13254166785753535
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6403908030098735,
+              "smoothness_rmse_normalized": 0.0511100802392836,
+              "tracking_rmse_normalized": 1.0278616833732501,
+              "visibility_rmse_normalized": 0.693230386833724
+            }
+          },
+          "selection_score": 3.542258304580374
+        },
+        {
+          "epoch": 40,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.02567297861868001,
+              "critical_smoothness_rmse_normalized": -0.09818501143895852,
+              "critical_tracking_rmse_normalized": 0.000562548079792835,
+              "critical_visibility_rmse_normalized": 0.0004856087595543901,
+              "global_saturation_rmse_normalized": -0.03308156448835564,
+              "global_smoothness_rmse_normalized": -0.062398019065484034,
+              "global_tracking_rmse_normalized": -0.017132765970716446,
+              "global_visibility_rmse_normalized": -0.02728172235058568
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2523001432418823,
+          "mean_absolute_residual_normalized": 0.04933975636959076,
+          "mean_gate_probability": 0.35991621017456055,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1234623679431581,
+              "smoothness_rmse_normalized": 0.07221204794950568,
+              "tracking_rmse_normalized": 0.8446372982776599,
+              "visibility_rmse_normalized": 0.13248921766584823
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6758944613198985,
+              "smoothness_rmse_normalized": 0.053176451525794075,
+              "tracking_rmse_normalized": 1.0165342124789394,
+              "visibility_rmse_normalized": 0.6846901375623863
+            }
+          },
+          "selection_score": 3.514828015773797
+        },
+        {
+          "epoch": 50,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": true,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.4564888426096124,
+              "critical_smoothness_rmse_normalized": -0.37447644196192764,
+              "critical_tracking_rmse_normalized": -0.02188482520094548,
+              "critical_visibility_rmse_normalized": 0.003437144144046389,
+              "global_saturation_rmse_normalized": -0.17122248773068094,
+              "global_smoothness_rmse_normalized": -0.123757708796986,
+              "global_tracking_rmse_normalized": -0.004681268560610463,
+              "global_visibility_rmse_normalized": -0.011035389976680077
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.24523615837097168,
+          "mean_absolute_residual_normalized": 0.0852566584944725,
+          "mean_gate_probability": 0.6190071105957031,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 0.6267036821165578,
+              "smoothness_rmse_normalized": 0.05008825284514909,
+              "tracking_rmse_normalized": 0.8256880694087007,
+              "visibility_rmse_normalized": 0.13288007447636171
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5793313165167912,
+              "smoothness_rmse_normalized": 0.04969641347874043,
+              "tracking_rmse_normalized": 1.0294122215077646,
+              "visibility_rmse_normalized": 0.6961258263980625
+            }
+          },
+          "selection_score": 3.528883872462871
+        },
+        {
+          "epoch": 60,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.03947689697448786,
+              "critical_smoothness_rmse_normalized": -0.06298450456184002,
+              "critical_tracking_rmse_normalized": 0.0013781512991357658,
+              "critical_visibility_rmse_normalized": 0.0015187473698261567,
+              "global_saturation_rmse_normalized": -0.15599058753053974,
+              "global_smoothness_rmse_normalized": -0.07382096130741989,
+              "global_tracking_rmse_normalized": 0.00021888876569597926,
+              "global_visibility_rmse_normalized": -0.0019017886226405656
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.22965459525585175,
+          "mean_absolute_residual_normalized": 0.03048568218946457,
+          "mean_gate_probability": 0.22203151881694794,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1075455530929206,
+              "smoothness_rmse_normalized": 0.07503069780862291,
+              "tracking_rmse_normalized": 0.845325799862068,
+              "visibility_rmse_normalized": 0.1326260309543322
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.5899787057923976,
+              "smoothness_rmse_normalized": 0.052528595029368144,
+              "tracking_rmse_normalized": 1.0344802280464498,
+              "visibility_rmse_normalized": 0.7025549096292828
+            }
+          },
+          "selection_score": 3.5688236254174712
+        }
+      ],
+      "gate": {
+        "checks": {
+          "critical_saturation": true,
+          "critical_smoothness": true,
+          "critical_tracking": false,
+          "critical_visibility": false,
+          "global_saturation": true,
+          "global_smoothness": true,
+          "global_tracking": true,
+          "global_visibility": true
+        },
+        "passed": false,
+        "relative_changes": {
+          "critical_saturation_rmse_normalized": -0.02567297861868001,
+          "critical_smoothness_rmse_normalized": -0.09818501143895852,
+          "critical_tracking_rmse_normalized": 0.000562548079792835,
+          "critical_visibility_rmse_normalized": 0.0004856087595543901,
+          "global_saturation_rmse_normalized": -0.03308156448835564,
+          "global_smoothness_rmse_normalized": -0.062398019065484034,
+          "global_tracking_rmse_normalized": -0.017132765970716446,
+          "global_visibility_rmse_normalized": -0.02728172235058568
+        }
+      },
+      "maximum_absolute_residual_normalized": 0.2523001432418823,
+      "mean_absolute_residual_normalized": 0.04933975636959076,
+      "mean_gate_probability": 0.35991621017456055,
+      "metrics": {
+        "critical": {
+          "sample_count": 32,
+          "saturation_rmse_normalized": 1.1234623679431581,
+          "smoothness_rmse_normalized": 0.07221204794950568,
+          "tracking_rmse_normalized": 0.8446372982776599,
+          "visibility_rmse_normalized": 0.13248921766584823
+        },
+        "global": {
+          "sample_count": 768,
+          "saturation_rmse_normalized": 0.6758944613198985,
+          "smoothness_rmse_normalized": 0.053176451525794075,
+          "tracking_rmse_normalized": 1.0165342124789394,
+          "visibility_rmse_normalized": 0.6846901375623863
+        }
+      },
+      "ordinary_trust_region_weight": 1.0,
+      "selected_epoch": 40,
+      "selection_score": 3.514828015773797,
+      "training_history": [
+        {
+          "action": 0.020387312668996554,
+          "epoch": 1,
+          "gate": 0.937971810499827,
+          "loss": 0.2548968152453502,
+          "residual": 1.6328425955077403e-05,
+          "trust": 1.6388552896503168e-05
+        },
+        {
+          "action": 0.020197640638798475,
+          "epoch": 2,
+          "gate": 0.7079562445481619,
+          "loss": 0.19736108804742494,
+          "residual": 0.0001727114273914291,
+          "trust": 0.0001726568566482456
+        },
+        {
+          "action": 0.019989972371452797,
+          "epoch": 3,
+          "gate": 0.689357616007328,
+          "loss": 0.1924124720195929,
+          "residual": 8.23002151264518e-05,
+          "trust": 8.227321268350352e-05
+        },
+        {
+          "action": 0.019828159303870052,
+          "epoch": 4,
+          "gate": 0.6908175374070803,
+          "loss": 0.1927098265538613,
+          "residual": 0.00017603519275629273,
+          "trust": 0.00017552268582221586
+        },
+        {
+          "action": 0.01989204331766814,
+          "epoch": 5,
+          "gate": 0.6882770160833994,
+          "loss": 0.19204018637537956,
+          "residual": 7.853763778105834e-05,
+          "trust": 7.810373199390597e-05
+        },
+        {
+          "action": 0.019936617308606703,
+          "epoch": 6,
+          "gate": 0.6884810452659925,
+          "loss": 0.19231372574965158,
+          "residual": 0.00025945505331037566,
+          "trust": 0.00025425089976730913
+        },
+        {
+          "action": 0.019191079773008823,
+          "epoch": 7,
+          "gate": 0.6894327128926913,
+          "loss": 0.1917833754171928,
+          "residual": 0.0002500055798009271,
+          "trust": 0.00023161825295877256
+        },
+        {
+          "action": 0.016329114480564993,
+          "epoch": 8,
+          "gate": 0.6879950066407522,
+          "loss": 0.189019742111365,
+          "residual": 0.0009193660104453253,
+          "trust": 0.0006826817134424346
+        },
+        {
+          "action": 0.0136951725386704,
+          "epoch": 9,
+          "gate": 0.6813891356190046,
+          "loss": 0.18565017792085806,
+          "residual": 0.0022717496855572485,
+          "trust": 0.001585002195497509
+        },
+        {
+          "action": 0.012421754033615192,
+          "epoch": 10,
+          "gate": 0.6708815693855286,
+          "loss": 0.1821078738818566,
+          "residual": 0.003063710144488141,
+          "trust": 0.0019350882988267888
+        },
+        {
+          "action": 0.012429588222100088,
+          "epoch": 11,
+          "gate": 0.6585353016853333,
+          "loss": 0.17855191913743815,
+          "residual": 0.002921119516637797,
+          "trust": 0.0014592933269644466
+        },
+        {
+          "action": 0.013115705796129381,
+          "epoch": 12,
+          "gate": 0.6116510406136513,
+          "loss": 0.1671470490594705,
+          "residual": 0.0029533632138433554,
+          "trust": 0.0010890471870273661
+        },
+        {
+          "action": 0.012661915738135576,
+          "epoch": 13,
+          "gate": 0.5693732139964899,
+          "loss": 0.15625239008416733,
+          "residual": 0.003331505426710161,
+          "trust": 0.0012138552907951332
+        },
+        {
+          "action": 0.01222706747163708,
+          "epoch": 14,
+          "gate": 0.506622102111578,
+          "loss": 0.13974336348474026,
+          "residual": 0.002784092579531716,
+          "trust": 0.0008329302787994189
+        },
+        {
+          "action": 0.010693820144903535,
+          "epoch": 15,
+          "gate": 0.4667353741824627,
+          "loss": 0.12845120361695686,
+          "residual": 0.004100967741881807,
+          "trust": 0.0010325290325757426
+        },
+        {
+          "action": 0.009815499225320915,
+          "epoch": 16,
+          "gate": 0.4356251222391923,
+          "loss": 0.11958694675316413,
+          "residual": 0.004298065139058356,
+          "trust": 0.0008221862626669463
+        },
+        {
+          "action": 0.010130147983242447,
+          "epoch": 17,
+          "gate": 0.4353688607613246,
+          "loss": 0.12013549202432235,
+          "residual": 0.004864162367690976,
+          "trust": 0.001114485787184094
+        },
+        {
+          "action": 0.00909841035415108,
+          "epoch": 18,
+          "gate": 0.4049052484333515,
+          "loss": 0.11137653328478336,
+          "residual": 0.005162128953088541,
+          "trust": 0.0010001884450806149
+        },
+        {
+          "action": 0.00851960145519115,
+          "epoch": 19,
+          "gate": 0.3943454505254825,
+          "loss": 0.10802219171697895,
+          "residual": 0.004718064611855273,
+          "trust": 0.000869044892169768
+        },
+        {
+          "action": 0.008183293636344994,
+          "epoch": 20,
+          "gate": 0.36575601312021416,
+          "loss": 0.10056520222375791,
+          "residual": 0.0053068488972106325,
+          "trust": 0.0008898375375186637
+        },
+        {
+          "action": 0.008677783509483561,
+          "epoch": 21,
+          "gate": 0.35135372541844845,
+          "loss": 0.09732489893212914,
+          "residual": 0.005417638535921772,
+          "trust": 0.0007545077351096552
+        },
+        {
+          "action": 0.008282848459202796,
+          "epoch": 22,
+          "gate": 0.3334277042498191,
+          "loss": 0.09249298848832647,
+          "residual": 0.004905566534337898,
+          "trust": 0.0008041588143896661
+        },
+        {
+          "action": 0.007391655206447467,
+          "epoch": 23,
+          "gate": 0.3414939735084772,
+          "loss": 0.09370833930249016,
+          "residual": 0.005602263612672687,
+          "trust": 0.000887168542855458
+        },
+        {
+          "action": 0.006705821288051084,
+          "epoch": 24,
+          "gate": 0.30216712939242524,
+          "loss": 0.08299470289299886,
+          "residual": 0.005455056874779984,
+          "trust": 0.0006925484716096738
+        },
+        {
+          "action": 0.007438354582215349,
+          "epoch": 25,
+          "gate": 0.34219177563985187,
+          "loss": 0.09367447346448898,
+          "residual": 0.005411842265554394,
+          "trust": 0.0006340569070744095
+        },
+        {
+          "action": 0.006189984705997631,
+          "epoch": 26,
+          "gate": 0.30083310790359974,
+          "loss": 0.08218528376892209,
+          "residual": 0.006141143821878359,
+          "trust": 0.0007256106358302835
+        },
+        {
+          "action": 0.006467814062489197,
+          "epoch": 27,
+          "gate": 0.26165996740261716,
+          "loss": 0.07238282651330034,
+          "residual": 0.005059642091509886,
+          "trust": 0.00044942422149082023
+        },
+        {
+          "action": 0.006674130165871854,
+          "epoch": 28,
+          "gate": 0.3017492964863777,
+          "loss": 0.08291128867616256,
+          "residual": 0.007031326191887881,
+          "trust": 0.0007295225683871346
+        },
+        {
+          "action": 0.006986491537342469,
+          "epoch": 29,
+          "gate": 0.2982573652019103,
+          "loss": 0.08231351710855961,
+          "residual": 0.0059780148246015114,
+          "trust": 0.0007029049475022475
+        },
+        {
+          "action": 0.005843347559372584,
+          "epoch": 30,
+          "gate": 0.25676667286703986,
+          "loss": 0.07069938303902745,
+          "residual": 0.006601535443527003,
+          "trust": 0.0005983522435902463
+        },
+        {
+          "action": 0.005833079941415538,
+          "epoch": 31,
+          "gate": 0.28211737672487897,
+          "loss": 0.07688453948746125,
+          "residual": 0.005456940193350117,
+          "trust": 0.000467545268596344
+        },
+        {
+          "action": 0.005777008501657595,
+          "epoch": 32,
+          "gate": 0.26638957609732944,
+          "loss": 0.07310799354066451,
+          "residual": 0.006598555822468673,
+          "trust": 0.0006676041151270814
+        },
+        {
+          "action": 0.005846757800706352,
+          "epoch": 33,
+          "gate": 0.2518632359181841,
+          "loss": 0.06937186000868678,
+          "residual": 0.0058972441765945405,
+          "trust": 0.0005003203235294981
+        },
+        {
+          "action": 0.005529555530908207,
+          "epoch": 34,
+          "gate": 0.22453725275894007,
+          "loss": 0.0622840152742962,
+          "residual": 0.0068064321725008385,
+          "trust": 0.0005520826665209219
+        },
+        {
+          "action": 0.005322480001874889,
+          "epoch": 35,
+          "gate": 0.2531988676637411,
+          "loss": 0.06916340114548802,
+          "residual": 0.0058063549125411855,
+          "trust": 0.00048314055614658474
+        },
+        {
+          "action": 0.004696742088223497,
+          "epoch": 36,
+          "gate": 0.22692563012242317,
+          "loss": 0.06200529782411953,
+          "residual": 0.007060511833212028,
+          "trust": 0.0005065433882312694
+        },
+        {
+          "action": 0.005045889910737363,
+          "epoch": 37,
+          "gate": 0.22357154761751494,
+          "loss": 0.06141495844349265,
+          "residual": 0.005901409778743982,
+          "trust": 0.00041716832856764086
+        },
+        {
+          "action": 0.004950888493719201,
+          "epoch": 38,
+          "gate": 0.2244882443919778,
+          "loss": 0.06156172036814193,
+          "residual": 0.006669002973164122,
+          "trust": 0.00042208014747302514
+        },
+        {
+          "action": 0.004348815302364528,
+          "epoch": 39,
+          "gate": 0.20557143725454807,
+          "loss": 0.05627733996758858,
+          "residual": 0.006674911574615787,
+          "trust": 0.00046891541812025633
+        },
+        {
+          "action": 0.004494578529071684,
+          "epoch": 40,
+          "gate": 0.1889772561068336,
+          "loss": 0.05224404064938426,
+          "residual": 0.006647589538867275,
+          "trust": 0.00043867185740964487
+        },
+        {
+          "action": 0.004785502872740229,
+          "epoch": 41,
+          "gate": 0.19416258049507937,
+          "loss": 0.05382624035701156,
+          "residual": 0.007150541214893262,
+          "trust": 0.0004285869054001523
+        },
+        {
+          "action": 0.005117597368856271,
+          "epoch": 42,
+          "gate": 0.19792883843183517,
+          "loss": 0.05503324527914325,
+          "residual": 0.005840632938391839,
+          "trust": 0.00037503234974186245
+        },
+        {
+          "action": 0.004466676803228135,
+          "epoch": 43,
+          "gate": 0.18597042808930078,
+          "loss": 0.05145897235100468,
+          "residual": 0.006871577594817306,
+          "trust": 0.00043097329095568665
+        },
+        {
+          "action": 0.004163896228419617,
+          "epoch": 44,
+          "gate": 0.17436568439006805,
+          "loss": 0.048159973618264,
+          "residual": 0.006550557377825801,
+          "trust": 0.00033915134372364264
+        },
+        {
+          "action": 0.004415359561486791,
+          "epoch": 45,
+          "gate": 0.1691776600976785,
+          "loss": 0.04710513143800199,
+          "residual": 0.006559870496857911,
+          "trust": 0.0003297574615620154
+        },
+        {
+          "action": 0.003990126715507358,
+          "epoch": 46,
+          "gate": 0.18664826732128859,
+          "loss": 0.05112611556736132,
+          "residual": 0.006521536813428004,
+          "trust": 0.00040870619826212834
+        },
+        {
+          "action": 0.003742517738525445,
+          "epoch": 47,
+          "gate": 0.18943514302372932,
+          "loss": 0.051570237847045064,
+          "residual": 0.0068879354900370044,
+          "trust": 0.00040005495581378153
+        },
+        {
+          "action": 0.004301375602760042,
+          "epoch": 48,
+          "gate": 0.1861665965989232,
+          "loss": 0.051406489529957376,
+          "residual": 0.007158285928502058,
+          "trust": 0.0004918820601839494
+        },
+        {
+          "action": 0.004224433558799016,
+          "epoch": 49,
+          "gate": 0.16848906440039477,
+          "loss": 0.04668900091201067,
+          "residual": 0.006175012676976621,
+          "trust": 0.0002805509749729633
+        },
+        {
+          "action": 0.0038085958076408133,
+          "epoch": 50,
+          "gate": 0.1685524545609951,
+          "loss": 0.046375500659147896,
+          "residual": 0.006782173896984507,
+          "trust": 0.00036096918665862177
+        },
+        {
+          "action": 0.003792204001607994,
+          "epoch": 51,
+          "gate": 0.15545818582177162,
+          "loss": 0.043012487779681884,
+          "residual": 0.006893933707033284,
+          "trust": 0.0002867980814092637
+        },
+        {
+          "action": 0.003611829442282518,
+          "epoch": 52,
+          "gate": 0.150331890831391,
+          "loss": 0.04166435326139132,
+          "residual": 0.006937549808450664,
+          "trust": 0.00040017614416380337
+        },
+        {
+          "action": 0.004061358849867247,
+          "epoch": 53,
+          "gate": 0.16794963522503772,
+          "loss": 0.046446484979242086,
+          "residual": 0.00634905284581085,
+          "trust": 0.0003342263811039932
+        },
+        {
+          "action": 0.00439122360451923,
+          "epoch": 54,
+          "gate": 0.1631442978978157,
+          "loss": 0.04559750948101282,
+          "residual": 0.007077280975257357,
+          "trust": 0.0003494386831638015
+        },
+        {
+          "action": 0.0037715227760296934,
+          "epoch": 55,
+          "gate": 0.16595461126416922,
+          "loss": 0.04565752949565649,
+          "residual": 0.006839432617804657,
+          "trust": 0.0003289603961699565
+        },
+        {
+          "action": 0.003912077023414895,
+          "epoch": 56,
+          "gate": 0.167743148903052,
+          "loss": 0.046239808512230716,
+          "residual": 0.006971175394331415,
+          "trust": 0.0003222323375666747
+        },
+        {
+          "action": 0.004020533970712374,
+          "epoch": 57,
+          "gate": 0.15684404565642276,
+          "loss": 0.04360355739481747,
+          "residual": 0.006703055255153838,
+          "trust": 0.00030498113119392656
+        },
+        {
+          "action": 0.003765393999249985,
+          "epoch": 58,
+          "gate": 0.14752878807485104,
+          "loss": 0.040983122463027634,
+          "residual": 0.006819630187237635,
+          "trust": 0.00026733573819607653
+        },
+        {
+          "action": 0.0039600789023097605,
+          "epoch": 59,
+          "gate": 0.17150861180076996,
+          "loss": 0.04728569540505608,
+          "residual": 0.007094633532688022,
+          "trust": 0.0003775171917368425
+        },
+        {
+          "action": 0.00493439211762355,
+          "epoch": 60,
+          "gate": 0.19958965914944807,
+          "loss": 0.05531502592687806,
+          "residual": 0.006499615342666705,
+          "trust": 0.00041822296922570484
+        }
+      ]
+    },
+    {
+      "checkpoint_candidates": [
+        {
+          "epoch": 0,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": true,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": 0.0,
+              "critical_smoothness_rmse_normalized": 0.0,
+              "critical_tracking_rmse_normalized": 0.0,
+              "critical_visibility_rmse_normalized": 0.0,
+              "global_saturation_rmse_normalized": 0.0,
+              "global_smoothness_rmse_normalized": 0.0,
+              "global_tracking_rmse_normalized": 0.0,
+              "global_visibility_rmse_normalized": 0.0
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.0,
+          "mean_absolute_residual_normalized": 0.0,
+          "mean_gate_probability": 0.11920293420553207,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1530649805343656,
+              "smoothness_rmse_normalized": 0.08007412702768339,
+              "tracking_rmse_normalized": 0.8441624163313194,
+              "visibility_rmse_normalized": 0.13242491096909842
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6990191069862571,
+              "smoothness_rmse_normalized": 0.05671537881435857,
+              "tracking_rmse_normalized": 1.0342538414996676,
+              "visibility_rmse_normalized": 0.7038935664054226
+            }
+          },
+          "selection_score": 3.5717223542340957
+        },
+        {
+          "epoch": 10,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.04670121167422925,
+              "critical_smoothness_rmse_normalized": -0.07287645842558677,
+              "critical_tracking_rmse_normalized": 0.004007030884676022,
+              "critical_visibility_rmse_normalized": 0.0043732892031138615,
+              "global_saturation_rmse_normalized": -0.06747631696082101,
+              "global_smoothness_rmse_normalized": -0.06150852543334673,
+              "global_tracking_rmse_normalized": 1.8128023072216948e-05,
+              "global_visibility_rmse_normalized": 0.0003436384402899506
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.06953783333301544,
+          "mean_absolute_residual_normalized": 0.01177882868796587,
+          "mean_gate_probability": 0.43857526779174805,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.0992154488042891,
+              "smoothness_rmse_normalized": 0.07423860823838527,
+              "tracking_rmse_normalized": 0.8475450012052417,
+              "visibility_rmse_normalized": 0.13300404340246288
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6518518721615824,
+              "smoothness_rmse_normalized": 0.053226899494093705,
+              "tracking_rmse_normalized": 1.0342725904771688,
+              "visibility_rmse_normalized": 0.7041354512927123
+            }
+          },
+          "selection_score": 3.5753616505676242
+        },
+        {
+          "epoch": 20,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.09619317793809012,
+              "critical_smoothness_rmse_normalized": -0.05714139923787309,
+              "critical_tracking_rmse_normalized": 0.002438014975244762,
+              "critical_visibility_rmse_normalized": 0.0012608411241779027,
+              "global_saturation_rmse_normalized": -0.06920317370059736,
+              "global_smoothness_rmse_normalized": -0.051307576667355526,
+              "global_tracking_rmse_normalized": -0.006359253412453136,
+              "global_visibility_rmse_normalized": -0.008836510588219881
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2080964893102646,
+          "mean_absolute_residual_normalized": 0.034624990075826645,
+          "mean_gate_probability": 0.5344223380088806,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.042147995687643,
+              "smoothness_rmse_normalized": 0.07549857936657037,
+              "tracking_rmse_normalized": 0.846220496943874,
+              "visibility_rmse_normalized": 0.13259187774271386
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6506447663054508,
+              "smoothness_rmse_normalized": 0.053805450167622754,
+              "tracking_rmse_normalized": 1.027676759228768,
+              "visibility_rmse_normalized": 0.6976736034529012
+            }
+          },
+          "selection_score": 3.553865069180346
+        },
+        {
+          "epoch": 30,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": true,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.020585913465837158,
+              "critical_smoothness_rmse_normalized": -0.07072571899875069,
+              "critical_tracking_rmse_normalized": 0.0010996315703872828,
+              "critical_visibility_rmse_normalized": 0.00040019565896387554,
+              "global_saturation_rmse_normalized": -0.04786856971802633,
+              "global_smoothness_rmse_normalized": -0.0382811826901841,
+              "global_tracking_rmse_normalized": -0.019937904313236166,
+              "global_visibility_rmse_normalized": -0.031511589073021984
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.22819648683071136,
+          "mean_absolute_residual_normalized": 0.05037890002131462,
+          "mean_gate_probability": 0.557250440120697,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1293280846245979,
+              "smoothness_rmse_normalized": 0.07441082682045319,
+              "tracking_rmse_normalized": 0.8450906839748518,
+              "visibility_rmse_normalized": 0.13247790684360694
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.665558062129253,
+              "smoothness_rmse_normalized": 0.05454424703662311,
+              "tracking_rmse_normalized": 1.0136329873722503,
+              "visibility_rmse_normalized": 0.681712761589711
+            }
+          },
+          "selection_score": 3.506656096220738
+        },
+        {
+          "epoch": 40,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.004966945397715916,
+              "critical_smoothness_rmse_normalized": -0.0071326945884178095,
+              "critical_tracking_rmse_normalized": -4.408067803407523e-05,
+              "critical_visibility_rmse_normalized": 0.00017492277696851133,
+              "global_saturation_rmse_normalized": 0.003205839768888996,
+              "global_smoothness_rmse_normalized": -0.003780100707512002,
+              "global_tracking_rmse_normalized": 0.00037750025616234417,
+              "global_visibility_rmse_normalized": 0.00032924736598149984
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.21749667823314667,
+          "mean_absolute_residual_normalized": 0.006710002664476633,
+          "mean_gate_probability": 0.12224090099334717,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.147337769736033,
+              "smoothness_rmse_normalized": 0.07950298273516075,
+              "tracking_rmse_normalized": 0.8441252050796366,
+              "visibility_rmse_normalized": 0.13244807510226494
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.7012600502386469,
+              "smoothness_rmse_normalized": 0.0565009889707756,
+              "tracking_rmse_normalized": 1.0346442725897707,
+              "visibility_rmse_normalized": 0.7041253215080929
+            }
+          },
+          "selection_score": 3.572529268563103
+        },
+        {
+          "epoch": 50,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": false
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.034630103843718785,
+              "critical_smoothness_rmse_normalized": -0.03385561664009362,
+              "critical_tracking_rmse_normalized": 0.0020487368665347283,
+              "critical_visibility_rmse_normalized": 0.0009224339827618167,
+              "global_saturation_rmse_normalized": -0.012486139750620961,
+              "global_smoothness_rmse_normalized": -0.027237553414437565,
+              "global_tracking_rmse_normalized": 0.010230106646621051,
+              "global_visibility_rmse_normalized": 0.01008404137744301
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.2444971352815628,
+          "mean_absolute_residual_normalized": 0.03141358122229576,
+          "mean_gate_probability": 0.3008718192577362,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.1131342205199048,
+              "smoothness_rmse_normalized": 0.07736316808024399,
+              "tracking_rmse_normalized": 0.8458918829950004,
+              "visibility_rmse_normalized": 0.13254706420714052
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6902910567280724,
+              "smoothness_rmse_normalized": 0.05517059065448242,
+              "tracking_rmse_normalized": 1.0448343685978867,
+              "visibility_rmse_normalized": 0.7109916582543707
+            }
+          },
+          "selection_score": 3.5979599829566626
+        },
+        {
+          "epoch": 60,
+          "gate": {
+            "checks": {
+              "critical_saturation": true,
+              "critical_smoothness": true,
+              "critical_tracking": false,
+              "critical_visibility": false,
+              "global_saturation": true,
+              "global_smoothness": true,
+              "global_tracking": false,
+              "global_visibility": true
+            },
+            "passed": false,
+            "relative_changes": {
+              "critical_saturation_rmse_normalized": -0.01845668647941756,
+              "critical_smoothness_rmse_normalized": -0.046651270430038916,
+              "critical_tracking_rmse_normalized": 0.002673369557228744,
+              "critical_visibility_rmse_normalized": 0.0016760147735517261,
+              "global_saturation_rmse_normalized": -0.01261914516663143,
+              "global_smoothness_rmse_normalized": -0.02002424829664018,
+              "global_tracking_rmse_normalized": -0.0006283316636391811,
+              "global_visibility_rmse_normalized": -0.0010624536902646975
+            }
+          },
+          "maximum_absolute_residual_normalized": 0.05276653915643692,
+          "mean_absolute_residual_normalized": 0.002185054589062929,
+          "mean_gate_probability": 0.05950735881924629,
+          "metrics": {
+            "critical": {
+              "sample_count": 32,
+              "saturation_rmse_normalized": 1.131783221698247,
+              "smoothness_rmse_normalized": 0.07633856727326564,
+              "tracking_rmse_normalized": 0.8464191744364962,
+              "visibility_rmse_normalized": 0.1326468570762689
+            },
+            "global": {
+              "sample_count": 768,
+              "saturation_rmse_normalized": 0.6901980834009485,
+              "smoothness_rmse_normalized": 0.055579695986741846,
+              "tracking_rmse_normalized": 1.0336039870628129,
+              "visibility_rmse_normalized": 0.7031457120882415
+            }
+          },
+          "selection_score": 3.5717021069883406
+        }
+      ],
+      "gate": {
+        "checks": {
+          "critical_saturation": true,
+          "critical_smoothness": true,
+          "critical_tracking": false,
+          "critical_visibility": false,
+          "global_saturation": true,
+          "global_smoothness": true,
+          "global_tracking": true,
+          "global_visibility": true
+        },
+        "passed": false,
+        "relative_changes": {
+          "critical_saturation_rmse_normalized": -0.020585913465837158,
+          "critical_smoothness_rmse_normalized": -0.07072571899875069,
+          "critical_tracking_rmse_normalized": 0.0010996315703872828,
+          "critical_visibility_rmse_normalized": 0.00040019565896387554,
+          "global_saturation_rmse_normalized": -0.04786856971802633,
+          "global_smoothness_rmse_normalized": -0.0382811826901841,
+          "global_tracking_rmse_normalized": -0.019937904313236166,
+          "global_visibility_rmse_normalized": -0.031511589073021984
+        }
+      },
+      "maximum_absolute_residual_normalized": 0.22819648683071136,
+      "mean_absolute_residual_normalized": 0.05037890002131462,
+      "mean_gate_probability": 0.557250440120697,
+      "metrics": {
+        "critical": {
+          "sample_count": 32,
+          "saturation_rmse_normalized": 1.1293280846245979,
+          "smoothness_rmse_normalized": 0.07441082682045319,
+          "tracking_rmse_normalized": 0.8450906839748518,
+          "visibility_rmse_normalized": 0.13247790684360694
+        },
+        "global": {
+          "sample_count": 768,
+          "saturation_rmse_normalized": 0.665558062129253,
+          "smoothness_rmse_normalized": 0.05454424703662311,
+          "tracking_rmse_normalized": 1.0136329873722503,
+          "visibility_rmse_normalized": 0.681712761589711
+        }
+      },
+      "ordinary_trust_region_weight": 5.0,
+      "selected_epoch": 30,
+      "selection_score": 3.506656096220738,
+      "training_history": [
+        {
+          "action": 0.020416203459414344,
+          "epoch": 1,
+          "gate": 0.9379770755767822,
+          "loss": 0.2549492549151182,
+          "residual": 7.70634389494577e-06,
+          "trust": 7.741128384308738e-06
+        },
+        {
+          "action": 0.020384181872941554,
+          "epoch": 2,
+          "gate": 0.7081445579727491,
+          "loss": 0.19749447020391622,
+          "residual": 1.4811407123005438e-05,
+          "trust": 1.480027427073575e-05
+        },
+        {
+          "action": 0.020199824958884467,
+          "epoch": 3,
+          "gate": 0.6893797467152277,
+          "loss": 0.19260978139936924,
+          "residual": 1.2949772970690296e-05,
+          "trust": 1.2977908587193573e-05
+        },
+        {
+          "action": 0.020083185382342588,
+          "epoch": 4,
+          "gate": 0.6908587117989858,
+          "loss": 0.1929057507465283,
+          "residual": 2.1614302265030954e-05,
+          "trust": 2.1534239976972458e-05
+        },
+        {
+          "action": 0.020093389747974772,
+          "epoch": 5,
+          "gate": 0.6883176291982332,
+          "loss": 0.1922618312140306,
+          "residual": 1.780630053834405e-05,
+          "trust": 1.7771556419650853e-05
+        },
+        {
+          "action": 0.02030103704115997,
+          "epoch": 6,
+          "gate": 0.6887115513285001,
+          "loss": 0.19272585461537042,
+          "residual": 5.0171029746100736e-05,
+          "trust": 4.928557488407629e-05
+        },
+        {
+          "action": 0.020339236361905932,
+          "epoch": 7,
+          "gate": 0.6898694932460785,
+          "loss": 0.1929722186177969,
+          "residual": 3.465094800958468e-05,
+          "trust": 3.305264476693992e-05
+        },
+        {
+          "action": 0.019290008426954348,
+          "epoch": 8,
+          "gate": 0.6894818916916847,
+          "loss": 0.19203192802766958,
+          "residual": 9.27156318842511e-05,
+          "trust": 7.410393148650958e-05
+        },
+        {
+          "action": 0.017335515857363742,
+          "epoch": 9,
+          "gate": 0.6856322834889094,
+          "loss": 0.18989255155126253,
+          "residual": 0.00031891039786084246,
+          "trust": 0.0002291548462380888
+        },
+        {
+          "action": 0.015752244701919455,
+          "epoch": 10,
+          "gate": 0.677525152762731,
+          "loss": 0.18717209187646708,
+          "residual": 0.0006261694349329142,
+          "trust": 0.00040645920428990695
+        },
+        {
+          "action": 0.015657314254591864,
+          "epoch": 11,
+          "gate": 0.6705812389651934,
+          "loss": 0.18491897421578565,
+          "residual": 0.0006044042523474976,
+          "trust": 0.0003220613031468626
+        },
+        {
+          "action": 0.015479253643813232,
+          "epoch": 12,
+          "gate": 0.6441165804862976,
+          "loss": 0.178028899555405,
+          "residual": 0.0007961670895989906,
+          "trust": 0.00030250806260786095
+        },
+        {
+          "action": 0.015341541303011278,
+          "epoch": 13,
+          "gate": 0.5855198837816715,
+          "loss": 0.16350331467886767,
+          "residual": 0.00135870187356583,
+          "trust": 0.0003536425347192562
+        },
+        {
+          "action": 0.015748420933960006,
+          "epoch": 14,
+          "gate": 0.5558378261824449,
+          "loss": 0.1558413098876675,
+          "residual": 0.001124385044401303,
+          "trust": 0.00022443746562809488
+        },
+        {
+          "action": 0.015059797170882424,
+          "epoch": 15,
+          "gate": 0.4887060721715291,
+          "loss": 0.1382751651108265,
+          "residual": 0.0017360186344982746,
+          "trust": 0.0002042978636988361
+        },
+        {
+          "action": 0.013798484054859728,
+          "epoch": 16,
+          "gate": 0.46806688730915386,
+          "loss": 0.13195978663861752,
+          "residual": 0.0019815728204169623,
+          "trust": 0.00022495309046159187
+        },
+        {
+          "action": 0.013459043150457243,
+          "epoch": 17,
+          "gate": 0.4713798339168231,
+          "loss": 0.13245496743669113,
+          "residual": 0.002233656843600329,
+          "trust": 0.0002257260642484956
+        },
+        {
+          "action": 0.01206770089144508,
+          "epoch": 18,
+          "gate": 0.44319423163930577,
+          "loss": 0.12438913589964311,
+          "residual": 0.002561569596764457,
+          "trust": 0.0002994522398391079
+        },
+        {
+          "action": 0.011312244149545828,
+          "epoch": 19,
+          "gate": 0.4114101516703765,
+          "loss": 0.1154363142947356,
+          "residual": 0.0026049781154142693,
+          "trust": 0.00024909635552224546
+        },
+        {
+          "action": 0.011177386700486144,
+          "epoch": 20,
+          "gate": 0.40193819130460423,
+          "loss": 0.11315186368301511,
+          "residual": 0.003514949113499218,
+          "trust": 0.0002909557582218743
+        },
+        {
+          "action": 0.01122701761778444,
+          "epoch": 21,
+          "gate": 0.3939322636773189,
+          "loss": 0.11105769919231534,
+          "residual": 0.003145444299055574,
+          "trust": 0.0002632318378346099
+        },
+        {
+          "action": 0.01047989406894582,
+          "epoch": 22,
+          "gate": 0.35687303356826305,
+          "loss": 0.1010581492446363,
+          "residual": 0.0029840140050509945,
+          "trust": 0.00026603158759523166
+        },
+        {
+          "action": 0.009756644013881063,
+          "epoch": 23,
+          "gate": 0.3839273552099864,
+          "loss": 0.10744145543624957,
+          "residual": 0.003844464177139647,
+          "trust": 0.00033290547404855414
+        },
+        {
+          "action": 0.010027173877460882,
+          "epoch": 24,
+          "gate": 0.3726297200967868,
+          "loss": 0.1046950959910949,
+          "residual": 0.0034069495886797085,
+          "trust": 0.00029528481294012937
+        },
+        {
+          "action": 0.009692573978099972,
+          "epoch": 25,
+          "gate": 0.3462709914892912,
+          "loss": 0.09749502952521046,
+          "residual": 0.0032718548075839258,
+          "trust": 0.00024039782935384815
+        },
+        {
+          "action": 0.00852657489789029,
+          "epoch": 26,
+          "gate": 0.30891650542616844,
+          "loss": 0.08707201667129993,
+          "residual": 0.0043336732051102445,
+          "trust": 0.00025459569739420357
+        },
+        {
+          "action": 0.008825679838385744,
+          "epoch": 27,
+          "gate": 0.30130546105404693,
+          "loss": 0.0853993664495647,
+          "residual": 0.0037127640728916353,
+          "trust": 0.00024203865223171306
+        },
+        {
+          "action": 0.008191403108260905,
+          "epoch": 28,
+          "gate": 0.31174063372115296,
+          "loss": 0.08728092163801193,
+          "residual": 0.004708655168845628,
+          "trust": 0.00022145470999627528
+        },
+        {
+          "action": 0.008096709915359194,
+          "epoch": 29,
+          "gate": 0.2844884054114421,
+          "loss": 0.08041186320285003,
+          "residual": 0.004416637952090241,
+          "trust": 0.0002297771088706213
+        },
+        {
+          "action": 0.007902703917352483,
+          "epoch": 30,
+          "gate": 0.2618695981800556,
+          "loss": 0.07455813186243176,
+          "residual": 0.005117462399842528,
+          "trust": 0.00022737060832393277
+        },
+        {
+          "action": 0.007670104833475004,
+          "epoch": 31,
+          "gate": 0.32185636771221954,
+          "loss": 0.08963217865675688,
+          "residual": 0.0042690764215270365,
+          "trust": 0.00029105801028587547
+        },
+        {
+          "action": 0.007845604966860265,
+          "epoch": 32,
+          "gate": 0.2899589668959379,
+          "loss": 0.08140834684794147,
+          "residual": 0.003925545194457906,
+          "trust": 0.00020674898360084626
+        },
+        {
+          "action": 0.006785236619180068,
+          "epoch": 33,
+          "gate": 0.25410921064515907,
+          "loss": 0.07149196493749817,
+          "residual": 0.005077524178583796,
+          "trust": 0.0002257300012994771
+        },
+        {
+          "action": 0.006927288767959301,
+          "epoch": 34,
+          "gate": 0.24459818502267203,
+          "loss": 0.0690277605317533,
+          "residual": 0.004950418951921165,
+          "trust": 0.0001802842702242439
+        },
+        {
+          "action": 0.006831942747036616,
+          "epoch": 35,
+          "gate": 0.2582949722806613,
+          "loss": 0.07238850789144635,
+          "residual": 0.0046971787814982235,
+          "trust": 0.00018716988309582425
+        },
+        {
+          "action": 0.006239544512936845,
+          "epoch": 36,
+          "gate": 0.23173280650128922,
+          "loss": 0.0656285360455513,
+          "residual": 0.005980584469701474,
+          "trust": 0.00027919677495447104
+        },
+        {
+          "action": 0.00793959708729138,
+          "epoch": 37,
+          "gate": 0.30968322046101093,
+          "loss": 0.08672141508820157,
+          "residual": 0.004016353404343438,
+          "trust": 0.0002641696947497015
+        },
+        {
+          "action": 0.006429712821651871,
+          "epoch": 38,
+          "gate": 0.24705661150316396,
+          "loss": 0.0692348126322031,
+          "residual": 0.005213440876104869,
+          "trust": 0.00019776264313501693
+        },
+        {
+          "action": 0.00625881168525666,
+          "epoch": 39,
+          "gate": 0.23076372438420853,
+          "loss": 0.06487299253543218,
+          "residual": 0.0053174408482542885,
+          "trust": 0.0001740150469231594
+        },
+        {
+          "action": 0.005862479495893543,
+          "epoch": 40,
+          "gate": 0.21656434858838716,
+          "loss": 0.0606880405296882,
+          "residual": 0.005243874872879435,
+          "trust": 0.00012640708791877842
+        },
+        {
+          "action": 0.005857216300986086,
+          "epoch": 41,
+          "gate": 0.21905956200013557,
+          "loss": 0.06139274251957735,
+          "residual": 0.005964027067723994,
+          "trust": 0.00014219905551726697
+        },
+        {
+          "action": 0.005825070009450428,
+          "epoch": 42,
+          "gate": 0.20970873348414898,
+          "loss": 0.05912721979742249,
+          "residual": 0.005317696205262716,
+          "trust": 0.00016435789605869408
+        },
+        {
+          "action": 0.005658857388577114,
+          "epoch": 43,
+          "gate": 0.1986730620265007,
+          "loss": 0.056131635482112564,
+          "residual": 0.005413894463951389,
+          "trust": 0.0001500747433359114
+        },
+        {
+          "action": 0.005368958178830023,
+          "epoch": 44,
+          "gate": 0.1811683395256599,
+          "loss": 0.05143838934600353,
+          "residual": 0.0064714700856711715,
+          "trust": 0.00014252632922762132
+        },
+        {
+          "action": 0.00571211186858515,
+          "epoch": 45,
+          "gate": 0.1813323718185226,
+          "loss": 0.05170631726893286,
+          "residual": 0.005513167328899726,
+          "trust": 0.00012119615174318217
+        },
+        {
+          "action": 0.0049392715154681355,
+          "epoch": 46,
+          "gate": 0.19729160300145546,
+          "loss": 0.05499184442063173,
+          "residual": 0.0056736446131253615,
+          "trust": 0.00013458706033967852
+        },
+        {
+          "action": 0.005137457691792709,
+          "epoch": 47,
+          "gate": 0.17783783562481403,
+          "loss": 0.050525698655595384,
+          "residual": 0.006232704802338655,
+          "trust": 0.00017329094453089056
+        },
+        {
+          "action": 0.005300490961720546,
+          "epoch": 48,
+          "gate": 0.20570306604107222,
+          "loss": 0.05761333306630453,
+          "residual": 0.00583119524041346,
+          "trust": 0.0001657527163653564
+        },
+        {
+          "action": 0.005150663763439904,
+          "epoch": 49,
+          "gate": 0.1832934490715464,
+          "loss": 0.05145348235964775,
+          "residual": 0.005109201505547389,
+          "trust": 8.567289914177915e-05
+        },
+        {
+          "action": 0.0045521870876351995,
+          "epoch": 50,
+          "gate": 0.1665902677923441,
+          "loss": 0.046812416442359485,
+          "residual": 0.00621858465213639,
+          "trust": 0.0001100951589402636
+        },
+        {
+          "action": 0.004801051235214497,
+          "epoch": 51,
+          "gate": 0.1682969961936275,
+          "loss": 0.04746860545128584,
+          "residual": 0.006043493218991595,
+          "trust": 0.0001065741487309424
+        },
+        {
+          "action": 0.004234962577659947,
+          "epoch": 52,
+          "gate": 0.15888902203490338,
+          "loss": 0.04474818939343095,
+          "residual": 0.006331349829755102,
+          "trust": 0.0001455316352500328
+        },
+        {
+          "action": 0.004658079861352841,
+          "epoch": 53,
+          "gate": 0.17044558748602867,
+          "loss": 0.04774752872375151,
+          "residual": 0.005656464122390996,
+          "trust": 8.42974394193637e-05
+        },
+        {
+          "action": 0.005215298054584612,
+          "epoch": 54,
+          "gate": 0.16940630692988634,
+          "loss": 0.04837858226771156,
+          "residual": 0.006446359882829711,
+          "trust": 0.00014944882438309529
+        },
+        {
+          "action": 0.004540262125374284,
+          "epoch": 55,
+          "gate": 0.1900627532353004,
+          "loss": 0.052844313982253276,
+          "residual": 0.006186511959337319,
+          "trust": 0.000145299684239338
+        },
+        {
+          "action": 0.004808649808789293,
+          "epoch": 56,
+          "gate": 0.18574918868641058,
+          "loss": 0.051864426427831255,
+          "residual": 0.005827649205457419,
+          "trust": 0.00011204055647340283
+        },
+        {
+          "action": 0.004449200719439735,
+          "epoch": 57,
+          "gate": 0.15802641275028387,
+          "loss": 0.04447535324531297,
+          "residual": 0.006253495962785867,
+          "trust": 9.140287132443821e-05
+        },
+        {
+          "action": 0.005059725420627122,
+          "epoch": 58,
+          "gate": 0.16184097000708184,
+          "loss": 0.04637638906327387,
+          "residual": 0.0063388332588753355,
+          "trust": 0.00015860652399624087
+        },
+        {
+          "action": 0.005082404347679888,
+          "epoch": 59,
+          "gate": 0.15792224432031313,
+          "loss": 0.04536094074137509,
+          "residual": 0.006317983168022086,
+          "trust": 0.00014695915903454684
+        },
+        {
+          "action": 0.00426729518949287,
+          "epoch": 60,
+          "gate": 0.1593706632653872,
+          "loss": 0.044837798069541655,
+          "residual": 0.006288343424481961,
+          "trust": 0.0001329906779119483
+        }
+      ]
+    }
+  ],
+  "base_checkpoint": {
+    "metadata": {
+      "candidate": "midpoint_state_reference",
+      "experiment": "gimbal_midpoint_adapter_v7_replication_v1",
+      "test_opened": false,
+      "train_sha256": "da25df22053c802c4640dad692fe7e7c4fe73942667384543aaf1fa99534fafb",
+      "training_seed": 29,
+      "validation_sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+    },
+    "path": "artifacts/gimbal_midpoint_adapter_replication_checkpoints/gimbal_v7_midpoint_state_reference_seed_29.pt",
+    "sha256": "9e8177445c68e43453bf45fbb88beaaa9be2e573d2452e2a89dca689b6f0f11b"
+  },
+  "checkpoint": null,
+  "config": {
+    "batch_size": 16,
+    "behavior_name": "privileged_oracle_position",
+    "correction_label_threshold": 0.005,
+    "correction_policy": {
+      "embedding_dim": 48,
+      "evidence": {
+        "body_rate_full_fraction": 0.9,
+        "body_rate_onset_fraction": 0.35,
+        "measurement_age_full_frames": 5.0,
+        "measurement_age_onset_frames": 1.5,
+        "servo_rate_full_fraction": 0.9,
+        "servo_rate_onset_fraction": 0.35,
+        "travel_full_fraction": 0.98,
+        "travel_onset_fraction": 0.75,
+        "visibility_full_fraction": 0.9,
+        "visibility_onset_fraction": 0.45
+      },
+      "hidden_dim": 48,
+      "initial_gate_bias": -2.0,
+      "maximum_residual_magnitude": 0.4
+    },
+    "critical_weight": 1.0,
+    "criticality": {
+      "acceleration_full_capacity_fraction": 0.8,
+      "acceleration_onset_capacity_fraction": 0.2,
+      "acceleration_weight": 2.0,
+      "critical_weight_threshold": 5.0,
+      "detector_gap_weight": 1.0,
+      "joint_capacity_visibility_weight": 2.0,
+      "maximum_label_weight": 10.0,
+      "mechanically_reachable_only": true,
+      "normalize_mean_weight": true,
+      "rate_full_capacity_fraction": 0.9,
+      "rate_onset_capacity_fraction": 0.35,
+      "rate_weight": 1.0,
+      "reversal_weight": 3.0,
+      "visibility_full_fov_fraction": 0.9,
+      "visibility_onset_fov_fraction": 0.45,
+      "visibility_weight": 2.0,
+      "weighting_strength": 1.0
+    },
+    "device": "cpu",
+    "disagreement_weight": 4.0,
+    "epochs": 60,
+    "gate_classification_weight": 0.25,
+    "gradient_clip_norm": 5.0,
+    "learning_rate": 0.001,
+    "maximum_saturation_regression_fraction": 0.05,
+    "minimum_tracking_improvement_fraction": 0.005,
+    "optimization_seed": 29,
+    "oracle": {
+      "blend_fractions": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+      ],
+      "focus_start_index": 0,
+      "focus_steps": 16,
+      "gradient_clip_norm": 5.0,
+      "learning_rate": 0.05,
+      "maximum_command_residual": 0.4,
+      "maximum_saturation_regression_absolute_mean": 0.0,
+      "maximum_saturation_regression_fraction": 0.05,
+      "maximum_smoothness_regression_absolute_mse": 0.0,
+      "maximum_smoothness_regression_fraction": 0.0,
+      "maximum_visibility_regression_absolute_mse": 0.0,
+      "maximum_visibility_regression_fraction": 0.0,
+      "optimization_iterations": 24,
+      "residual_weight": 0.005,
+      "saturation_weight": 0.01,
+      "smoothness_weight": 0.1,
+      "terminal_tracking_multiplier": 2.0,
+      "tracking_weight": 1.0,
+      "training_integration_period_s": 0.01,
+      "visibility_margin_fraction": 0.85,
+      "visibility_weight": 2.0
+    },
+    "oracle_batch_size": 8,
+    "ordinary_trust_region_weights": [
+      0.25,
+      1.0,
+      5.0
+    ],
+    "residual_magnitude_weight": 0.01,
+    "retention_weight": 0.25,
+    "rollout_batch_size": 16,
+    "selection_epoch_interval": 10,
+    "sequence_steps": 16,
+    "training_episode_count": 192,
+    "validation_episode_count": 48,
+    "weight_decay": 1e-05
+  },
+  "datasets": {
+    "fresh_test": {
+      "opened": false
+    },
+    "train": {
+      "path": "artifacts/gimbal_control_aware_train.npz",
+      "sha256": "da25df22053c802c4640dad692fe7e7c4fe73942667384543aaf1fa99534fafb"
+    },
+    "validation": {
+      "path": "artifacts/gimbal_midpoint_adapter_validation.npz",
+      "sha256": "021f1c78866112549c0af451dcf2a3bb0fdf2fc889322f464e03ade655836daf"
+    }
+  },
+  "experiment": "gimbal_deployable_residual_distillation_v14_1_development_v1",
+  "oracle_training_data": {
+    "correction_gate_positive_fraction": 0.8828125,
+    "episode_count": 192,
+    "nonzero_blend_fraction": 0.90625,
+    "reference_command_reconstruction_maximum_error": 4.842877388000488e-07,
+    "selected_command_delta_mae_normalized": 0.12346117943525314,
+    "selected_command_delta_max_normalized": 0.33449846506118774,
+    "training_record_count": 384
+  },
+  "recommendation": "do_not_promote_deployable_gated_residual",
+  "reference": {
+    "critical": {
+      "sample_count": 32,
+      "saturation_rmse_normalized": 1.1530649805343656,
+      "smoothness_rmse_normalized": 0.08007412702768339,
+      "tracking_rmse_normalized": 0.8441624163313194,
+      "visibility_rmse_normalized": 0.13242491096909842
+    },
+    "global": {
+      "sample_count": 768,
+      "saturation_rmse_normalized": 0.6990191069862571,
+      "smoothness_rmse_normalized": 0.05671537881435857,
+      "tracking_rmse_normalized": 1.0342538414996676,
+      "visibility_rmse_normalized": 0.7038935664054226
+    }
+  },
+  "selected": {
+    "checkpoint_candidates": [
+      {
+        "epoch": 0,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": true,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": 0.0,
+            "critical_smoothness_rmse_normalized": 0.0,
+            "critical_tracking_rmse_normalized": 0.0,
+            "critical_visibility_rmse_normalized": 0.0,
+            "global_saturation_rmse_normalized": 0.0,
+            "global_smoothness_rmse_normalized": 0.0,
+            "global_tracking_rmse_normalized": 0.0,
+            "global_visibility_rmse_normalized": 0.0
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.0,
+        "mean_absolute_residual_normalized": 0.0,
+        "mean_gate_probability": 0.11920293420553207,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.1530649805343656,
+            "smoothness_rmse_normalized": 0.08007412702768339,
+            "tracking_rmse_normalized": 0.8441624163313194,
+            "visibility_rmse_normalized": 0.13242491096909842
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6990191069862571,
+            "smoothness_rmse_normalized": 0.05671537881435857,
+            "tracking_rmse_normalized": 1.0342538414996676,
+            "visibility_rmse_normalized": 0.7038935664054226
+          }
+        },
+        "selection_score": 3.5717223542340957
+      },
+      {
+        "epoch": 10,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.21067022439765304,
+            "critical_smoothness_rmse_normalized": -0.11970886960417704,
+            "critical_tracking_rmse_normalized": 0.018073913508085848,
+            "critical_visibility_rmse_normalized": 0.026375006233491094,
+            "global_saturation_rmse_normalized": -0.22457151471098113,
+            "global_smoothness_rmse_normalized": -0.1692195634894259,
+            "global_tracking_rmse_normalized": -0.00012995188528741597,
+            "global_visibility_rmse_normalized": -0.0025098033568787814
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.17171265184879303,
+        "mean_absolute_residual_normalized": 0.05346941947937012,
+        "mean_gate_probability": 0.42596232891082764,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.9101485223401153,
+            "smoothness_rmse_normalized": 0.07048854379665813,
+            "tracking_rmse_normalized": 0.8594197348308684,
+            "visibility_rmse_normalized": 0.1359176188213779
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.542039327318436,
+            "smoothness_rmse_normalized": 0.04711802716825538,
+            "tracking_rmse_normalized": 1.034119438263099,
+            "visibility_rmse_normalized": 0.7021269319695729
+          }
+        },
+        "selection_score": 3.586809325045544
+      },
+      {
+        "epoch": 20,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.33558820394440936,
+            "critical_smoothness_rmse_normalized": -0.24134743868859476,
+            "critical_tracking_rmse_normalized": 0.01908707223600148,
+            "critical_visibility_rmse_normalized": 0.019504031806223843,
+            "global_saturation_rmse_normalized": -0.08545630036018492,
+            "global_smoothness_rmse_normalized": -0.03344714901198431,
+            "global_tracking_rmse_normalized": -0.01932708791211657,
+            "global_visibility_rmse_normalized": -0.03817004853219985
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25762274861335754,
+        "mean_absolute_residual_normalized": 0.12687848508358002,
+        "mean_gate_probability": 0.8905852437019348,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7661099746856425,
+            "smoothness_rmse_normalized": 0.06074844156432682,
+            "tracking_rmse_normalized": 0.8602750053507529,
+            "visibility_rmse_normalized": 0.13500773064457608
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6392835202221313,
+            "smoothness_rmse_normalized": 0.05481841108788358,
+            "tracking_rmse_normalized": 1.0142647265815592,
+            "visibility_rmse_normalized": 0.6770259148142244
+          }
+        },
+        "selection_score": 3.516556543317355
+      },
+      {
+        "epoch": 30,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": true,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3236749225609302,
+            "critical_smoothness_rmse_normalized": -0.21291285782410685,
+            "critical_tracking_rmse_normalized": -0.016829124324093225,
+            "critical_visibility_rmse_normalized": 0.003023228946368084,
+            "global_saturation_rmse_normalized": -0.11503146082636295,
+            "global_smoothness_rmse_normalized": -0.12713049771700524,
+            "global_tracking_rmse_normalized": -0.02535997131210066,
+            "global_visibility_rmse_normalized": -0.043124407605410364
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.25788819789886475,
+        "mean_absolute_residual_normalized": 0.11735460162162781,
+        "mean_gate_probability": 0.8280847668647766,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7798467622521843,
+            "smoothness_rmse_normalized": 0.06302531580444877,
+            "tracking_rmse_normalized": 0.8299559020771526,
+            "visibility_rmse_normalized": 0.13282526179316043
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6186099179640883,
+            "smoothness_rmse_normalized": 0.04950512447748067,
+            "tracking_rmse_normalized": 1.0080251937498061,
+            "visibility_rmse_normalized": 0.6735385733369291
+          }
+        },
+        "selection_score": 3.4681479092949723
+      },
+      {
+        "epoch": 40,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": true,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.07897100977902916,
+            "critical_smoothness_rmse_normalized": -0.16458561361445523,
+            "critical_tracking_rmse_normalized": -0.0010472532024689007,
+            "critical_visibility_rmse_normalized": 0.0011448862990410813,
+            "global_saturation_rmse_normalized": -0.020803801290877888,
+            "global_smoothness_rmse_normalized": -0.10748874155814814,
+            "global_tracking_rmse_normalized": -0.010128034670209174,
+            "global_visibility_rmse_normalized": -0.020145310650239723
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.2773548662662506,
+        "mean_absolute_residual_normalized": 0.08656363934278488,
+        "mean_gate_probability": 0.5922840237617493,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 1.0620062746807302,
+            "smoothness_rmse_normalized": 0.06689507769619028,
+            "tracking_rmse_normalized": 0.8432783645374126,
+            "visibility_rmse_normalized": 0.13257652243531867
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6844768523859881,
+            "smoothness_rmse_normalized": 0.05061911411860951,
+            "tracking_rmse_normalized": 1.023778882735162,
+            "visibility_rmse_normalized": 0.6897134118454802
+          }
+        },
+        "selection_score": 3.5302333035395117
+      },
+      {
+        "epoch": 50,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": true,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": true
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.43809699811965686,
+            "critical_smoothness_rmse_normalized": -0.34413519597071285,
+            "critical_tracking_rmse_normalized": -0.019515019871462758,
+            "critical_visibility_rmse_normalized": 0.0038899313386313583,
+            "global_saturation_rmse_normalized": -0.043422672927135975,
+            "global_smoothness_rmse_normalized": -0.14850508844369537,
+            "global_tracking_rmse_normalized": -0.0024812907724751643,
+            "global_visibility_rmse_normalized": -0.0077769273541346
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.24188348650932312,
+        "mean_absolute_residual_normalized": 0.09199821203947067,
+        "mean_gate_probability": 0.7171887755393982,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.6479106739253595,
+            "smoothness_rmse_normalized": 0.05251780163082781,
+            "tracking_rmse_normalized": 0.8276885700018717,
+            "visibility_rmse_normalized": 0.1329400347802926
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6686658289337742,
+            "smoothness_rmse_normalized": 0.04829285646741457,
+            "tracking_rmse_normalized": 1.0316875569863575,
+            "visibility_rmse_normalized": 0.6984194372744449
+          }
+        },
+        "selection_score": 3.538862795196866
+      },
+      {
+        "epoch": 60,
+        "gate": {
+          "checks": {
+            "critical_saturation": true,
+            "critical_smoothness": true,
+            "critical_tracking": false,
+            "critical_visibility": false,
+            "global_saturation": true,
+            "global_smoothness": true,
+            "global_tracking": false,
+            "global_visibility": false
+          },
+          "passed": false,
+          "relative_changes": {
+            "critical_saturation_rmse_normalized": -0.3457088626117575,
+            "critical_smoothness_rmse_normalized": -0.3212154136837493,
+            "critical_tracking_rmse_normalized": -0.002604973875246497,
+            "critical_visibility_rmse_normalized": 0.0038310493385629307,
+            "global_saturation_rmse_normalized": -0.11477148747544774,
+            "global_smoothness_rmse_normalized": -0.12533148185681775,
+            "global_tracking_rmse_normalized": 0.011394585053911443,
+            "global_visibility_rmse_normalized": 0.012321143857010775
+          }
+        },
+        "maximum_absolute_residual_normalized": 0.2485784888267517,
+        "mean_absolute_residual_normalized": 0.05292392894625664,
+        "mean_gate_probability": 0.32012656331062317,
+        "metrics": {
+          "critical": {
+            "sample_count": 32,
+            "saturation_rmse_normalized": 0.7544401975963818,
+            "smoothness_rmse_normalized": 0.05435308318912098,
+            "tracking_rmse_normalized": 0.8419633952903114,
+            "visibility_rmse_normalized": 0.13293223733667583
+          },
+          "global": {
+            "sample_count": 768,
+            "saturation_rmse_normalized": 0.6187916443036853,
+            "smoothness_rmse_normalized": 0.04960715634348424,
+            "tracking_rmse_normalized": 1.0460387348639701,
+            "visibility_rmse_normalized": 0.7125663402971281
+          }
+        },
+        "selection_score": 3.5955832258181863
+      }
+    ],
+    "gate": {
+      "checks": {
+        "critical_saturation": true,
+        "critical_smoothness": true,
+        "critical_tracking": true,
+        "critical_visibility": false,
+        "global_saturation": true,
+        "global_smoothness": true,
+        "global_tracking": true,
+        "global_visibility": true
+      },
+      "passed": false,
+      "relative_changes": {
+        "critical_saturation_rmse_normalized": -0.3236749225609302,
+        "critical_smoothness_rmse_normalized": -0.21291285782410685,
+        "critical_tracking_rmse_normalized": -0.016829124324093225,
+        "critical_visibility_rmse_normalized": 0.003023228946368084,
+        "global_saturation_rmse_normalized": -0.11503146082636295,
+        "global_smoothness_rmse_normalized": -0.12713049771700524,
+        "global_tracking_rmse_normalized": -0.02535997131210066,
+        "global_visibility_rmse_normalized": -0.043124407605410364
+      }
+    },
+    "maximum_absolute_residual_normalized": 0.25788819789886475,
+    "mean_absolute_residual_normalized": 0.11735460162162781,
+    "mean_gate_probability": 0.8280847668647766,
+    "metrics": {
+      "critical": {
+        "sample_count": 32,
+        "saturation_rmse_normalized": 0.7798467622521843,
+        "smoothness_rmse_normalized": 0.06302531580444877,
+        "tracking_rmse_normalized": 0.8299559020771526,
+        "visibility_rmse_normalized": 0.13282526179316043
+      },
+      "global": {
+        "sample_count": 768,
+        "saturation_rmse_normalized": 0.6186099179640883,
+        "smoothness_rmse_normalized": 0.04950512447748067,
+        "tracking_rmse_normalized": 1.0080251937498061,
+        "visibility_rmse_normalized": 0.6735385733369291
+      }
+    },
+    "ordinary_trust_region_weight": 0.25,
+    "selected_epoch": 30,
+    "selection_score": 3.4681479092949723,
+    "training_history": [
+      {
+        "action": 0.02037983896055569,
+        "epoch": 1,
+        "gate": 0.9379702483614286,
+        "loss": 0.25487738971908885,
+        "residual": 1.9112759175765603e-05,
+        "trust": 1.9179653014012032e-05
+      },
+      {
+        "action": 0.02017062654097875,
+        "epoch": 2,
+        "gate": 0.7079203749696413,
+        "loss": 0.19725612799326578,
+        "residual": 0.00040554242817355163,
+        "trust": 0.00040540434414045495
+      },
+      {
+        "action": 0.019849642412737012,
+        "epoch": 3,
+        "gate": 0.6893252581357956,
+        "loss": 0.19223366801937422,
+        "residual": 0.00020281165598134976,
+        "trust": 0.00020273740483389702
+      },
+      {
+        "action": 0.019764444208703935,
+        "epoch": 4,
+        "gate": 0.6907646581530571,
+        "loss": 0.19256649414698282,
+        "residual": 0.00042741515547580394,
+        "trust": 0.0004264444032742176
+      },
+      {
+        "action": 0.01975991006474942,
+        "epoch": 5,
+        "gate": 0.6882624924182892,
+        "loss": 0.1918737137069305,
+        "residual": 0.0001863476669920298,
+        "trust": 0.00018527186087643108
+      },
+      {
+        "action": 0.019758881612991292,
+        "epoch": 6,
+        "gate": 0.688401552538077,
+        "loss": 0.1919941051552693,
+        "residual": 0.0005274916153818291,
+        "trust": 0.0005182450416517289
+      },
+      {
+        "action": 0.01870152730649958,
+        "epoch": 7,
+        "gate": 0.6891019890705744,
+        "loss": 0.19111328944563866,
+        "residual": 0.0005622935829402801,
+        "trust": 0.0005225639063913453
+      },
+      {
+        "action": 0.015345412752746293,
+        "epoch": 8,
+        "gate": 0.6872008815407753,
+        "loss": 0.18747929483652115,
+        "residual": 0.0016739926977606956,
+        "trust": 0.00126769439035949
+      },
+      {
+        "action": 0.01287726720329374,
+        "epoch": 9,
+        "gate": 0.6798299898703893,
+        "loss": 0.18362039824326834,
+        "residual": 0.004054026464776446,
+        "trust": 0.0029803771127869063
+      },
+      {
+        "action": 0.011808424411962429,
+        "epoch": 10,
+        "gate": 0.6689765974879265,
+        "loss": 0.17999392996231714,
+        "residual": 0.005258784348067517,
+        "trust": 0.003555061038544712
+      },
+      {
+        "action": 0.011526180276026329,
+        "epoch": 11,
+        "gate": 0.6558240801095963,
+        "loss": 0.17622306818763414,
+        "residual": 0.004814361978787929,
+        "trust": 0.0027708960503029325
+      },
+      {
+        "action": 0.012338219064986333,
+        "epoch": 12,
+        "gate": 0.6090243682265282,
+        "loss": 0.16516600797573724,
+        "residual": 0.004488346666524497,
+        "trust": 0.002107246841963691
+      },
+      {
+        "action": 0.011708820258112004,
+        "epoch": 13,
+        "gate": 0.5694533127049605,
+        "loss": 0.15472557426740727,
+        "residual": 0.0049772377727398025,
+        "trust": 0.0024146225672060004
+      },
+      {
+        "action": 0.011210431228391826,
+        "epoch": 14,
+        "gate": 0.5040477588772774,
+        "loss": 0.13763776669899622,
+        "residual": 0.003937352300757387,
+        "trust": 0.0015040936571798131
+      },
+      {
+        "action": 0.009620816873696944,
+        "epoch": 15,
+        "gate": 0.46088284626603127,
+        "loss": 0.12531824223697186,
+        "residual": 0.005342947804213812,
+        "trust": 0.001693135922929893
+      },
+      {
+        "action": 0.008891336328815669,
+        "epoch": 16,
+        "gate": 0.4311158669491609,
+        "loss": 0.11706335283815861,
+        "residual": 0.005285337965081756,
+        "trust": 0.001360788837094636
+      },
+      {
+        "action": 0.009256786259356886,
+        "epoch": 17,
+        "gate": 0.4204380636413892,
+        "loss": 0.11490752858420213,
+        "residual": 0.006378481669041018,
+        "trust": 0.001909774856661291
+      },
+      {
+        "action": 0.008465909486403689,
+        "epoch": 18,
+        "gate": 0.39102303485075635,
+        "loss": 0.10661928060775001,
+        "residual": 0.006161864303673307,
+        "trust": 0.001343978408840485
+      },
+      {
+        "action": 0.007519869056219856,
+        "epoch": 19,
+        "gate": 0.3583137318491936,
+        "loss": 0.0974540519528091,
+        "residual": 0.00568232136235262,
+        "trust": 0.001195712509797886
+      },
+      {
+        "action": 0.008010458065352092,
+        "epoch": 20,
+        "gate": 0.41019539535045624,
+        "loss": 0.11104048353930314,
+        "residual": 0.006700665956789938,
+        "trust": 0.0016566831272939453
+      },
+      {
+        "action": 0.008634363883174956,
+        "epoch": 21,
+        "gate": 0.3676537734766801,
+        "loss": 0.1008985317312181,
+        "residual": 0.006058540112765816,
+        "trust": 0.0011605567936688506
+      },
+      {
+        "action": 0.0077706071800397085,
+        "epoch": 22,
+        "gate": 0.3407487416019042,
+        "loss": 0.09331736185898383,
+        "residual": 0.005724927497794852,
+        "trust": 0.0012092828073946293
+      },
+      {
+        "action": 0.0067393851253048824,
+        "epoch": 23,
+        "gate": 0.3195584410180648,
+        "loss": 0.08696333443125089,
+        "residual": 0.006338304350113806,
+        "trust": 0.0010838285197678488
+      },
+      {
+        "action": 0.006259593462649112,
+        "epoch": 24,
+        "gate": 0.3023217556377252,
+        "loss": 0.08221694206198056,
+        "residual": 0.006382309429075879,
+        "trust": 0.001252341027187261
+      },
+      {
+        "action": 0.00687663970165886,
+        "epoch": 25,
+        "gate": 0.32343851526578266,
+        "loss": 0.0879896110855043,
+        "residual": 0.005990075374332567,
+        "trust": 0.0007737689053707678
+      },
+      {
+        "action": 0.006064481523935683,
+        "epoch": 26,
+        "gate": 0.3018502437820037,
+        "loss": 0.08188185623536508,
+        "residual": 0.007036409437811623,
+        "trust": 0.0011377984192222357
+      },
+      {
+        "action": 0.005729970003206593,
+        "epoch": 27,
+        "gate": 0.2755036223679781,
+        "loss": 0.0748505590793987,
+        "residual": 0.005705718227545731,
+        "trust": 0.0007505083164384511
+      },
+      {
+        "action": 0.005619383397667359,
+        "epoch": 28,
+        "gate": 0.2638236805796623,
+        "loss": 0.07187554240226746,
+        "residual": 0.007166835993605976,
+        "trust": 0.0009142814718264466
+      },
+      {
+        "action": 0.005924912179276968,
+        "epoch": 29,
+        "gate": 0.2735357250397404,
+        "loss": 0.0746299351255099,
+        "residual": 0.007266376322756211,
+        "trust": 0.0009937095689262303
+      },
+      {
+        "action": 0.006242404109798372,
+        "epoch": 30,
+        "gate": 0.24342717664937177,
+        "loss": 0.06737157919754584,
+        "residual": 0.006795807033389186,
+        "trust": 0.0008176943168412739
+      },
+      {
+        "action": 0.005427970623713918,
+        "epoch": 31,
+        "gate": 0.26971980060140294,
+        "loss": 0.07312395935878158,
+        "residual": 0.006358245028726135,
+        "trust": 0.0008098234284261707
+      },
+      {
+        "action": 0.006412415231655662,
+        "epoch": 32,
+        "gate": 0.28818875302871066,
+        "loss": 0.0787939284928143,
+        "residual": 0.006960337622634445,
+        "trust": 0.0010588876878803906
+      },
+      {
+        "action": 0.005909344661631621,
+        "epoch": 33,
+        "gate": 0.23830877430737019,
+        "loss": 0.06575698172673583,
+        "residual": 0.006475847262966757,
+        "trust": 0.0008227387431058256
+      },
+      {
+        "action": 0.005439817682296659,
+        "epoch": 34,
+        "gate": 0.23606122036774954,
+        "loss": 0.06472751094649236,
+        "residual": 0.006966252859759455,
+        "trust": 0.0008108992933557602
+      },
+      {
+        "action": 0.005573284404817969,
+        "epoch": 35,
+        "gate": 0.266013886158665,
+        "loss": 0.07235888345167041,
+        "residual": 0.006499621085822582,
+        "trust": 0.0008685273448160539
+      },
+      {
+        "action": 0.004896371508948505,
+        "epoch": 36,
+        "gate": 0.21825104393064976,
+        "loss": 0.05974821816198528,
+        "residual": 0.007536950443560879,
+        "trust": 0.0008548618582911635
+      },
+      {
+        "action": 0.004935583220988822,
+        "epoch": 37,
+        "gate": 0.22475997048119703,
+        "loss": 0.06135578049967686,
+        "residual": 0.006409829831682146,
+        "trust": 0.0006644247890411256
+      },
+      {
+        "action": 0.004691882078380634,
+        "epoch": 38,
+        "gate": 0.21752422085652748,
+        "loss": 0.05929761317869028,
+        "residual": 0.007152235513785854,
+        "trust": 0.0006126109171115482
+      },
+      {
+        "action": 0.004411497036926448,
+        "epoch": 39,
+        "gate": 0.20619147519270578,
+        "loss": 0.056227601443727813,
+        "residual": 0.0072751275729388,
+        "trust": 0.0007819366437615827
+      },
+      {
+        "action": 0.004565112030832097,
+        "epoch": 40,
+        "gate": 0.19434795745958885,
+        "loss": 0.05340262843916813,
+        "residual": 0.006696601543808356,
+        "trust": 0.0007342440136805332
+      },
+      {
+        "action": 0.004610323890422781,
+        "epoch": 41,
+        "gate": 0.1963615513717135,
+        "loss": 0.0539305677327017,
+        "residual": 0.00770156760700047,
+        "trust": 0.0006113608663630051
+      },
+      {
+        "action": 0.004649287759093568,
+        "epoch": 42,
+        "gate": 0.1906689265742898,
+        "loss": 0.05253724412371715,
+        "residual": 0.006386957364156842,
+        "trust": 0.0006274196287752906
+      },
+      {
+        "action": 0.0044488738155147685,
+        "epoch": 43,
+        "gate": 0.18832687505831322,
+        "loss": 0.05178232972199718,
+        "residual": 0.007238409190904349,
+        "trust": 0.0007174110093425649
+      },
+      {
+        "action": 0.004194122026092373,
+        "epoch": 44,
+        "gate": 0.17952765679607788,
+        "loss": 0.049311766788984336,
+        "residual": 0.0072525208233855665,
+        "trust": 0.0006528209972505769
+      },
+      {
+        "action": 0.004279312711635915,
+        "epoch": 45,
+        "gate": 0.16621637934197983,
+        "loss": 0.0460439194769909,
+        "residual": 0.006720983394188806,
+        "trust": 0.0005732084294625869
+      },
+      {
+        "action": 0.004008876412020375,
+        "epoch": 46,
+        "gate": 0.1818893365561962,
+        "loss": 0.049718363055338465,
+        "residual": 0.0071587705266817165,
+        "trust": 0.0006622602959396318
+      },
+      {
+        "action": 0.003922346300290276,
+        "epoch": 47,
+        "gate": 0.16642104865362248,
+        "loss": 0.045759470745300256,
+        "residual": 0.007286043420511608,
+        "trust": 0.0006360074354840132
+      },
+      {
+        "action": 0.004237147727205108,
+        "epoch": 48,
+        "gate": 0.19246320612728596,
+        "loss": 0.052644375866899885,
+        "residual": 0.007529256108682603,
+        "trust": 0.000864535296689913
+      },
+      {
+        "action": 0.004410502971344006,
+        "epoch": 49,
+        "gate": 0.20264978210131326,
+        "loss": 0.05532114525946478,
+        "residual": 0.006776290955410029,
+        "trust": 0.000721736968747185
+      },
+      {
+        "action": 0.004467332478573856,
+        "epoch": 50,
+        "gate": 0.18155275471508503,
+        "loss": 0.05008203249114255,
+        "residual": 0.007324014693343391,
+        "trust": 0.0006130820729595143
+      },
+      {
+        "action": 0.004014961964761217,
+        "epoch": 51,
+        "gate": 0.16864070513596138,
+        "loss": 0.04638665650660793,
+        "residual": 0.006921640539076179,
+        "trust": 0.0005692057178142326
+      },
+      {
+        "action": 0.003682351224900534,
+        "epoch": 52,
+        "gate": 0.1500640461842219,
+        "loss": 0.041422212263569236,
+        "residual": 0.00731904348746563,
+        "trust": 0.0006026336371481497
+      },
+      {
+        "action": 0.0037259817375646285,
+        "epoch": 53,
+        "gate": 0.16119190522780022,
+        "loss": 0.04423265717923641,
+        "residual": 0.006651773049573724,
+        "trust": 0.0005687255276522288
+      },
+      {
+        "action": 0.0040939363922613365,
+        "epoch": 54,
+        "gate": 0.15412253141403198,
+        "loss": 0.04285164852626622,
+        "residual": 0.00787099706940353,
+        "trust": 0.0005934773798799142
+      },
+      {
+        "action": 0.0037273526346931853,
+        "epoch": 55,
+        "gate": 0.1588001623749733,
+        "loss": 0.043639394687488675,
+        "residual": 0.007194581422178696,
+        "trust": 0.0005602254216986088
+      },
+      {
+        "action": 0.004111321099723379,
+        "epoch": 56,
+        "gate": 0.1648673495898644,
+        "loss": 0.045555515525241695,
+        "residual": 0.007263861615986873,
+        "trust": 0.0006188722460744126
+      },
+      {
+        "action": 0.003850627389814084,
+        "epoch": 57,
+        "gate": 0.14638270437717438,
+        "loss": 0.04065080227640768,
+        "residual": 0.0071643907091735555,
+        "trust": 0.0005314189505346197
+      },
+      {
+        "action": 0.0037588267490112535,
+        "epoch": 58,
+        "gate": 0.14603266989191374,
+        "loss": 0.040467743296176195,
+        "residual": 0.007047732603192951,
+        "trust": 0.0005210879159373386
+      },
+      {
+        "action": 0.003635552765141862,
+        "epoch": 59,
+        "gate": 0.13655174865076938,
+        "loss": 0.037976997128377356,
+        "residual": 0.007507968131297578,
+        "trust": 0.0005137080770509783
+      },
+      {
+        "action": 0.003581067081540823,
+        "epoch": 60,
+        "gate": 0.15629626251757145,
+        "loss": 0.04289188771508634,
+        "residual": 0.007169992954004556,
+        "trust": 0.0006602191867083699
+      }
+    ]
+  },
+  "selected_arm_index": 0
+}

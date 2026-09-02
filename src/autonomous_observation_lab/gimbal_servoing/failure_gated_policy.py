@@ -305,3 +305,136 @@ class FailureGatedPositionCorrectionPolicy(nn.Module):
             gate_probability=torch.stack(gates, dim=1),
             failure_evidence=torch.stack(evidence, dim=1),
         )
+
+
+class FailureGatedCommandResidualPolicy(nn.Module):
+    """Bounded gated correction around externally supplied base commands."""
+
+    def __init__(
+        self,
+        config: FailureGatedPositionPolicyConfig | None = None,
+    ):
+        super().__init__()
+        self.config = config or FailureGatedPositionPolicyConfig()
+        input_dim = (
+            len(FEATURE_NAMES)
+            + HARDWARE_FEATURE_COUNT
+            + 1
+            + FAILURE_EVIDENCE_COUNT
+        )
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, self.config.embedding_dim),
+            nn.LayerNorm(self.config.embedding_dim),
+            nn.SiLU(),
+        )
+        self.recurrent = nn.GRUCell(
+            self.config.embedding_dim,
+            self.config.hidden_dim,
+        )
+        self.residual_head = nn.Sequential(
+            nn.Linear(self.config.hidden_dim, self.config.hidden_dim),
+            nn.SiLU(),
+            nn.Linear(self.config.hidden_dim, 1),
+        )
+        self.gate_head = nn.Sequential(
+            nn.Linear(self.config.hidden_dim, self.config.hidden_dim),
+            nn.SiLU(),
+            nn.Linear(self.config.hidden_dim, 1),
+        )
+        residual_final = self.residual_head[-1]
+        gate_final = self.gate_head[-1]
+        assert isinstance(residual_final, nn.Linear)
+        assert isinstance(gate_final, nn.Linear)
+        nn.init.zeros_(residual_final.weight)
+        nn.init.zeros_(residual_final.bias)
+        nn.init.zeros_(gate_final.weight)
+        nn.init.constant_(gate_final.bias, self.config.initial_gate_bias)
+
+    def forward_step(
+        self,
+        feature: torch.Tensor,
+        hardware: torch.Tensor,
+        base_command_normalized: torch.Tensor,
+        hidden: torch.Tensor | None = None,
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+        torch.Tensor,
+    ]:
+        if feature.ndim != 2 or feature.shape[-1] != len(FEATURE_NAMES):
+            raise ValueError("command-residual feature shape is invalid")
+        batch_size = feature.shape[0]
+        if hardware.shape != (batch_size, HARDWARE_FEATURE_COUNT):
+            raise ValueError("command-residual hardware shape is invalid")
+        if base_command_normalized.shape != (batch_size,):
+            raise ValueError("command-residual base-command shape is invalid")
+        if hidden is None:
+            hidden = feature.new_zeros(batch_size, self.config.hidden_dim)
+        if hidden.shape != (batch_size, self.config.hidden_dim):
+            raise ValueError("command-residual hidden shape is invalid")
+        evidence = deployable_failure_evidence(
+            feature,
+            hardware,
+            self.config.evidence,
+        )
+        inputs = torch.cat(
+            (
+                feature,
+                hardware,
+                base_command_normalized.unsqueeze(-1),
+                evidence,
+            ),
+            dim=-1,
+        )
+        hidden = self.recurrent(self.encoder(inputs), hidden)
+        gate = torch.sigmoid(self.gate_head(hidden).squeeze(-1))
+        raw_residual = self.config.maximum_residual_magnitude * torch.tanh(
+            self.residual_head(hidden).squeeze(-1)
+        )
+        residual = gate * raw_residual
+        command = torch.clamp(
+            base_command_normalized + residual,
+            -1.0,
+            1.0,
+        )
+        return command, residual, gate, evidence, hidden
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        context: GRUAdaptivePositionLossContext,
+        base_command_normalized: torch.Tensor,
+    ) -> FailureGatedPositionSequence:
+        if features.ndim != 3 or features.shape[-1] != len(FEATURE_NAMES):
+            raise ValueError(
+                "command-residual features must have shape [batch, time, feature]"
+            )
+        batch_size, time_count, _ = features.shape
+        if base_command_normalized.shape != (batch_size, time_count):
+            raise ValueError("command-residual base sequence shape is invalid")
+        hardware = normalized_hardware_features(context)
+        hidden = None
+        commands = []
+        residuals = []
+        gates = []
+        evidence = []
+        for time_index in range(time_count):
+            command, residual, gate, step_evidence, hidden = self.forward_step(
+                features[:, time_index],
+                hardware[:, time_index],
+                base_command_normalized[:, time_index],
+                hidden,
+            )
+            commands.append(command)
+            residuals.append(residual)
+            gates.append(gate)
+            evidence.append(step_evidence)
+        return FailureGatedPositionSequence(
+            command_normalized=torch.stack(commands, dim=1),
+            base_command_normalized=base_command_normalized,
+            residual_normalized=torch.stack(residuals, dim=1),
+            gate_probability=torch.stack(gates, dim=1),
+            failure_evidence=torch.stack(evidence, dim=1),
+        )

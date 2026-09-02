@@ -448,6 +448,21 @@ smoothness by 20.49%/42.33%, and saturation by 69.66%/64.51%. All eight ceiling
 checks pass. State-consistent, failure-gated residual distillation around this
 deployable reference is now authorized; the fresh test remains sealed.
 
+V14.1--V14.3 perform that distillation and two targeted safety refinements:
+
+```bash
+aol-distill-gimbal-deployable-sequence-oracle
+```
+
+The [gated-residual report](docs/research_tracks/predictive_gimbal_servoing/deployable_residual_v14_experiment.md)
+shows 2.54% lower global tracking error, 1.68% lower critical tracking error,
+4.31% lower global visibility error, and substantially smoother/less saturated
+actuation. The student misses only critical-visibility non-regression (+0.30%).
+Scalar residual scaling and a deployable directional shield do not remove this
+delayed sequence effect, so no checkpoint is promoted. The next experiment is
+control-aware fine-tuning through the multi-command plant with an explicit
+critical-visibility constraint and ordinary-state trust region.
+
 Evaluate the configurable `TRACK`/`COAST`/`SEARCH`/`REACQUIRE` manager on
 scheduled detector outages, target re-entry, and a physically unreachable
 ceiling with:
