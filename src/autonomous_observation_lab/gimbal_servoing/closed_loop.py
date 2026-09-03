@@ -77,6 +77,7 @@ class ControllerRun:
     estimates: tuple[TargetStateEstimate, ...]
     estimator_metrics: EstimatorMetrics | None
     adapter_diagnostics: tuple[dict[str, float | bool], ...] = ()
+    forecasts: tuple[tuple[TargetStateEstimate, ...], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -317,6 +318,7 @@ def _rollout(
     DemoEpisode,
     tuple[TargetStateEstimate, ...],
     tuple[dict[str, float | bool], ...],
+    tuple[tuple[TargetStateEstimate, ...], ...],
 ]:
     env = GimbalServoEnv(
         config,
@@ -329,6 +331,7 @@ def _rollout(
     frames = [DemoFrame(0, action, observation, diagnostics)]
     estimates = [_controller_estimate(controller, observation.time_s)]
     adapter_diagnostics = [_controller_adapter_diagnostics(controller)]
+    forecasts = [_controller_forecasts(controller)]
     step = 0
     while True:
         result = env.step(action)
@@ -347,8 +350,14 @@ def _rollout(
         action = controller.act(observation)
         estimates.append(_controller_estimate(controller, observation.time_s))
         adapter_diagnostics.append(_controller_adapter_diagnostics(controller))
+        forecasts.append(_controller_forecasts(controller))
     episode = DemoEpisode(name, description, config, tuple(frames))
-    return episode, tuple(estimates), tuple(adapter_diagnostics)
+    return (
+        episode,
+        tuple(estimates),
+        tuple(adapter_diagnostics),
+        tuple(forecasts),
+    )
 
 
 def _controller_estimate(
@@ -370,6 +379,21 @@ def _controller_adapter_diagnostics(
         if isinstance(value, dict):
             return value
     return {}
+
+
+def _controller_forecasts(
+    controller: Controller,
+) -> tuple[TargetStateEstimate, ...]:
+    estimator = getattr(controller, "estimator", None)
+    values = getattr(estimator, "last_estimates", None)
+    if isinstance(values, tuple) and all(
+        isinstance(value, TargetStateEstimate) for value in values
+    ):
+        return values
+    estimate = getattr(controller, "last_estimate", None)
+    if isinstance(estimate, TargetStateEstimate):
+        return (estimate,)
+    return ()
 
 
 def _tracking_lag_s(episode: DemoEpisode, max_lag_s: float = 0.50) -> float:
@@ -499,7 +523,7 @@ def run_closed_loop_controller(
     seed: int,
 ) -> ControllerRun:
     """Roll out one controller and compute tracking and estimator metrics."""
-    episode, estimates, adapter_diagnostics = _rollout(
+    episode, estimates, adapter_diagnostics, forecasts = _rollout(
         name=name,
         description=description,
         config=config,
@@ -514,6 +538,7 @@ def run_closed_loop_controller(
         estimates=estimates,
         estimator_metrics=estimator_metrics(episode, estimates),
         adapter_diagnostics=adapter_diagnostics,
+        forecasts=forecasts,
     )
 
 
@@ -645,7 +670,7 @@ def closed_loop_comparison(
     specifications = _controller_specifications(scenario.config)
     runs = []
     for name, description, config, controller in specifications:
-        episode, estimates, adapter_diagnostics = _rollout(
+        episode, estimates, adapter_diagnostics, forecasts = _rollout(
             name=name,
             description=description,
             config=config,
@@ -661,6 +686,7 @@ def closed_loop_comparison(
                 estimates=estimates,
                 estimator_metrics=estimator_metrics(episode, estimates),
                 adapter_diagnostics=adapter_diagnostics,
+                forecasts=forecasts,
             )
         )
     return ClosedLoopComparison(

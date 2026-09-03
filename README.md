@@ -237,6 +237,22 @@ scripts/open_gimbal_controller_arena.sh \
   --arena-training-seed 43
 ```
 
+For a higher-contrast presentation, open the Predictive Gimbal Challenge
+Arena:
+
+```bash
+scripts/open_gimbal_challenge_arena.sh
+```
+
+It replays reactive position control, classical constant-velocity prediction,
+and deployable GRU/V2.1 Dream-to-Center on exactly the same frozen world. Live
+HUDs and +100/+200/+300 ms ghost boxes expose when prediction starts braking
+or intercepting before delayed feedback catches up. The default high-latency
+case shows 87.7%, 4.1%, and 0.0% loss of view respectively; the privileged V16
+oracle is explicitly excluded. See the
+[challenge-arena guide](docs/research_tracks/predictive_gimbal_servoing/gimbal_challenge_arena.md)
+for selectable oscillation, reversal, slow-servo, and dropout cases.
+
 The relative V2.1 gate is not an absolute performance claim. Build the
 hardware-relative performance contract and full loss-event atlas with:
 

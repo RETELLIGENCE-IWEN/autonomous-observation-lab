@@ -28,6 +28,7 @@ from autonomous_observation_lab.gimbal_servoing.closed_loop import (
     nominal_scenario,
 )
 from autonomous_observation_lab.gimbal_servoing.controller_arena import (
+    build_gimbal_challenge_arena,
     build_visibility_risk_controller_arena,
 )
 from autonomous_observation_lab.gimbal_servoing.controllers import (
@@ -187,3 +188,37 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
         "arena_visibility_risk_v21",
     ]
     assert len({len(run.episode.frames) for run in arena.comparison.runs}) == 1
+
+    challenge = build_gimbal_challenge_arena(
+        arena_result,
+        scenario_name="nominal_combined",
+        world_seed=901,
+        training_seed=7,
+    )
+    assert challenge.kind == "challenge"
+    assert [run.episode.name for run in challenge.comparison.runs] == [
+        "challenge_reactive_position",
+        "challenge_classical_predictive",
+        "challenge_dream_to_center",
+    ]
+    assert len(
+        {len(run.episode.frames) for run in challenge.comparison.runs}
+    ) == 1
+    assert not any(challenge.comparison.runs[0].forecasts)
+    assert any(challenge.comparison.runs[1].forecasts)
+    assert any(
+        len(forecasts) > 1
+        for forecasts in challenge.comparison.runs[2].forecasts
+    )
+    assert all(
+        run.episode.config.servo == challenge.comparison.runs[0].episode.config.servo
+        for run in challenge.comparison.runs
+    )
+    with pytest.raises(ValueError, match="strictly increasing"):
+        build_gimbal_challenge_arena(
+            arena_result,
+            scenario_name="nominal_combined",
+            world_seed=901,
+            training_seed=7,
+            ghost_horizons_s=(0.2, 0.1),
+        )

@@ -163,6 +163,10 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
         root = f"/{run.episode.name}"
         controller_views.append(
             rrb.Vertical(
+                rrb.TextDocumentView(
+                    origin=f"{root}/hud",
+                    name="Live controller HUD",
+                ),
                 rrb.Spatial3DView(
                     origin=f"{root}/world",
                     name=f"{run.episode.description}: 3D gimbal",
@@ -175,8 +179,38 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
                         y_range=[-1.15, 1.15],
                     ),
                 ),
-                row_shares=[1.15, 0.85],
+                row_shares=[0.35, 1.15, 0.85],
             )
+        )
+    if arena.kind == "challenge":
+        diagnostics = rrb.Horizontal(
+            rrb.TimeSeriesView(
+                origin="/arena/signals/fov_margin",
+                name="FOV margin: positive is visible",
+            ),
+            rrb.TimeSeriesView(
+                origin="/arena/signals/body_rate_deg_s",
+                name="Shared body yaw rate",
+            ),
+            rrb.TimeSeriesView(
+                origin="/arena/dream/risk_trust",
+                name="Dream-to-Center risk and forecast trust",
+            ),
+            rrb.TimeSeriesView(
+                origin="/arena/dream/horizon_ms",
+                name="Dream-to-Center prediction horizon",
+            ),
+        )
+    else:
+        diagnostics = rrb.Horizontal(
+            rrb.TimeSeriesView(
+                origin="/arena/v21/risk",
+                name="V2.1 visibility risk and predicted FOV fraction",
+            ),
+            rrb.TimeSeriesView(
+                origin="/arena/v21/horizon_ms",
+                name="V2.1 horizon boost and effective horizon",
+            ),
         )
     return rrb.Blueprint(
         rrb.Vertical(
@@ -206,16 +240,7 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
                     name="Target visible: 1 yes, 0 no",
                 ),
             ),
-            rrb.Horizontal(
-                rrb.TimeSeriesView(
-                    origin="/arena/v21/risk",
-                    name="V2.1 visibility risk and predicted FOV fraction",
-                ),
-                rrb.TimeSeriesView(
-                    origin="/arena/v21/horizon_ms",
-                    name="V2.1 horizon boost and effective horizon",
-                ),
-            ),
+            diagnostics,
             row_shares=[0.55, 2.35, 1.0, 0.75],
         ),
         collapse_panels=True,
@@ -916,16 +941,24 @@ def _arena_controller_label(name: str) -> str:
         "arena_fixed_horizon": "Fixed horizon",
         "arena_adaptive_v2": "Adaptive V2",
         "arena_visibility_risk_v21": "Risk V2.1",
+        "challenge_reactive_position": "Reactive position",
+        "challenge_classical_predictive": "Classical predictive",
+        "challenge_dream_to_center": "Dream-to-Center",
     }.get(name, name)
 
 
 def _controller_arena_markdown(arena: ControllerArena) -> str:
+    challenge = arena.kind == "challenge"
     lines = [
-        "# Three-controller visual arena",
+        (
+            "# Predictive Gimbal Challenge Arena"
+            if challenge
+            else "# Three-controller visual arena"
+        ),
         "",
         f"Scenario **{arena.scenario_name}**, world seed "
         f"**{arena.world_seed}**, GRU training seed "
-        f"**{arena.training_seed}**. V2.1 candidate: "
+        f"**{arena.training_seed}**. Deployable V2.1 candidate: "
         f"**{arena.selected_v21_candidate}**.",
         "",
         "Press Play or drag the shared `sim_time` cursor. Every column uses "
@@ -950,12 +983,189 @@ def _controller_arena_markdown(arena: ControllerArena) -> str:
     lines.extend(
         (
             "",
-            "Color key in the shared plots: **blue fixed horizon**, "
-            "**magenta adaptive V2**, **green risk V2.1**, and "
-            "**yellow target**.",
+            (
+                "Color key: **orange reactive**, **blue classical "
+                "predictive**, **green Dream-to-Center**, and **yellow "
+                "target**. Cyan/purple boxes are causal +100/+200/+300 ms "
+                "forecast ghosts. The privileged V16 authority oracle is "
+                "deliberately excluded."
+                if challenge
+                else "Color key in the shared plots: **blue fixed horizon**, "
+                "**magenta adaptive V2**, **green risk V2.1**, and "
+                "**yellow target**."
+            ),
         )
     )
     return "\n".join(lines)
+
+
+def _forecast_bearing_at(
+    forecasts: tuple[TargetStateEstimate, ...],
+    *,
+    frame_time_s: float,
+    horizon_s: float,
+) -> float | None:
+    valid = sorted(
+        (estimate for estimate in forecasts if estimate.valid),
+        key=lambda estimate: estimate.time_s,
+    )
+    if not valid:
+        return None
+    target_time_s = frame_time_s + horizon_s
+    if len(valid) == 1:
+        estimate = valid[0]
+        delta_s = target_time_s - estimate.time_s
+        return math.atan2(
+            math.sin(
+                estimate.body_relative_bearing_rad.value
+                + delta_s * estimate.body_relative_rate_rad_s.value
+            ),
+            math.cos(
+                estimate.body_relative_bearing_rad.value
+                + delta_s * estimate.body_relative_rate_rad_s.value
+            ),
+        )
+    if target_time_s <= valid[0].time_s:
+        return valid[0].body_relative_bearing_rad.value
+    if target_time_s >= valid[-1].time_s:
+        return valid[-1].body_relative_bearing_rad.value
+    for left, right in zip(valid, valid[1:]):
+        if left.time_s <= target_time_s <= right.time_s:
+            fraction = (target_time_s - left.time_s) / (
+                right.time_s - left.time_s
+            )
+            delta = math.atan2(
+                math.sin(
+                    right.body_relative_bearing_rad.value
+                    - left.body_relative_bearing_rad.value
+                ),
+                math.cos(
+                    right.body_relative_bearing_rad.value
+                    - left.body_relative_bearing_rad.value
+                ),
+            )
+            bearing = left.body_relative_bearing_rad.value + fraction * delta
+            return math.atan2(math.sin(bearing), math.cos(bearing))
+    return None
+
+
+def _forecast_image_center(
+    run: ControllerRun,
+    frame: DemoFrame,
+    frame_index: int,
+    horizon_s: float,
+) -> float | None:
+    if frame_index >= len(run.forecasts):
+        return None
+    bearing = _forecast_bearing_at(
+        run.forecasts[frame_index],
+        frame_time_s=frame.diagnostics.time_s,
+        horizon_s=horizon_s,
+    )
+    if bearing is None:
+        return None
+    image_error = math.atan2(
+        math.sin(bearing - frame.diagnostics.gimbal_angle_rad),
+        math.cos(bearing - frame.diagnostics.gimbal_angle_rad),
+    ) / (0.5 * run.episode.config.camera.selected_axis_fov_rad)
+    return float(max(-1.12, min(1.12, image_error)))
+
+
+def _arena_hud_markdown(
+    arena: ControllerArena,
+    run: ControllerRun,
+    frame: DemoFrame,
+    frame_index: int,
+) -> str:
+    diagnostics = frame.diagnostics
+    observation = frame.observation
+    margin = 1.0 - abs(diagnostics.true_image_error_normalized)
+    status = "✅ TARGET VISIBLE" if diagnostics.target_in_view else "🚨 TARGET LOST"
+    age_ms = (
+        1000.0 * observation.measurement_age_s.value
+        if observation.measurement_age_s.valid
+        else math.nan
+    )
+    estimate = (
+        run.estimates[frame_index]
+        if frame_index < len(run.estimates)
+        else None
+    )
+    horizon_ms = (
+        1000.0 * max(0.0, estimate.time_s - diagnostics.time_s)
+        if estimate is not None and estimate.valid
+        else 0.0
+    )
+    adapter = (
+        run.adapter_diagnostics[frame_index]
+        if frame_index < len(run.adapter_diagnostics)
+        else {}
+    )
+    if run.episode.name == "challenge_dream_to_center":
+        horizon_ms = 1000.0 * float(
+            adapter.get("effective_horizon_s", horizon_ms / 1000.0)
+        )
+    trust = float(adapter.get("prediction_weight", 0.0))
+    risk = float(adapter.get("visibility_risk", 0.0))
+    forecast_text = (
+        f"{horizon_ms:.0f} ms | trust {100.0 * trust:.0f}% | risk "
+        f"{100.0 * risk:.0f}%"
+        if run.episode.name == "challenge_dream_to_center"
+        else (f"{horizon_ms:.0f} ms" if horizon_ms > 0.0 else "none")
+    )
+    age_text = f"{age_ms:.0f} ms" if math.isfinite(age_ms) else "unavailable"
+    lines = [
+        f"## {_arena_controller_label(run.episode.name)}",
+        "",
+        f"### {status}",
+        "",
+        f"FOV margin: **{100.0 * margin:+.1f}%**  ",
+        f"Body yaw rate: **{math.degrees(diagnostics.body_rate_rad_s):+.1f}°/s**  ",
+        f"Measurement age: **{age_text}**  ",
+        "Servo limit: "
+        f"**{math.degrees(run.episode.config.servo.max_rate_rad_s):.1f}°/s**  ",
+        f"Forecast: **{forecast_text}**",
+    ]
+    if arena.kind == "challenge" and (
+        run.episode.name == "challenge_dream_to_center"
+    ):
+        lines.extend(("", "V16 privileged authority: **not shown / not deployed**"))
+    return "\n".join(lines)
+
+
+def _log_arena_forecast_ghosts(
+    rr: Any,
+    arena: ControllerArena,
+    run: ControllerRun,
+    frame: DemoFrame,
+    frame_index: int,
+) -> None:
+    colors = ([80, 225, 255], [80, 165, 255], [165, 105, 255])
+    config = run.episode.config
+    half_size = [
+        config.scenario.target_angular_width_rad
+        / config.camera.selected_axis_fov_rad,
+        config.scenario.target_angular_height_rad
+        / config.camera.orthogonal_fov_rad,
+    ]
+    for index, horizon_s in enumerate(arena.ghost_horizons_s):
+        path = (
+            f"{run.episode.name}/image/forecast_"
+            f"{int(round(1000.0 * horizon_s))}_ms"
+        )
+        center = _forecast_image_center(run, frame, frame_index, horizon_s)
+        if center is None:
+            rr.log(path, rr.Clear(recursive=False))
+            continue
+        rr.log(
+            path,
+            rr.Boxes2D(
+                centers=[[center, 0.0]],
+                half_sizes=[half_size],
+                colors=[colors[min(index, len(colors) - 1)]],
+                labels=[f"+{1000.0 * horizon_s:.0f} ms forecast"],
+            ),
+        )
 
 
 def _recovery_markdown(replay: RecoveryReplay) -> str:
@@ -2545,9 +2755,29 @@ def write_controller_arena(
     )
 
     styles = (
-        ("arena_fixed_horizon", [50, 150, 255], "fixed horizon"),
-        ("arena_adaptive_v2", [215, 90, 255], "adaptive V2"),
-        ("arena_visibility_risk_v21", [70, 210, 130], "risk V2.1"),
+        (
+            (
+                "challenge_reactive_position",
+                [255, 145, 45],
+                "reactive position",
+            ),
+            (
+                "challenge_classical_predictive",
+                [55, 155, 255],
+                "classical predictive",
+            ),
+            (
+                "challenge_dream_to_center",
+                [65, 215, 125],
+                "Dream-to-Center",
+            ),
+        )
+        if arena.kind == "challenge"
+        else (
+            ("arena_fixed_horizon", [50, 150, 255], "fixed horizon"),
+            ("arena_adaptive_v2", [215, 90, 255], "adaptive V2"),
+            ("arena_visibility_risk_v21", [70, 210, 130], "risk V2.1"),
+        )
     )
     rr.log(
         "arena/signals/tracking_deg/target",
@@ -2566,17 +2796,40 @@ def write_controller_arena(
                 rr.SeriesLines(colors=color, names=label),
                 static=True,
             )
-    for root, color, label in (
-        ("risk/visibility", [255, 100, 70], "visibility risk"),
-        ("risk/fov_fraction", [70, 190, 255], "predicted FOV fraction"),
-        ("horizon_ms/boost", [255, 130, 40], "risk boost"),
-        ("horizon_ms/effective", [70, 210, 130], "effective horizon"),
-    ):
+        if arena.kind == "challenge":
+            rr.log(
+                f"arena/signals/fov_margin/{name}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+    if arena.kind == "challenge":
         rr.log(
-            f"arena/v21/{root}",
-            rr.SeriesLines(colors=color, names=label),
+            "arena/signals/body_rate_deg_s/shared",
+            rr.SeriesLines(colors=[235, 210, 70], names="body yaw rate"),
             static=True,
         )
+        for path, color, label in (
+            ("risk_trust/risk", [255, 100, 70], "visibility risk"),
+            ("risk_trust/trust", [70, 190, 255], "forecast trust"),
+            ("horizon_ms/effective", [70, 210, 130], "effective horizon"),
+        ):
+            rr.log(
+                f"arena/dream/{path}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
+    else:
+        for root, color, label in (
+            ("risk/visibility", [255, 100, 70], "visibility risk"),
+            ("risk/fov_fraction", [70, 190, 255], "predicted FOV fraction"),
+            ("horizon_ms/boost", [255, 130, 40], "risk boost"),
+            ("horizon_ms/effective", [70, 210, 130], "effective horizon"),
+        ):
+            rr.log(
+                f"arena/v21/{root}",
+                rr.SeriesLines(colors=color, names=label),
+                static=True,
+            )
 
     for run in arena.comparison.runs:
         _log_closed_loop_static(rr, run)
@@ -2592,6 +2845,26 @@ def write_controller_arena(
                 else None
             )
             _log_closed_loop_frame(rr, run, frame, estimate)
+            rr.log(
+                f"{run.episode.name}/hud",
+                rr.TextDocument(
+                    _arena_hud_markdown(
+                        arena,
+                        run,
+                        frame,
+                        frame_index,
+                    ),
+                    media_type=rr.MediaType.MARKDOWN,
+                ),
+            )
+            if arena.kind == "challenge":
+                _log_arena_forecast_ghosts(
+                    rr,
+                    arena,
+                    run,
+                    frame,
+                    frame_index,
+                )
             diagnostics = frame.diagnostics
             desired_body_relative = math.atan2(
                 math.sin(
@@ -2633,6 +2906,13 @@ def write_controller_arena(
                 ),
             ):
                 rr.log(f"arena/signals/{path}", rr.Scalars(value))
+            if arena.kind == "challenge":
+                rr.log(
+                    f"arena/signals/fov_margin/{name}",
+                    rr.Scalars(
+                        1.0 - abs(diagnostics.true_image_error_normalized)
+                    ),
+                )
         if desired_body_relative_deg is not None:
             rr.log(
                 "arena/signals/tracking_deg/target",
@@ -2640,24 +2920,40 @@ def write_controller_arena(
             )
 
         v21_run = arena.comparison.runs[-1]
+        if arena.kind == "challenge":
+            rr.log(
+                "arena/signals/body_rate_deg_s/shared",
+                rr.Scalars(math.degrees(frames[0].diagnostics.body_rate_rad_s)),
+            )
         if frame_index < len(v21_run.adapter_diagnostics):
             item = v21_run.adapter_diagnostics[frame_index]
-            for path, value in (
-                ("risk/visibility", item.get("visibility_risk", 0.0)),
-                (
-                    "risk/fov_fraction",
-                    item.get("predicted_fov_fraction", 0.0),
-                ),
-                (
-                    "horizon_ms/boost",
-                    1000.0 * float(item.get("horizon_boost_s", 0.0)),
-                ),
-                (
-                    "horizon_ms/effective",
-                    1000.0 * float(item.get("effective_horizon_s", 0.0)),
-                ),
-            ):
-                rr.log(f"arena/v21/{path}", rr.Scalars(value))
+            if arena.kind == "challenge":
+                for path, value in (
+                    ("risk_trust/risk", item.get("visibility_risk", 0.0)),
+                    ("risk_trust/trust", item.get("prediction_weight", 0.0)),
+                    (
+                        "horizon_ms/effective",
+                        1000.0 * float(item.get("effective_horizon_s", 0.0)),
+                    ),
+                ):
+                    rr.log(f"arena/dream/{path}", rr.Scalars(value))
+            else:
+                for path, value in (
+                    ("risk/visibility", item.get("visibility_risk", 0.0)),
+                    (
+                        "risk/fov_fraction",
+                        item.get("predicted_fov_fraction", 0.0),
+                    ),
+                    (
+                        "horizon_ms/boost",
+                        1000.0 * float(item.get("horizon_boost_s", 0.0)),
+                    ),
+                    (
+                        "horizon_ms/effective",
+                        1000.0 * float(item.get("effective_horizon_s", 0.0)),
+                    ),
+                ):
+                    rr.log(f"arena/v21/{path}", rr.Scalars(value))
 
 
 def write_recovery_replay(
@@ -3733,6 +4029,7 @@ def _parser() -> argparse.ArgumentParser:
             "predictive-position",
             "failure-atlas",
             "controller-arena",
+            "challenge-arena",
         ),
         default="causality",
         help=(
@@ -3740,7 +4037,7 @@ def _parser() -> argparse.ArgumentParser:
             "training-seed replication, performance-verification, or adaptive "
             "position V2, visibility-risk V2.1, predictive-position V3, "
             "failure-atlas, or "
-            "controller-arena dashboard"
+            "controller-arena or predictive challenge-arena dashboard"
         ),
     )
     parser.add_argument(
@@ -3794,6 +4091,19 @@ def _parser() -> argparse.ArgumentParser:
         "--arena-training-seed",
         type=int,
         help="GRU initialization seed for the controller arena",
+    )
+    parser.add_argument(
+        "--arena-reactive-gain",
+        type=float,
+        default=0.85,
+        help="reactive position gain for the challenge arena",
+    )
+    parser.add_argument(
+        "--arena-ghost-horizons-ms",
+        type=float,
+        nargs="+",
+        default=(100.0, 200.0, 300.0),
+        help="future bbox ghost horizons in milliseconds",
     )
     parser.add_argument(
         "--performance-results",
@@ -3864,16 +4174,34 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     spawn = args.spawn or args.output is None
-    if args.demo == "controller-arena":
-        from .controller_arena import build_visibility_risk_controller_arena
+    if args.demo in {"controller-arena", "challenge-arena"}:
+        from .controller_arena import (
+            build_gimbal_challenge_arena,
+            build_visibility_risk_controller_arena,
+        )
 
         result = _load_visibility_risk_result(args.visibility_risk_results)
-        arena = build_visibility_risk_controller_arena(
-            result,
-            scenario_name=args.arena_scenario,
-            world_seed=args.arena_world_seed,
-            training_seed=args.arena_training_seed,
-            device=args.device,
+        arena = (
+            build_gimbal_challenge_arena(
+                result,
+                scenario_name=args.arena_scenario or "high_latency",
+                world_seed=args.arena_world_seed or 82000,
+                training_seed=args.arena_training_seed or 17,
+                reactive_gain=args.arena_reactive_gain,
+                ghost_horizons_s=tuple(
+                    value / 1000.0
+                    for value in args.arena_ghost_horizons_ms
+                ),
+                device=args.device,
+            )
+            if args.demo == "challenge-arena"
+            else build_visibility_risk_controller_arena(
+                result,
+                scenario_name=args.arena_scenario,
+                world_seed=args.arena_world_seed,
+                training_seed=args.arena_training_seed,
+                device=args.device,
+            )
         )
         write_controller_arena(
             arena,

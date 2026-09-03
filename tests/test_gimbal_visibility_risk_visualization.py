@@ -3,8 +3,15 @@ import json
 import pytest
 
 from autonomous_observation_lab.gimbal_servoing.visualization import (
+    _controller_arena_markdown,
     _load_visibility_risk_result,
     _visibility_risk_markdown,
+)
+from autonomous_observation_lab.gimbal_servoing.closed_loop import (
+    ClosedLoopComparison,
+)
+from autonomous_observation_lab.gimbal_servoing.controller_arena import (
+    ControllerArena,
 )
 
 
@@ -114,3 +121,23 @@ def test_visibility_risk_loader_rejects_closed_confirmation(tmp_path):
 
     with pytest.raises(ValueError, match="confirmation block was not opened"):
         _load_visibility_risk_result(artifact)
+
+
+def test_challenge_arena_markdown_excludes_privileged_oracle():
+    arena = ControllerArena(
+        comparison=ClosedLoopComparison(
+            scenario_name="high_latency",
+            description="paired",
+            runs=(),
+        ),
+        world_seed=82000,
+        training_seed=17,
+        scenario_name="high_latency",
+        selected_v21_candidate="preview_125",
+        kind="challenge",
+    )
+
+    markdown = _controller_arena_markdown(arena)
+
+    assert "Predictive Gimbal Challenge Arena" in markdown
+    assert "privileged V16 authority oracle is deliberately excluded" in markdown

@@ -48,6 +48,7 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Deployable-Reference Gated Residual V14.1--V14.3](deployable_residual_v14_experiment.md)
 - [Deployable Constrained Fine-Tuning V15](deployable_constrained_v15_experiment.md)
 - [State-Consistent Authority Distillation V16](deployable_authority_v16_experiment.md)
+- [Predictive Gimbal Challenge Arena v0.1](gimbal_challenge_arena.md)
 - [Belief-Guided Recovery Experiment](belief_recovery_experiment.md)
 - [O2 GRU Uncertainty Calibration Experiment](uncertainty_calibration_experiment.md)
 - [Contextual Calibration and Recovery Development/Test Protocol](contextual_calibration_and_recovery_protocol.md)
