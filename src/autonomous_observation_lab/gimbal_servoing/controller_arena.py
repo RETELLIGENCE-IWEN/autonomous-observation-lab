@@ -20,15 +20,12 @@ from .closed_loop import (
     ClosedLoopComparison,
     ClosedLoopScenario,
     ControllerRun,
-    _target_estimator,
     closed_loop_scenarios,
-    run_closed_loop_controller,
 )
-from .config import GimbalCommandMode, ObservationProfile
 from .controllers import AdaptivePositionControllerConfig
-from .controllers import (
-    ProportionalPositionController,
-    TargetStatePositionController,
+from .conventional_champion import (
+    conventional_champion_run,
+    practical_feedback_run,
 )
 from .gru import CausalTargetStateGRU
 from .gru import load_gru_checkpoint
@@ -259,13 +256,16 @@ def build_gimbal_challenge_arena(
     scenario_name: str = "high_latency",
     world_seed: int = 82000,
     training_seed: int = 17,
-    reactive_gain: float = 0.85,
+    reactive_gain: float | None = None,
+    naive_reactive: bool = False,
     ghost_horizons_s: tuple[float, ...] = (0.1, 0.2, 0.3),
     device: str = "cpu",
 ) -> ControllerArena:
-    """Build the reactive/classical/Dream-to-Center showcase arena."""
+    """Build the practical/champion/Dream-to-Center comparison arena."""
 
-    if not math.isfinite(reactive_gain) or reactive_gain <= 0.0:
+    if reactive_gain is not None and (
+        not math.isfinite(reactive_gain) or reactive_gain <= 0.0
+    ):
         raise ValueError("challenge reactive gain must be finite and positive")
     if not ghost_horizons_s or any(
         not math.isfinite(value) or value <= 0.0
@@ -284,39 +284,24 @@ def build_gimbal_challenge_arena(
         training_seed=training_seed,
         device=device,
     )
-    config = replace(
-        inputs.scenario.config,
-        observation_profile=ObservationProfile.DISTURBANCE_AWARE,
-        command_mode=GimbalCommandMode.POSITION,
+    feedback_name = (
+        "challenge_naive_reactive"
+        if naive_reactive
+        else "challenge_practical_feedback"
     )
-    reactive = run_closed_loop_controller(
-        name="challenge_reactive_position",
-        description="Reactive bbox-error position servo",
+    feedback = practical_feedback_run(
         scenario=inputs.scenario,
-        config=config,
-        controller=ProportionalPositionController(
-            servo=config.servo,
-            selected_axis_fov_rad=config.camera.selected_axis_fov_rad,
-            gain=reactive_gain,
-            name="challenge_reactive_position",
-        ),
         seed=inputs.world_seed,
+        gain=(0.85 if naive_reactive and reactive_gain is None else reactive_gain),
+        name=feedback_name,
     )
-    classical = run_closed_loop_controller(
-        name="challenge_classical_predictive",
-        description="Classical constant-velocity predictive position servo",
+    classical = conventional_champion_run(
         scenario=inputs.scenario,
-        config=config,
-        controller=TargetStatePositionController(
-            estimator=_target_estimator(config),
-            servo=config.servo,
-            command_preview_s=(
-                config.servo.command_latency_s
-                + config.servo.rate_time_constant_s
-            ),
-            name="challenge_classical_predictive",
-        ),
         seed=inputs.world_seed,
+        adapter=inputs.v21_config,
+        prediction_horizons_s=inputs.model.config.prediction_horizons_s,
+        maximum_staleness_s=inputs.runtime.maximum_staleness_s,
+        name="challenge_conventional_champion",
     )
     dream = _rename_run(
         _adaptive_run(
@@ -334,11 +319,12 @@ def build_gimbal_challenge_arena(
         scenario_name=inputs.scenario.name,
         description=(
             f"Exact paired showcase on frozen confirmation world seed "
-            f"{inputs.world_seed}. Reactive, classical predictive, and "
-            "Dream-to-Center controllers share target/body motion, detector "
-            "randomness, configured hardware, and initial state."
+            f"{inputs.world_seed}. Practical feedback, the conventional "
+            "champion, and Dream-to-Center share target/body motion, detector "
+            "randomness, configured hardware, initial state, and—between the "
+            "predictive controllers—the exact V2.1 command adapter."
         ),
-        runs=(reactive, classical, dream),
+        runs=(feedback, classical, dream),
     )
     return ControllerArena(
         comparison=comparison,

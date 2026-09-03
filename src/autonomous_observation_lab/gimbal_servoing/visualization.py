@@ -945,8 +945,9 @@ def _arena_controller_label(name: str) -> str:
         "arena_fixed_horizon": "Fixed horizon",
         "arena_adaptive_v2": "Adaptive V2",
         "arena_visibility_risk_v21": "Risk V2.1",
-        "challenge_reactive_position": "Reactive position",
-        "challenge_classical_predictive": "Classical predictive",
+        "challenge_practical_feedback": "Practical feedback",
+        "challenge_naive_reactive": "Naive reactive P",
+        "challenge_conventional_champion": "Conventional Champion v1",
         "challenge_dream_to_center": "Dream-to-Center",
     }.get(name, name)
 
@@ -988,8 +989,8 @@ def _controller_arena_markdown(arena: ControllerArena) -> str:
         (
             "",
             (
-                "Color key: **orange reactive**, **blue classical "
-                "predictive**, **green Dream-to-Center**, and **yellow "
+                "Color key: **orange practical feedback**, **blue "
+                "Conventional Champion v1**, **green Dream-to-Center**, and **yellow "
                 "target**. Cyan/purple boxes are causal +100/+200/+300 ms "
                 "forecast ghosts. The privileged V16 authority oracle is "
                 "deliberately excluded."
@@ -1105,7 +1106,11 @@ def _arena_hud_markdown(
         if frame_index < len(run.adapter_diagnostics)
         else {}
     )
-    if run.episode.name == "challenge_dream_to_center":
+    predictive_names = {
+        "challenge_conventional_champion",
+        "challenge_dream_to_center",
+    }
+    if run.episode.name in predictive_names:
         horizon_ms = 1000.0 * float(
             adapter.get("effective_horizon_s", horizon_ms / 1000.0)
         )
@@ -1114,7 +1119,7 @@ def _arena_hud_markdown(
     forecast_text = (
         f"{horizon_ms:.0f} ms | trust {100.0 * trust:.0f}% | risk "
         f"{100.0 * risk:.0f}%"
-        if run.episode.name == "challenge_dream_to_center"
+        if run.episode.name in predictive_names
         else (f"{horizon_ms:.0f} ms" if horizon_ms > 0.0 else "none")
     )
     age_text = f"{age_ms:.0f} ms" if math.isfinite(age_ms) else "unavailable"
@@ -2745,7 +2750,7 @@ def write_controller_arena(
     blueprint = _controller_arena_blueprint(rrb, arena)
     rr.init(
         f"{_APP_ID}_"
-        f"{'challenge_arena_v1' if arena.kind == 'challenge' else 'controller_arena_v1'}"
+        f"{'challenge_arena_v2' if arena.kind == 'challenge' else 'controller_arena_v1'}"
     )
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -2764,19 +2769,25 @@ def write_controller_arena(
     styles = (
         (
             (
-                "challenge_reactive_position",
+                arena.comparison.runs[0].episode.name,
                 [255, 145, 45],
-                "reactive position",
+                _arena_controller_label(
+                    arena.comparison.runs[0].episode.name
+                ),
             ),
             (
-                "challenge_classical_predictive",
+                arena.comparison.runs[1].episode.name,
                 [55, 155, 255],
-                "classical predictive",
+                _arena_controller_label(
+                    arena.comparison.runs[1].episode.name
+                ),
             ),
             (
-                "challenge_dream_to_center",
+                arena.comparison.runs[2].episode.name,
                 [65, 215, 125],
-                "Dream-to-Center",
+                _arena_controller_label(
+                    arena.comparison.runs[2].episode.name
+                ),
             ),
         )
         if arena.kind == "challenge"
@@ -4102,8 +4113,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--arena-reactive-gain",
         type=float,
-        default=0.85,
-        help="reactive position gain for the challenge arena",
+        help=(
+            "optional fixed-gain override for the practical feedback column"
+        ),
+    )
+    parser.add_argument(
+        "--arena-naive-reactive",
+        action="store_true",
+        help="show the historical gain-0.85 naive P ablation in column one",
     )
     parser.add_argument(
         "--arena-ghost-horizons-ms",
@@ -4195,6 +4212,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 world_seed=args.arena_world_seed or 82000,
                 training_seed=args.arena_training_seed or 17,
                 reactive_gain=args.arena_reactive_gain,
+                naive_reactive=args.arena_naive_reactive,
                 ghost_horizons_s=tuple(
                     value / 1000.0
                     for value in args.arena_ghost_horizons_ms

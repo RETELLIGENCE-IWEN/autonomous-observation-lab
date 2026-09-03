@@ -197,15 +197,18 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
     )
     assert challenge.kind == "challenge"
     assert [run.episode.name for run in challenge.comparison.runs] == [
-        "challenge_reactive_position",
-        "challenge_classical_predictive",
+        "challenge_practical_feedback",
+        "challenge_conventional_champion",
         "challenge_dream_to_center",
     ]
     assert len(
         {len(run.episode.frames) for run in challenge.comparison.runs}
     ) == 1
     assert not any(challenge.comparison.runs[0].forecasts)
-    assert any(challenge.comparison.runs[1].forecasts)
+    assert any(
+        len(forecasts) > 1
+        for forecasts in challenge.comparison.runs[1].forecasts
+    )
     assert any(
         len(forecasts) > 1
         for forecasts in challenge.comparison.runs[2].forecasts
@@ -222,3 +225,11 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
             training_seed=7,
             ghost_horizons_s=(0.2, 0.1),
         )
+    naive = build_gimbal_challenge_arena(
+        arena_result,
+        scenario_name="nominal_combined",
+        world_seed=901,
+        training_seed=7,
+        naive_reactive=True,
+    )
+    assert naive.comparison.runs[0].episode.name == "challenge_naive_reactive"

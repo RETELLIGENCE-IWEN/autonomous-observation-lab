@@ -244,14 +244,29 @@ Arena:
 scripts/open_gimbal_challenge_arena.sh
 ```
 
-It replays reactive position control, classical constant-velocity prediction,
-and deployable GRU/V2.1 Dream-to-Center on exactly the same frozen world. Live
-HUDs and +100/+200/+300 ms ghost boxes expose when prediction starts braking
-or intercepting before delayed feedback catches up. The default high-latency
-case shows 87.7%, 4.1%, and 0.0% loss of view respectively; the privileged V16
-oracle is explicitly excluded. See the
+It replays latency-scheduled practical feedback, Conventional Champion v1,
+and deployable GRU/V2.1 Dream-to-Center on exactly the same frozen world. The
+two predictive controllers use the same V2.1 command adapter, while live HUDs
+and +100/+200/+300 ms ghost boxes expose their different forecasts. In the
+default high-latency case their mean errors are 12.61°, 6.66°, and 9.34°;
+loss of view is 3.28%, 0.0%, and 0.0%. The historical gain-0.85 naive P
+ablation remains available with `--arena-naive-reactive`, and the privileged
+V16 oracle is explicitly excluded. See the
 [challenge-arena guide](docs/research_tracks/predictive_gimbal_servoing/gimbal_challenge_arena.md)
 for selectable oscillation, reversal, slow-servo, and dropout cases.
+
+Reproduce the development-locked conventional baseline and its historical
+confirmation replay with:
+
+```bash
+aol-evaluate-gimbal-conventional-champion
+```
+
+Across 48 frozen confirmation worlds, the champion and three-seed GRU are
+effectively tied on mean error (13.30° vs 13.31°) and loss of view (11.13% vs
+11.09%). The GRU improves P95 error by 1.01°, while increasing command
+variation by 9.0%. See the
+[Conventional Champion v1 report](docs/research_tracks/predictive_gimbal_servoing/conventional_champion_v1_experiment.md).
 
 The relative V2.1 gate is not an absolute performance claim. Build the
 hardware-relative performance contract and full loss-event atlas with:

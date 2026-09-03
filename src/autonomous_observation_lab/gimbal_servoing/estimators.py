@@ -88,6 +88,7 @@ class ConstantVelocityEstimatorConfig:
     minimum_bearing_std_rad: float = math.radians(0.05)
     initial_rate_std_rad_s: float = math.radians(30.0)
     process_acceleration_std_rad_s2: float = math.radians(80.0)
+    body_rate_compensation: bool = False
 
     def __post_init__(self) -> None:
         if self.selected_axis_fov_rad <= 0.0:
@@ -111,6 +112,8 @@ class ConstantVelocityEstimatorConfig:
             raise ValueError("initial rate uncertainty must be non-negative")
         if self.process_acceleration_std_rad_s2 < 0.0:
             raise ValueError("process acceleration uncertainty must be non-negative")
+        if not isinstance(self.body_rate_compensation, bool):
+            raise ValueError("body_rate_compensation must be boolean")
 
 
 @dataclass
@@ -128,6 +131,9 @@ class ConstantVelocityTargetEstimator:
     _gimbal_history: list[tuple[float, float]] = field(
         init=False, default_factory=list, repr=False
     )
+    _body_rate_history: list[tuple[float, float]] = field(
+        init=False, default_factory=list, repr=False
+    )
     _last_target_sample: tuple[float, float] | None = field(
         init=False, default=None, repr=False
     )
@@ -140,6 +146,7 @@ class ConstantVelocityTargetEstimator:
 
     def reset(self) -> None:
         self._gimbal_history.clear()
+        self._body_rate_history.clear()
         self._last_target_sample = None
         self._target_rate_rad_s = 0.0
         self._rate_variance_rad_s2 = self.config.initial_rate_std_rad_s**2
@@ -158,6 +165,17 @@ class ConstantVelocityTargetEstimator:
             and self._gimbal_history[1][0] < cutoff
         ):
             self._gimbal_history.pop(0)
+        body_rate = observation.body_rate_rad_s
+        if body_rate.valid and (
+            not self._body_rate_history
+            or time_s > self._body_rate_history[-1][0]
+        ):
+            self._body_rate_history.append((time_s, body_rate.value))
+        while (
+            len(self._body_rate_history) > 2
+            and self._body_rate_history[1][0] < cutoff
+        ):
+            self._body_rate_history.pop(0)
 
     def _gimbal_angle_at(self, time_s: float) -> float | None:
         history = self._gimbal_history
@@ -174,6 +192,48 @@ class ConstantVelocityTargetEstimator:
                     right_angle, left_angle
                 )
         return None
+
+    def _body_rate_at(self, time_s: float) -> float | None:
+        history = self._body_rate_history
+        if not history or time_s < history[0][0] - 1e-9:
+            return None
+        if time_s >= history[-1][0]:
+            return history[-1][1]
+        for (left_time, left_rate), (right_time, right_rate) in zip(
+            history, history[1:]
+        ):
+            if left_time <= time_s <= right_time:
+                fraction = (time_s - left_time) / (right_time - left_time)
+                return left_rate + fraction * (right_rate - left_rate)
+        return None
+
+    def _integrated_body_rotation(
+        self,
+        start_time_s: float,
+        end_time_s: float,
+    ) -> float | None:
+        """Integrate causal IMU yaw-rate history with a constant future hold."""
+
+        if end_time_s < start_time_s:
+            raise ValueError("body-rate integration interval must be ordered")
+        start_rate = self._body_rate_at(start_time_s)
+        end_rate = self._body_rate_at(end_time_s)
+        if start_rate is None or end_rate is None:
+            return None
+        knots = [(start_time_s, start_rate)]
+        knots.extend(
+            (time_s, rate_rad_s)
+            for time_s, rate_rad_s in self._body_rate_history
+            if start_time_s < time_s < end_time_s
+        )
+        knots.append((end_time_s, end_rate))
+        return sum(
+            0.5 * (left_rate + right_rate) * (right_time - left_time)
+            for (left_time, left_rate), (right_time, right_rate) in zip(
+                knots,
+                knots[1:],
+            )
+        )
 
     def _update_measurement(self, observation: GimbalObservation) -> None:
         if not observation.frame_updated or not observation.detection_valid:
@@ -198,6 +258,18 @@ class ConstantVelocityTargetEstimator:
             sample_rate = angle_delta_rad(
                 target_bearing_rad, previous[1]
             ) / sample_period_s
+            if self.config.body_rate_compensation:
+                body_rotation = self._integrated_body_rotation(
+                    previous[0],
+                    capture_time_s,
+                )
+                if body_rotation is None:
+                    self._last_target_sample = (
+                        capture_time_s,
+                        target_bearing_rad,
+                    )
+                    return
+                sample_rate += body_rotation / sample_period_s
             innovation = sample_rate - self._target_rate_rad_s
             rate_alpha = self.config.velocity_filter_coefficient
             self._target_rate_rad_s += rate_alpha * innovation
@@ -238,17 +310,33 @@ class ConstantVelocityTargetEstimator:
             )
             ** 2
         )
+        projected_bearing_rad = wrap_angle_rad(
+            sampled_bearing_rad + self._target_rate_rad_s * horizon_s
+        )
+        projected_rate_rad_s = self._target_rate_rad_s
+        if self.config.body_rate_compensation:
+            body_rotation = self._integrated_body_rotation(
+                sample_time_s,
+                time_s,
+            )
+            body_rate = self._body_rate_at(time_s)
+            if body_rotation is None or body_rate is None:
+                return TargetStateEstimate.missing(time_s)
+            projected_bearing_rad = wrap_angle_rad(
+                sampled_bearing_rad
+                + self._target_rate_rad_s * horizon_s
+                - body_rotation
+            )
+            projected_rate_rad_s = self._target_rate_rad_s - body_rate
         return TargetStateEstimate(
             time_s=time_s,
             measurement_time_s=MaskedScalar(sample_time_s, True),
             body_relative_bearing_rad=MaskedScalar(
-                wrap_angle_rad(
-                    sampled_bearing_rad + self._target_rate_rad_s * horizon_s
-                ),
+                projected_bearing_rad,
                 True,
             ),
             body_relative_rate_rad_s=MaskedScalar(
-                self._target_rate_rad_s, True
+                projected_rate_rad_s, True
             ),
             bearing_std_rad=MaskedScalar(bearing_std_rad, True),
             rate_std_rad_s=MaskedScalar(rate_std_rad_s, True),
@@ -259,4 +347,69 @@ class ConstantVelocityTargetEstimator:
         self._remember_gimbal(observation)
         self._update_measurement(observation)
         self.last_estimate = self._project(observation.time_s)
+        return self.last_estimate
+
+
+@dataclass
+class MultiHorizonConstantVelocityTargetEstimator(
+    ConstantVelocityTargetEstimator
+):
+    """Expose one causal constant-velocity state at several future horizons.
+
+    This is the classical counterpart to a learned multi-horizon estimator.
+    Measurement reconstruction and state filtering happen exactly once per
+    control update; every forecast is then projected from that same filtered
+    state. This lets classical and learned estimators use the identical
+    downstream command adapter without duplicating observations or state.
+    """
+
+    prediction_horizons_s: tuple[float, ...] = (0.0, 0.1, 0.2, 0.3)
+    name: str = "multi_horizon_constant_velocity"
+    last_estimates: tuple[TargetStateEstimate, ...] = field(
+        init=False,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        if not self.prediction_horizons_s:
+            raise ValueError("prediction horizons must be non-empty")
+        if any(
+            not math.isfinite(value) or value < 0.0
+            for value in self.prediction_horizons_s
+        ):
+            raise ValueError(
+                "prediction horizons must be finite and non-negative"
+            )
+        if any(
+            right <= left
+            for left, right in zip(
+                self.prediction_horizons_s,
+                self.prediction_horizons_s[1:],
+            )
+        ):
+            raise ValueError("prediction horizons must be strictly increasing")
+        super().__post_init__()
+
+    def reset(self) -> None:
+        super().reset()
+        self.last_estimates = tuple(
+            TargetStateEstimate.missing(0.0)
+            for _ in self.prediction_horizons_s
+        )
+
+    def update_all(
+        self,
+        observation: GimbalObservation,
+    ) -> tuple[TargetStateEstimate, ...]:
+        self._remember_gimbal(observation)
+        self._update_measurement(observation)
+        self.last_estimates = tuple(
+            self._project(observation.time_s + horizon_s)
+            for horizon_s in self.prediction_horizons_s
+        )
+        self.last_estimate = self.last_estimates[0]
+        return self.last_estimates
+
+    def update(self, observation: GimbalObservation) -> TargetStateEstimate:
+        self.update_all(observation)
         return self.last_estimate

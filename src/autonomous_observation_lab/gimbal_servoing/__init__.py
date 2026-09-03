@@ -67,6 +67,7 @@ from .env import GimbalServoEnv, wrap_angle_rad
 from .estimators import (
     ConstantVelocityEstimatorConfig,
     ConstantVelocityTargetEstimator,
+    MultiHorizonConstantVelocityTargetEstimator,
     MultiHorizonTargetStateEstimator,
     TargetStateEstimate,
     TargetStateEstimator,
@@ -126,6 +127,7 @@ __all__ = [
     "ClosedLoopScenario",
     "ConstantVelocityEstimatorConfig",
     "ConstantVelocityTargetEstimator",
+    "MultiHorizonConstantVelocityTargetEstimator",
     "ConstantRateAngularMotion",
     "ConstrainedPredictivePositionController",
     "ControllerRun",
