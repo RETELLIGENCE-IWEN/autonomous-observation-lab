@@ -179,7 +179,7 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
                         y_range=[-1.15, 1.15],
                     ),
                 ),
-                row_shares=[0.35, 1.15, 0.85],
+                row_shares=[0.75, 1.15, 0.85],
             )
         )
     if arena.kind == "challenge":
@@ -216,7 +216,11 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
         rrb.Vertical(
             rrb.TextDocumentView(
                 origin="/arena/summary",
-                name="Controller arena instructions and metrics",
+                name=(
+                    "Predictive Gimbal Challenge Arena"
+                    if arena.kind == "challenge"
+                    else "Controller arena instructions and metrics"
+                ),
             ),
             rrb.Horizontal(
                 *controller_views,
@@ -241,7 +245,7 @@ def _controller_arena_blueprint(rrb: Any, arena: ControllerArena) -> Any:
                 ),
             ),
             diagnostics,
-            row_shares=[0.55, 2.35, 1.0, 0.75],
+            row_shares=[0.45, 2.65, 0.95, 0.70],
         ),
         collapse_panels=True,
     )
@@ -1163,7 +1167,7 @@ def _log_arena_forecast_ghosts(
                 centers=[[center, 0.0]],
                 half_sizes=[half_size],
                 colors=[colors[min(index, len(colors) - 1)]],
-                labels=[f"+{1000.0 * horizon_s:.0f} ms forecast"],
+                labels=[f"+{1000.0 * horizon_s:.0f} ms"],
             ),
         )
 
@@ -2739,7 +2743,10 @@ def write_controller_arena(
         ) from error
 
     blueprint = _controller_arena_blueprint(rrb, arena)
-    rr.init(f"{_APP_ID}_controller_arena_v1")
+    rr.init(
+        f"{_APP_ID}_"
+        f"{'challenge_arena_v1' if arena.kind == 'challenge' else 'controller_arena_v1'}"
+    )
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         rr.save(output, default_blueprint=blueprint)
