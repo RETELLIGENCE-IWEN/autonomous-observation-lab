@@ -197,14 +197,17 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
     )
     assert challenge.kind == "challenge"
     assert [run.episode.name for run in challenge.comparison.runs] == [
-        "challenge_practical_feedback",
+        "challenge_identified_mpc",
         "challenge_conventional_champion",
         "challenge_dream_to_center",
     ]
     assert len(
         {len(run.episode.frames) for run in challenge.comparison.runs}
     ) == 1
-    assert not any(challenge.comparison.runs[0].forecasts)
+    assert any(
+        len(forecasts) > 1
+        for forecasts in challenge.comparison.runs[0].forecasts
+    )
     assert any(
         len(forecasts) > 1
         for forecasts in challenge.comparison.runs[1].forecasts
@@ -233,3 +236,30 @@ def test_adaptive_position_protocol_selects_before_disjoint_test(tmp_path):
         naive_reactive=True,
     )
     assert naive.comparison.runs[0].episode.name == "challenge_naive_reactive"
+    practical = build_gimbal_challenge_arena(
+        arena_result,
+        scenario_name="nominal_combined",
+        world_seed=901,
+        training_seed=7,
+        feedback_controller="practical",
+    )
+    assert (
+        practical.comparison.runs[0].episode.name
+        == "challenge_practical_feedback"
+    )
+    robust_pid = build_gimbal_challenge_arena(
+        arena_result,
+        scenario_name="nominal_combined",
+        world_seed=901,
+        training_seed=7,
+        feedback_controller="robust_pid",
+    )
+    assert robust_pid.comparison.runs[0].episode.name == "challenge_robust_pid"
+    with pytest.raises(ValueError, match="applies only"):
+        build_gimbal_challenge_arena(
+            arena_result,
+            scenario_name="nominal_combined",
+            world_seed=901,
+            training_seed=7,
+            reactive_gain=0.2,
+        )

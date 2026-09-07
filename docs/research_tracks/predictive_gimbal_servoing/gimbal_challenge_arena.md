@@ -1,4 +1,4 @@
-# Predictive Gimbal Challenge Arena v0.1
+# Predictive Gimbal Challenge Arena v0.3
 
 ## Purpose
 
@@ -11,17 +11,18 @@ prediction visible.
 Every column receives the same target motion, body disturbance, detector
 randomness, camera, servo, initial state, and random seed. The controllers are:
 
-1. **Practical feedback** — proportional bbox-error position control whose
-   gain is scheduled from the configured camera and servo delay;
+1. **Identified MPC (C4)** — a causal constant-velocity target estimator
+   feeding a constrained receding-horizon servo model; the
+   development-selected position controller is the default;
 2. **Conventional Champion v1** — a causal, IMU-compensated
    constant-velocity estimator feeding the exact V2.1 hardware-aware command
    adapter used by the learned controller; and
 3. **Dream-to-Center** — the deployable disturbance-aware GRU with the accepted
    V2.1 visibility-risk position adapter.
 
-This supersedes the original showcase comparison. The old gain-0.85 reactive
-controller is retained only as a named `Naive reactive P` teaching ablation;
-it is not a credible performance baseline.
+This supersedes the original showcase comparison. Robust PID C2 and practical
+feedback C1 are still selectable, while the old gain-0.85 reactive controller
+is retained only as a named `Naive reactive P` teaching ablation.
 
 The privileged V16 authority oracle is not shown as a controller. It remains a
 research ceiling, not a deployable result.
@@ -37,14 +38,15 @@ camera FOV.
 
 | Controller | Mean error | P95 error | Lost view | Command variation/s |
 |---|---:|---:|---:|---:|
-| Practical feedback | 12.61° | 25.91° | **3.28%** | **0.267** |
+| Identified MPC C4, position | 7.01° | 22.28° | **0.00%** | **0.833** |
 | Conventional Champion v1 | **6.66°** | **21.95°** | **0.00%** | 1.166 |
 | Dream-to-Center | 9.34° | 21.96° | **0.00%** | 2.795 |
 
 This single world is a diagnostic showcase, not an aggregate performance
-claim. Here the conventional champion is better than the learned controller
-on mean error and smoothness, while their P95 and visibility are effectively
-tied. The dashboard deliberately makes that result visible.
+claim. Here the learned controller loses to C4 by 2.33° mean error and uses
+3.36 times its command variation. The conventional champion is better than
+both on mean error and nearly matches the learned P95. The dashboard
+deliberately makes that result visible.
 
 Across the full 48-world historical confirmation replay, Conventional
 Champion v1 and the three-seed learned controller are nearly tied:
@@ -108,13 +110,17 @@ scripts/open_gimbal_challenge_arena.sh \
   --arena-scenario dropout_noise --arena-world-seed 82001
 ```
 
-The practical feedback gain can still be overridden for diagnostics, and the
-ghost horizons remain configurable:
+Robust PID C2, practical C1, and ghost horizons remain configurable:
 
 ```bash
 scripts/open_gimbal_challenge_arena.sh \
-  --arena-reactive-gain 0.20 \
+  --arena-feedback-controller robust-pid \
+  --arena-robust-pid-command-mode position \
   --arena-ghost-horizons-ms 100 200 300
+
+scripts/open_gimbal_challenge_arena.sh \
+  --arena-feedback-controller practical \
+  --arena-reactive-gain 0.20
 ```
 
 To reproduce the original unstable teaching case explicitly:
@@ -127,18 +133,19 @@ Create a portable recording without opening a window:
 
 ```bash
 aol-visualize-gimbal --demo challenge-arena \
-  --output artifacts/gimbal_challenge_arena_v01.rrd
+  --output artifacts/gimbal_challenge_arena_v03.rrd
 ```
 
 ## Research interpretation
 
-The corrected arena now asks a useful question: where does the learned
-estimator beat a strong conventional predictor when both issue commands
-through the same control stack? Current evidence points to a modest tail-error
-advantage, not a general tracking advantage. The next model work should target
-the champion's known assumption failures—motion reversals, non-constant
-acceleration, dropout coincident with manoeuvres, and plant mismatch—while
-holding the shared adapter fixed.
+The corrected arena now asks whether the learned controller beats two strong
+but structurally different conventional predictors. C3 tests conventional
+state estimation through the shared learned-controller adapter. C4 tests
+explicit multi-command plant optimization. Current evidence does not show
+general learned dominance over either. The next learned model work should
+target their known assumptions—constant target velocity, nominal linear plant
+dynamics, fixed objective weights, and weak loss-of-view recovery—while
+retaining their smoothness.
 
 The 82000-series block had already been opened for V2.1. Replaying it after
 development-only baseline tuning is valid for a controlled historical
@@ -147,7 +154,7 @@ new learned model beats this champion requires a new untouched seed block.
 
 ## Scope and next visual increment
 
-v0.1 deliberately reuses the validated one-axis research simulator. Its 3D
+v0.3 deliberately reuses the validated one-axis research simulator. Its 3D
 view provides body/gimbal/FOV geometry, while its camera panel remains a
 normalized 2D projection. The next demo-only increment is a perspective
 yaw/pitch scene that applies the one-axis controller independently to both

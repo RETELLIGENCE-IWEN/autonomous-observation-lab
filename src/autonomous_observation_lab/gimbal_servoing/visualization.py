@@ -945,6 +945,8 @@ def _arena_controller_label(name: str) -> str:
         "arena_fixed_horizon": "Fixed horizon",
         "arena_adaptive_v2": "Adaptive V2",
         "arena_visibility_risk_v21": "Risk V2.1",
+        "challenge_identified_mpc": "Identified MPC (C4)",
+        "challenge_robust_pid": "Robust PID (C2)",
         "challenge_practical_feedback": "Practical feedback",
         "challenge_naive_reactive": "Naive reactive P",
         "challenge_conventional_champion": "Conventional Champion v1",
@@ -4111,6 +4113,18 @@ def _parser() -> argparse.ArgumentParser:
         help="GRU initialization seed for the controller arena",
     )
     parser.add_argument(
+        "--arena-feedback-controller",
+        choices=("identified-mpc", "robust-pid", "practical"),
+        default="identified-mpc",
+        help="feedback baseline shown in challenge-arena column one",
+    )
+    parser.add_argument(
+        "--arena-robust-pid-command-mode",
+        choices=("rate", "position"),
+        default="rate",
+        help="hardware command interface for the robust PID baseline",
+    )
+    parser.add_argument(
         "--arena-reactive-gain",
         type=float,
         help=(
@@ -4211,6 +4225,14 @@ def main(argv: Sequence[str] | None = None) -> None:
                 scenario_name=args.arena_scenario or "high_latency",
                 world_seed=args.arena_world_seed or 82000,
                 training_seed=args.arena_training_seed or 17,
+                feedback_controller=args.arena_feedback_controller.replace(
+                    "-", "_"
+                ),
+                robust_pid_command_mode=(
+                    GimbalCommandMode.RATE
+                    if args.arena_robust_pid_command_mode == "rate"
+                    else GimbalCommandMode.POSITION
+                ),
                 reactive_gain=args.arena_reactive_gain,
                 naive_reactive=args.arena_naive_reactive,
                 ghost_horizons_s=tuple(

@@ -48,7 +48,9 @@ This is a candidate contribution, not a novelty claim. The claim must be narrowe
 - [Deployable-Reference Gated Residual V14.1--V14.3](deployable_residual_v14_experiment.md)
 - [Deployable Constrained Fine-Tuning V15](deployable_constrained_v15_experiment.md)
 - [State-Consistent Authority Distillation V16](deployable_authority_v16_experiment.md)
-- [Predictive Gimbal Challenge Arena v0.1](gimbal_challenge_arena.md)
+- [Baseline Benchmark v1: PID and MPC](baseline_benchmark_v1.md)
+- [C4 Identified Constrained MPC Experiment](identified_mpc_c4_experiment.md)
+- [Predictive Gimbal Challenge Arena v0.3](gimbal_challenge_arena.md)
 - [Belief-Guided Recovery Experiment](belief_recovery_experiment.md)
 - [O2 GRU Uncertainty Calibration Experiment](uncertainty_calibration_experiment.md)
 - [Contextual Calibration and Recovery Development/Test Protocol](contextual_calibration_and_recovery_protocol.md)
@@ -68,3 +70,14 @@ The project-specific reading path is maintained in the [Foundation Notes index](
 ## Status
 
 Concept locked on 2026-08-26. The configurable simulator, analytical estimator, rate/position adapters, diagnostics, stress matrix, privileged oracle, domain-randomized dataset, causal GRU predictor, configurable belief-recovery state machine, validation-fit O2 variance calibration, contextual-calibration ablation, disjoint recovery development/test protocol, three-initialization O2 replication, expanded seven-scenario recovery robustness protocol, deployable edge-conditioned recovery ablation, adaptive multi-horizon position V2, visibility-risk position V2.1, absolute performance/failure atlas, constrained predictive position V3/V3.1, and control-aware predictor V4/V5 studies are implemented. The V4 consistency objective passes three-seed replication and a fresh open-loop test, then passes the fresh rate-controller gate with 4.25% lower mean error and 0.69 percentage points less avoidable loss than its expanded-data baseline. Position averages improve slightly and become 5.6% smoother, but only one of three initializations improves mean tracking, so the primary position promotion gate fails. V8--V8.7 adds an exact differentiable servo rollout and one-sided counterfactual regret; frozen replication passes only seeds 17 and 43. V8.8 identifies frequent critical/ordinary gradient conflict and nearly reaches the tracking gates without passing them. V8.9 freezes state estimation and learns a bounded control residual but misses critical tracking and smoothness. V10 supplies multi-command plant feedback and causal counterfactual observations, yet all learned arms fail the tracking gate. V11 proves a feasible constrained-sequence ceiling, while V11.1/V11.2 show that logged teacher coverage alone does not transfer it. V12 closes the evaluation loop and aggregates student-induced states: critical tracking changes from a 4.37% regression to a 1.21% improvement, with much smoother and less saturated action, but global tracking and visibility regress 10.35%/10.83%. V13 identifies its learned absolute base as the binding ceiling. V14 switches to the frozen deployable midpoint-GRU/V2.1 controller and finds a passing constrained sequence ceiling. V14.1 transfers 2.54% global and 1.68% critical tracking improvement while improving global visibility, smoothness, and saturation, but misses strict critical-visibility non-regression by 0.30%. V15 adds streaming exact recurrent plant state, direct differentiable control losses, primal-dual visibility and ordinary-state constraints, critical/scenario-balanced sampling, CVaR and worst-scenario objectives, and a deployable hardware/evidence authority calibrator. No learned V15 arm passes: visibility-safe states lose the required tracking gain. V16 then evaluates exact per-episode residual scales under global and critical constraints. Its privileged authority oracle passes all eight checks with 3.92%/0.60% global/critical tracking improvements and critical visibility at numerical parity. The pointwise deployable router does not transfer that ceiling: all arms retain the near-full-authority initialization and miss critical visibility by 0.292%. The remaining bottleneck is therefore localized to causal motion-sensitive authority inference; a recurrent, prefix-conditioned safety router is next. The fresh test remains sealed.
+
+Baseline Benchmark v1 now makes the ten-method comparison explicit: 7 entries
+are ready, 1 is partial, and 2 are missing. C2 development selected a gain-0.50
+P+IMU specialization. C4 adds causal finite-horizon dynamic-matrix control in
+both command modes and selects its 200 ms position arm. Across the six open
+development scenarios, C4 narrowly improves over C3 in mean error, visibility,
+smoothness, and control cost while trailing its P95 by 0.10°. The frozen
+three-seed GRU then improves C4 mean/P95/loss by 0.21°/0.80°/0.32 percentage
+points, but uses 56.5% more command variation. Benchmark final seeds
+121000–121007 remain sealed; L2, L0, and L1 must be completed and frozen before
+opening them.

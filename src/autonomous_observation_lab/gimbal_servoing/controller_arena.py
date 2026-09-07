@@ -16,12 +16,14 @@ from .adaptive_position_v21 import (
     ADAPTIVE_POSITION_V21_SCHEMA_VERSION,
     adaptive_position_v2_config,
 )
+from .baseline_benchmark import identified_mpc_run, robust_pid_run
 from .closed_loop import (
     ClosedLoopComparison,
     ClosedLoopScenario,
     ControllerRun,
     closed_loop_scenarios,
 )
+from .config import GimbalCommandMode
 from .controllers import AdaptivePositionControllerConfig
 from .conventional_champion import (
     conventional_champion_run,
@@ -256,17 +258,35 @@ def build_gimbal_challenge_arena(
     scenario_name: str = "high_latency",
     world_seed: int = 82000,
     training_seed: int = 17,
+    feedback_controller: str = "identified_mpc",
+    robust_pid_command_mode: GimbalCommandMode = GimbalCommandMode.RATE,
     reactive_gain: float | None = None,
     naive_reactive: bool = False,
     ghost_horizons_s: tuple[float, ...] = (0.1, 0.2, 0.3),
     device: str = "cpu",
 ) -> ControllerArena:
-    """Build the practical/champion/Dream-to-Center comparison arena."""
+    """Build the C2/C3/Dream-to-Center comparison arena."""
 
+    if feedback_controller not in {
+        "identified_mpc",
+        "robust_pid",
+        "practical",
+    }:
+        raise ValueError("unsupported challenge feedback controller")
+    if not isinstance(robust_pid_command_mode, GimbalCommandMode):
+        raise ValueError("robust PID command mode must be a GimbalCommandMode")
     if reactive_gain is not None and (
         not math.isfinite(reactive_gain) or reactive_gain <= 0.0
     ):
         raise ValueError("challenge reactive gain must be finite and positive")
+    if (
+        feedback_controller != "practical"
+        and reactive_gain is not None
+        and not naive_reactive
+    ):
+        raise ValueError(
+            "reactive gain applies only to practical or naive feedback"
+        )
     if not ghost_horizons_s or any(
         not math.isfinite(value) or value <= 0.0
         for value in ghost_horizons_s
@@ -284,17 +304,37 @@ def build_gimbal_challenge_arena(
         training_seed=training_seed,
         device=device,
     )
-    feedback_name = (
-        "challenge_naive_reactive"
-        if naive_reactive
-        else "challenge_practical_feedback"
-    )
-    feedback = practical_feedback_run(
-        scenario=inputs.scenario,
-        seed=inputs.world_seed,
-        gain=(0.85 if naive_reactive and reactive_gain is None else reactive_gain),
-        name=feedback_name,
-    )
+    if naive_reactive or feedback_controller == "practical":
+        feedback_name = (
+            "challenge_naive_reactive"
+            if naive_reactive
+            else "challenge_practical_feedback"
+        )
+        feedback = practical_feedback_run(
+            scenario=inputs.scenario,
+            seed=inputs.world_seed,
+            gain=(
+                0.85
+                if naive_reactive and reactive_gain is None
+                else reactive_gain
+            ),
+            name=feedback_name,
+        )
+    elif feedback_controller == "robust_pid":
+        feedback = robust_pid_run(
+            scenario=inputs.scenario,
+            seed=inputs.world_seed,
+            command_mode=robust_pid_command_mode,
+            name="challenge_robust_pid",
+        )
+    else:
+        feedback = identified_mpc_run(
+            scenario=inputs.scenario,
+            seed=inputs.world_seed,
+            command_mode=GimbalCommandMode.POSITION,
+            maximum_staleness_s=inputs.runtime.maximum_staleness_s,
+            name="challenge_identified_mpc",
+        )
     classical = conventional_champion_run(
         scenario=inputs.scenario,
         seed=inputs.world_seed,
@@ -319,10 +359,11 @@ def build_gimbal_challenge_arena(
         scenario_name=inputs.scenario.name,
         description=(
             f"Exact paired showcase on frozen confirmation world seed "
-            f"{inputs.world_seed}. Practical feedback, the conventional "
-            "champion, and Dream-to-Center share target/body motion, detector "
-            "randomness, configured hardware, initial state, and—between the "
-            "predictive controllers—the exact V2.1 command adapter."
+            f"{inputs.world_seed}. The selected first-column baseline, the "
+            "conventional champion, and Dream-to-Center share target/body "
+            "motion, detector randomness, configured hardware, and initial "
+            "state. C3 and Dream-to-Center share the exact V2.1 command "
+            "adapter."
         ),
         runs=(feedback, classical, dream),
     )

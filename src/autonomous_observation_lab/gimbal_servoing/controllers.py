@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from .config import GimbalCommandMode, ServoConfig
+from .config import CameraConfig, GimbalCommandMode, ServoConfig
 from .estimators import (
     ConstantVelocityEstimatorConfig,
     ConstantVelocityTargetEstimator,
@@ -117,6 +117,514 @@ class ProportionalPositionController:
             desired_angle
         )
         return GimbalAction.position(self._last_command_normalized)
+
+
+@dataclass(frozen=True)
+class RobustPIDControllerConfig:
+    """Hardware-relative configuration for a deployable cascaded PID.
+
+    PID gains operate on angular image error and produce desired gimbal rate.
+    The same outer loop can therefore drive either a logical rate command or
+    an integrated absolute-position setpoint. Hardware limits and latency are
+    supplied separately through ``ServoConfig`` and ``CameraConfig``.
+    """
+
+    proportional_gain_s_inv: float = 2.5
+    integral_gain_s_inv2: float = 0.20
+    derivative_gain: float = 0.20
+    derivative_filter_time_constant_s: float = 0.08
+    target_rate_filter_time_constant_s: float = 0.12
+    target_rate_feedforward_gain: float = 0.0
+    body_rate_feedforward_gain: float = 1.0
+    integral_limit_fov_fraction: float = 0.25
+    integral_leak_time_constant_s: float = 1.5
+    maximum_detection_gap_s: float = 0.25
+    gain_schedule_reference_delay_s: float = 0.25
+    gain_schedule_exponent: float = 1.0
+    minimum_gain_multiplier: float = 0.35
+    maximum_gain_multiplier: float = 1.50
+    latency_jitter_scale: float = 1.0
+    position_response_fraction: float = 0.15
+    command_rate_limit_scale: float = 1.0
+    command_acceleration_limit_scale: float = 1.0
+    command_jerk_rise_time_s: float = 0.04
+
+    def __post_init__(self) -> None:
+        for name in (
+            "proportional_gain_s_inv",
+            "integral_gain_s_inv2",
+            "derivative_gain",
+            "target_rate_feedforward_gain",
+            "body_rate_feedforward_gain",
+            "integral_limit_fov_fraction",
+            "maximum_detection_gap_s",
+            "gain_schedule_exponent",
+            "latency_jitter_scale",
+            "position_response_fraction",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and non-negative")
+        for name in (
+            "derivative_filter_time_constant_s",
+            "target_rate_filter_time_constant_s",
+            "integral_leak_time_constant_s",
+            "gain_schedule_reference_delay_s",
+            "minimum_gain_multiplier",
+            "maximum_gain_multiplier",
+            "command_rate_limit_scale",
+            "command_acceleration_limit_scale",
+            "command_jerk_rise_time_s",
+        ):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be finite and positive")
+        if self.minimum_gain_multiplier > self.maximum_gain_multiplier:
+            raise ValueError(
+                "minimum gain multiplier must not exceed maximum"
+            )
+
+
+@dataclass(frozen=True)
+class RobustPIDDiagnostics:
+    valid_tracking_evidence: bool
+    measurement_gap_s: float
+    scheduled_gain_multiplier: float
+    error_rad: float
+    filtered_error_rate_rad_s: float
+    integral_error_rad_s: float
+    proportional_rate_rad_s: float
+    integral_rate_rad_s: float
+    derivative_rate_rad_s: float
+    body_feedforward_rate_rad_s: float
+    target_feedforward_rate_rad_s: float
+    raw_desired_rate_rad_s: float
+    shaped_desired_rate_rad_s: float
+    command_acceleration_rad_s2: float
+    anti_windup_active: bool
+    rate_limited: bool
+    acceleration_limited: bool
+    jerk_limited: bool
+    position_limited: bool
+
+    def to_dict(self) -> dict[str, float | bool]:
+        return asdict(self)
+
+
+@dataclass
+class RobustPIDGimbalController:
+    """Filtered PID with IMU feed-forward and rate/position command adapters."""
+
+    servo: ServoConfig
+    camera: CameraConfig
+    command_mode: GimbalCommandMode
+    config: RobustPIDControllerConfig = RobustPIDControllerConfig()
+    name: str = "robust_pid"
+    last_diagnostics: RobustPIDDiagnostics = field(init=False, repr=False)
+    _last_valid_error_rad: float = field(init=False, default=0.0, repr=False)
+    _last_measurement_time_s: float | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _last_valid_arrival_time_s: float | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _filtered_error_rate_rad_s: float = field(
+        init=False,
+        default=0.0,
+        repr=False,
+    )
+    _filtered_target_inertial_rate_rad_s: float = field(
+        init=False,
+        default=0.0,
+        repr=False,
+    )
+    _integral_error_rad_s: float = field(init=False, default=0.0, repr=False)
+    _command_rate_rad_s: float = field(init=False, default=0.0, repr=False)
+    _command_acceleration_rad_s2: float = field(
+        init=False,
+        default=0.0,
+        repr=False,
+    )
+    _position_setpoint_rad: float | None = field(
+        init=False,
+        default=None,
+        repr=False,
+    )
+    _last_action_normalized: float = field(
+        init=False,
+        default=0.0,
+        repr=False,
+    )
+
+    def __post_init__(self) -> None:
+        self.reset()
+
+    def _missing_diagnostics(self) -> RobustPIDDiagnostics:
+        return RobustPIDDiagnostics(
+            valid_tracking_evidence=False,
+            measurement_gap_s=math.inf,
+            scheduled_gain_multiplier=self._scheduled_gain_multiplier(),
+            error_rad=0.0,
+            filtered_error_rate_rad_s=0.0,
+            integral_error_rad_s=0.0,
+            proportional_rate_rad_s=0.0,
+            integral_rate_rad_s=0.0,
+            derivative_rate_rad_s=0.0,
+            body_feedforward_rate_rad_s=0.0,
+            target_feedforward_rate_rad_s=0.0,
+            raw_desired_rate_rad_s=0.0,
+            shaped_desired_rate_rad_s=0.0,
+            command_acceleration_rad_s2=0.0,
+            anti_windup_active=False,
+            rate_limited=False,
+            acceleration_limited=False,
+            jerk_limited=False,
+            position_limited=False,
+        )
+
+    def reset(self) -> None:
+        self._last_valid_error_rad = 0.0
+        self._last_measurement_time_s = None
+        self._last_valid_arrival_time_s = None
+        self._filtered_error_rate_rad_s = 0.0
+        self._filtered_target_inertial_rate_rad_s = 0.0
+        self._integral_error_rad_s = 0.0
+        self._command_rate_rad_s = 0.0
+        self._command_acceleration_rad_s2 = 0.0
+        self._position_setpoint_rad = None
+        self._last_action_normalized = 0.0
+        self.last_diagnostics = self._missing_diagnostics()
+
+    def _loop_delay_s(self) -> float:
+        position_response_s = (
+            self.config.position_response_fraction
+            / self.servo.position_gain_s_inv
+            if self.command_mode is GimbalCommandMode.POSITION
+            else 0.0
+        )
+        return max(
+            1e-9,
+            self.camera.detection_latency_s
+            + self.config.latency_jitter_scale
+            * self.camera.detection_latency_jitter_s
+            + self.servo.command_latency_s
+            + self.servo.rate_time_constant_s
+            + position_response_s,
+        )
+
+    def _scheduled_gain_multiplier(self) -> float:
+        raw = (
+            self.config.gain_schedule_reference_delay_s / self._loop_delay_s()
+        ) ** self.config.gain_schedule_exponent
+        return float(
+            np.clip(
+                raw,
+                self.config.minimum_gain_multiplier,
+                self.config.maximum_gain_multiplier,
+            )
+        )
+
+    @staticmethod
+    def _filter_alpha(elapsed_s: float, time_constant_s: float) -> float:
+        return 1.0 - math.exp(-elapsed_s / time_constant_s)
+
+    def _update_measurement(self, observation: GimbalObservation) -> None:
+        if not (
+            observation.frame_updated
+            and observation.detection_valid
+            and observation.measurement_age_s.valid
+        ):
+            return
+        measurement_time_s = (
+            observation.time_s - observation.measurement_age_s.value
+        )
+        error_rad = (
+            observation.image_error_normalized.value
+            * 0.5
+            * self.camera.selected_axis_fov_rad
+        )
+        previous_time_s = self._last_measurement_time_s
+        if previous_time_s is not None and (
+            measurement_time_s > previous_time_s + 1e-9
+        ):
+            elapsed_s = measurement_time_s - previous_time_s
+            sample_error_rate = (
+                error_rad - self._last_valid_error_rad
+            ) / elapsed_s
+            derivative_alpha = self._filter_alpha(
+                elapsed_s,
+                self.config.derivative_filter_time_constant_s,
+            )
+            self._filtered_error_rate_rad_s += derivative_alpha * (
+                sample_error_rate - self._filtered_error_rate_rad_s
+            )
+            current_gimbal_rate = (
+                observation.gimbal_rate_rad_s.value
+                if observation.gimbal_rate_rad_s.valid
+                else 0.0
+            )
+            current_body_rate = (
+                observation.body_rate_rad_s.value
+                if observation.body_rate_rad_s.valid
+                else 0.0
+            )
+            target_inertial_rate = (
+                sample_error_rate
+                + current_gimbal_rate
+                + current_body_rate
+            )
+            target_alpha = self._filter_alpha(
+                elapsed_s,
+                self.config.target_rate_filter_time_constant_s,
+            )
+            self._filtered_target_inertial_rate_rad_s += target_alpha * (
+                target_inertial_rate
+                - self._filtered_target_inertial_rate_rad_s
+            )
+        self._last_valid_error_rad = error_rad
+        self._last_measurement_time_s = measurement_time_s
+        self._last_valid_arrival_time_s = observation.time_s
+
+    def _tracking_evidence(
+        self,
+        observation: GimbalObservation,
+    ) -> tuple[bool, float]:
+        if self._last_valid_arrival_time_s is None:
+            return False, math.inf
+        gap_s = observation.time_s - self._last_valid_arrival_time_s
+        return gap_s <= self.config.maximum_detection_gap_s + 1e-9, gap_s
+
+    def _integral_candidate(
+        self,
+        *,
+        error_rad: float,
+        tracking: bool,
+        dt_s: float,
+    ) -> float:
+        if not tracking:
+            return self._integral_error_rad_s * math.exp(
+                -dt_s / self.config.integral_leak_time_constant_s
+            )
+        limit = (
+            self.config.integral_limit_fov_fraction
+            * 0.5
+            * self.camera.selected_axis_fov_rad
+        )
+        return float(
+            np.clip(
+                self._integral_error_rad_s + error_rad * dt_s,
+                -limit,
+                limit,
+            )
+        )
+
+    @staticmethod
+    def _move_toward(value: float, target: float, delta: float) -> float:
+        return value + float(np.clip(target - value, -delta, delta))
+
+    def _shape_rate(
+        self,
+        raw_rate_rad_s: float,
+        dt_s: float,
+    ) -> tuple[float, bool, bool, bool]:
+        max_rate = min(
+            self.servo.max_rate_rad_s,
+            self.config.command_rate_limit_scale * self.servo.max_rate_rad_s,
+        )
+        desired_rate = float(
+            np.clip(raw_rate_rad_s, -max_rate, max_rate)
+        )
+        if dt_s <= 0.0:
+            self._command_rate_rad_s = 0.0
+            self._command_acceleration_rad_s2 = 0.0
+            return 0.0, abs(raw_rate_rad_s) > max_rate, False, False
+        max_acceleration = min(
+            self.servo.max_acceleration_rad_s2,
+            self.config.command_acceleration_limit_scale
+            * self.servo.max_acceleration_rad_s2,
+        )
+        raw_acceleration = (
+            desired_rate - self._command_rate_rad_s
+        ) / dt_s
+        desired_acceleration = float(
+            np.clip(
+                raw_acceleration,
+                -max_acceleration,
+                max_acceleration,
+            )
+        )
+        max_jerk = (
+            max_acceleration / self.config.command_jerk_rise_time_s
+        )
+        acceleration = self._move_toward(
+            self._command_acceleration_rad_s2,
+            desired_acceleration,
+            max_jerk * dt_s,
+        )
+        rate = float(
+            np.clip(
+                self._command_rate_rad_s + acceleration * dt_s,
+                -max_rate,
+                max_rate,
+            )
+        )
+        self._command_rate_rad_s = rate
+        self._command_acceleration_rad_s2 = acceleration
+        return (
+            rate,
+            abs(raw_rate_rad_s) > max_rate + 1e-12,
+            abs(raw_acceleration) > max_acceleration + 1e-12,
+            abs(acceleration - desired_acceleration) > 1e-12,
+        )
+
+    def act(self, observation: GimbalObservation) -> GimbalAction:
+        if observation.command_mode is not self.command_mode:
+            raise ValueError("observation command mode does not match PID adapter")
+        if self._position_setpoint_rad is None:
+            self._position_setpoint_rad = (
+                observation.gimbal_angle_rad.value
+                if observation.gimbal_angle_rad.valid
+                else 0.0
+            )
+        self._update_measurement(observation)
+        tracking, measurement_gap_s = self._tracking_evidence(observation)
+        dt_s = max(0.0, observation.control_dt_s)
+        error_rad = self._last_valid_error_rad if tracking else 0.0
+        previous_integral = self._integral_error_rad_s
+        integral = self._integral_candidate(
+            error_rad=error_rad,
+            tracking=tracking,
+            dt_s=dt_s,
+        )
+        gain_multiplier = self._scheduled_gain_multiplier()
+        proportional = (
+            gain_multiplier
+            * self.config.proportional_gain_s_inv
+            * error_rad
+        )
+        integral_rate = (
+            gain_multiplier * self.config.integral_gain_s_inv2 * integral
+        )
+        derivative = (
+            gain_multiplier
+            * self.config.derivative_gain
+            * self._filtered_error_rate_rad_s
+            if tracking
+            else 0.0
+        )
+        body_feedforward = (
+            -self.config.body_rate_feedforward_gain
+            * observation.body_rate_rad_s.value
+            if observation.body_rate_rad_s.valid
+            else 0.0
+        )
+        target_feedforward = (
+            self.config.target_rate_feedforward_gain
+            * self._filtered_target_inertial_rate_rad_s
+            if tracking
+            else 0.0
+        )
+        raw_rate = (
+            proportional
+            + integral_rate
+            + derivative
+            + body_feedforward
+            + target_feedforward
+        )
+        max_rate = min(
+            self.servo.max_rate_rad_s,
+            self.config.command_rate_limit_scale * self.servo.max_rate_rad_s,
+        )
+        rate_would_saturate = abs(raw_rate) > max_rate + 1e-12
+        anti_windup = bool(
+            tracking
+            and rate_would_saturate
+            and error_rad * raw_rate > 0.0
+        )
+        if anti_windup:
+            integral = previous_integral
+            integral_rate = (
+                gain_multiplier
+                * self.config.integral_gain_s_inv2
+                * integral
+            )
+            raw_rate = (
+                proportional
+                + integral_rate
+                + derivative
+                + body_feedforward
+                + target_feedforward
+            )
+        self._integral_error_rad_s = integral
+        shaped_rate, rate_limited, acceleration_limited, jerk_limited = (
+            self._shape_rate(raw_rate, dt_s)
+        )
+
+        position_limited = False
+        if self.command_mode is GimbalCommandMode.RATE:
+            command = float(
+                np.clip(
+                    shaped_rate / self.servo.max_rate_rad_s,
+                    -1.0,
+                    1.0,
+                )
+            )
+            action = GimbalAction.rate(command)
+        else:
+            proposed_setpoint = self._position_setpoint_rad + shaped_rate * dt_s
+            clipped_setpoint = float(
+                np.clip(
+                    proposed_setpoint,
+                    self.servo.min_angle_rad,
+                    self.servo.max_angle_rad,
+                )
+            )
+            position_limited = not math.isclose(
+                proposed_setpoint,
+                clipped_setpoint,
+                abs_tol=1e-12,
+            )
+            if position_limited:
+                anti_windup = anti_windup or error_rad * shaped_rate > 0.0
+                if error_rad * shaped_rate > 0.0:
+                    self._integral_error_rad_s = previous_integral
+                    integral_rate = (
+                        gain_multiplier
+                        * self.config.integral_gain_s_inv2
+                        * previous_integral
+                    )
+                self._command_rate_rad_s = 0.0
+                self._command_acceleration_rad_s2 = 0.0
+            self._position_setpoint_rad = clipped_setpoint
+            command = self.servo.normalized_from_position(clipped_setpoint)
+            action = GimbalAction.position(command)
+        self._last_action_normalized = command
+        self.last_diagnostics = RobustPIDDiagnostics(
+            valid_tracking_evidence=tracking,
+            measurement_gap_s=measurement_gap_s,
+            scheduled_gain_multiplier=gain_multiplier,
+            error_rad=error_rad,
+            filtered_error_rate_rad_s=self._filtered_error_rate_rad_s,
+            integral_error_rad_s=self._integral_error_rad_s,
+            proportional_rate_rad_s=proportional,
+            integral_rate_rad_s=integral_rate,
+            derivative_rate_rad_s=derivative,
+            body_feedforward_rate_rad_s=body_feedforward,
+            target_feedforward_rate_rad_s=target_feedforward,
+            raw_desired_rate_rad_s=raw_rate,
+            shaped_desired_rate_rad_s=shaped_rate,
+            command_acceleration_rad_s2=self._command_acceleration_rad_s2,
+            anti_windup_active=anti_windup,
+            rate_limited=rate_limited,
+            acceleration_limited=acceleration_limited,
+            jerk_limited=jerk_limited,
+            position_limited=position_limited,
+        )
+        return action
 
 
 @dataclass
