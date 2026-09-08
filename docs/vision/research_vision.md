@@ -30,6 +30,43 @@ Flight Intelligence가 항공기의 상태와 임무를 해석하여 비행명�
 
 프로젝트명 또는 모델명은 추가 선행명칭·상표 조사가 필요하다. 초기 논의에서 사용한 `Gaze Intelligence`는 인간 eye-tracking 분야의 기존 회사명과 충돌 가능성이 있고, `SCOPE` 역시 흔한 약어이므로 현재는 작업명으로만 사용한다.
 
+## 1.2.1 Think–Dream–Look: 상위 conceptual architecture
+
+이 연구 정체성을 구현하기 위한 상위 개념 구조를 **Think–Dream–Look (TDL)** 로 정의한다.
+
+- **Think** — 현재 가진 증거와 belief를 내부적으로 더 정제한다.
+- **Dream** — world model을 통해 가능한 미래 상태와 관측결과를 상상한다.
+- **Look** — 실제 센서를 움직여 새로운 증거를 획득한다.
+
+핵심은 세 단계를 고정된 pipeline으로 실행하는 것이 아니라, 제한된 compute·시간·센서 자원 아래에서 **지금 더 생각해야 하는지, 미래를 상상해야 하는지, 실제 세계를 다시 봐야 하는지**를 판단하는 것이다.
+
+Think에서의 recurrent computation은 동일한 물리적 시점에서 latent belief를 반복적으로 정제한다. Dream에서의 imagination은 물리적 미래를 latent space에서 rollout한다. 따라서 TDL은 computational depth와 temporal depth를 서로 다른 자원으로 취급한다.
+
+이를 가장 간단히 표현하면 다음과 같다.
+
+\[
+\text{Observe}
+\rightarrow
+\text{Think}
+\rightarrow
+\text{Dream}
+\rightarrow
+\text{Look}
+\rightarrow
+\text{Observe}
+\rightarrow \cdots
+\]
+
+Dream-to-Look(D2L)은 이 상위 구조 전체와 동의어가 아니다. D2L은 TDL 안에서 **Dream → Look**, 즉 learned world model이 후보 관측의 미래 evidence consequence를 예측하고 실제 sensing action으로 연결할 수 있는지를 검증하는 구체적 연구 track이다.
+
+따라서 관계를 다음과 같이 둔다.
+
+\[
+\boxed{\text{Think–Dream–Look} \supset \text{Dream-to-Look}}
+\]
+
+TDL의 자세한 정의, Think-versus-Look 문제, adaptive computation, object-centric instantiation, 단계별 연구가설은 [Think–Dream–Look Conceptual Architecture](think_dream_look.md)에 정리한다.
+
 ## 1.3 자동화와 연구의 차이
 
 ### 자동화 중심 접근
@@ -161,4 +198,3 @@ q_t = \pi_{inquiry}(b_t, g_t, m_t)
 4. 센서 embodiment가 바뀌어도 관측전략이 일반화되는가?
 5. 독립적인 비행정책과 최소한의 semantic request만으로 협력할 수 있는가?
 6. 의도적 기만과 attention hijacking에도 자신의 belief를 검증할 수 있는가?
-
