@@ -17,19 +17,19 @@ Keeping that boundary explicit makes a learned controller easier to train, compa
 
 Let a detector report a bounding box
 
-\[
+$$
 b_k=(c_{x,k},c_{y,k},w_k,h_k,q_k),
-\]
+$$
 
-where \((c_x,c_y)\) is its center, \((w,h)\) its size, and \(q\) an optional confidence or validity signal at time \(t_k\). If the desired horizontal location is \(c_x^*\), a focal-length-normalized horizontal error is
+where $(c_x,c_y)$ is its center, $(w,h)$ its size, and $q$ an optional confidence or validity signal at time $t_k$. If the desired horizontal location is $c_x^*$, a focal-length-normalized horizontal error is
 
-\[
+$$
 e_k = \frac{c_{x,k}-c_x^*}{f_x}.
-\]
+$$
 
 Normalization makes the feature approximately angular for modest fields of view and makes results less tied to pixel resolution. When camera intrinsics are unavailable, width-normalized pixel error is still useful, but it should not be mistaken for a calibrated angle.
 
-The controller's goal is not merely to make the current \(e_k\) small. It must keep future error small while respecting field of view, angular-rate, acceleration, travel, and electrical limits. That matters on a quadcopter because the measurement reflects several coupled effects:
+The controller's goal is not merely to make the current $e_k$ small. It must keep future error small while respecting field of view, angular-rate, acceleration, travel, and electrical limits. That matters on a quadcopter because the measurement reflects several coupled effects:
 
 - vehicle rotation and translation;
 - target motion;
@@ -41,62 +41,62 @@ The same observed error can therefore demand different actions. A target ten pix
 
 ## 2. The geometric core: the interaction matrix
 
-Image-based visual servoing describes how camera velocity changes image features. For a point with normalized image coordinates \(s=(x,y)\), depth \(Z\), and camera twist
+Image-based visual servoing describes how camera velocity changes image features. For a point with normalized image coordinates $s=(x,y)$, depth $Z$, and camera twist
 
-\[
+$$
 v_c=(v_x,v_y,v_z,\omega_x,\omega_y,\omega_z)^\top,
-\]
+$$
 
 one common camera-velocity convention gives
 
-\[
+$$
 \begin{bmatrix}
 \dot{x}\\
 \dot{y}
 \end{bmatrix}
 =
 L_s v_c,
-\]
+$$
 
 with
 
-\[
+$$
 L_s=
 \begin{bmatrix}
 -1/Z & 0 & x/Z & xy & -(1+x^2) & y\\
 0 & -1/Z & y/Z & 1+y^2 & -xy & -x
 \end{bmatrix}.
-\]
+$$
 
-The matrix \(L_s\), called the **interaction matrix** or image Jacobian, maps physical camera motion into instantaneous image motion. Its entries show why visual control is not only a pixel-space problem: translation depends on depth, rotational axes couple, and the sensitivity changes across the image. Signs vary with coordinate and twist conventions, so an implementation must document and test its convention rather than copy signs blindly.
+The matrix $L_s$, called the **interaction matrix** or image Jacobian, maps physical camera motion into instantaneous image motion. Its entries show why visual control is not only a pixel-space problem: translation depends on depth, rotational axes couple, and the sensitivity changes across the image. Signs vary with coordinate and twist conventions, so an implementation must document and test its convention rather than copy signs blindly.
 
-For feature error \(e=s-s^*\), the idealized image-based law
+For feature error $e=s-s^*$, the idealized image-based law
 
-\[
+$$
 v_c=-\lambda \widehat{L}_s^{+}e
-\]
+$$
 
-uses an estimated pseudoinverse of the interaction matrix to produce exponentially decreasing error under favorable local assumptions. Here \(\lambda>0\) sets the convergence rate. The hat matters: depth, calibration, target geometry, and motion are rarely exact.
+uses an estimated pseudoinverse of the interaction matrix to produce exponentially decreasing error under favorable local assumptions. Here $\lambda>0$ sets the convergence rate. The hat matters: depth, calibration, target geometry, and motion are rarely exact.
 
 For a one-axis gimbal, much of this geometry can be reduced to a local scalar model:
 
-\[
+$$
 \dot e(t)=d(t)-k(t)\,\omega_g(t),
-\]
+$$
 
-where \(\omega_g\) is achieved gimbal rate, \(k(t)>0\) is the local image-motion gain, and \(d(t)\) collects target and carrier motion that would occur with a stationary gimbal. Sampled at interval \(\Delta t_k\),
+where $\omega_g$ is achieved gimbal rate, $k(t)>0$ is the local image-motion gain, and $d(t)$ collects target and carrier motion that would occur with a stationary gimbal. Sampled at interval $\Delta t_k$,
 
-\[
+$$
 e_{k+1}\approx e_k+\Delta t_k\left(d_k-k_k\omega_{g,k}\right).
-\]
+$$
 
-This compact equation exposes the real task. A good outer loop must infer the disturbance \(d_k\), understand the effective gain and actuator response, and act early enough that delay does not turn correction into oscillation.
+This compact equation exposes the real task. A good outer loop must infer the disturbance $d_k$, understand the effective gain and actuator response, and act early enough that delay does not turn correction into oscillation.
 
 ## 3. Cascaded control is an architectural contract
 
 A practical gimbal normally uses nested loops:
 
-\[
+$$
 \text{detections and telemetry}
 \rightarrow
 \boxed{\text{visual outer loop}}
@@ -106,9 +106,9 @@ A practical gimbal normally uses nested loops:
 \text{camera motion}
 \rightarrow
 \text{next image}.
-\]
+$$
 
-The outer loop may run at the detector or policy rate, often tens of hertz. It emits a desired angular rate \(\omega_g^*\), or less commonly a desired angle. The inner loop runs much faster, often hundreds of hertz or more, using encoder and inertial measurements to track the command and enforce current, speed, acceleration, and travel limits.
+The outer loop may run at the detector or policy rate, often tens of hertz. It emits a desired angular rate $\omega_g^*$, or less commonly a desired angle. The inner loop runs much faster, often hundreds of hertz or more, using encoder and inertial measurements to track the command and enforce current, speed, acceleration, and travel limits.
 
 Rate command is a useful learned-control interface because it:
 
@@ -125,9 +125,9 @@ An angle-command interface can work when the embedded gimbal already provides a 
 
 With the sign convention above, a proportional-integral-derivative outer loop can be written
 
-\[
+$$
 \omega_g^* = K_p e + K_i\sum_j e_j\Delta t_j + K_d\widehat{\dot e}.
-\]
+$$
 
 The proportional term corrects displacement, the derivative term reacts to image motion, and the integral term removes persistent bias. This controller is strong when sampling, gain, and delay are stable. Its weaknesses are also diagnostic:
 
@@ -141,37 +141,38 @@ A state estimator can turn a sequence of detections into estimates of error, err
 
 A disturbance observer treats the unmodeled term in the scalar dynamics as something to estimate. Informally,
 
-\[
+$$
 \widehat d_k \approx \widehat{\dot e}_k + \widehat k_k\omega_{g,k}.
-\]
+$$
 
 The estimate can then be canceled in the command. Robust visual-servo work for inertially stabilized platforms shows why this is a serious baseline: target motion, uncertain depth, angular rate, tracking error, and camera parameters can be grouped as disturbances and addressed with observer-based predictive control.
 
 Model predictive control instead rolls a model forward over a horizon and chooses a command sequence that minimizes an objective such as
 
-\[
+$$
 \sum_{i=1}^{H}
 q_e e_{k+i}^2
 +q_u(\omega^*_{k+i})^2
 +q_{\Delta u}(\Delta\omega^*_{k+i})^2,
-\]
+$$
 
 subject to rate, acceleration, travel, and field-of-view constraints. The terms respectively penalize tracking error, excessive motion, and command chatter. MPC makes prediction and constraints explicit, but depends on model quality and sufficient compute. It is an especially important comparator for any learned controller advertised as predictive.
 
 ## 5. Delay, irregular time, and actuator dynamics
 
-If the command applied during the next image interval was issued \(d\) steps earlier, a more honest model is
+If the command applied during the next image interval was issued $d$ steps earlier, a more honest model is
 
-\[
-e_{k+1}=e_k+\Delta t_k\left(d_k-k_k\omega_{g,k-d}ight)+\nu_k,
-\]
+$$
+e_{k+1}=e_k+\Delta t_k\left(d_k-k_k\omega_{g,k-d}
+ight)+\nu_k,
+$$
 
-where \(\nu_k\) represents measurement and model error. Treating \(d=0\) when delay is material makes a controller respond to an old world. Treating every interval as the same duration makes velocity estimates and recurrent state inconsistent under jitter.
+where $\nu_k$ represents measurement and model error. Treating $d=0$ when delay is material makes a controller respond to an old world. Treating every interval as the same duration makes velocity estimates and recurrent state inconsistent under jitter.
 
 Useful operational practices are:
 
 - timestamp at capture, inference completion, command issue, and actuator application when available;
-- expose \(\Delta t_k\), measurement age, and recent applied commands to an estimator or learned policy;
+- expose $\Delta t_k$, measurement age, and recent applied commands to an estimator or learned policy;
 - simulate command queues and dropped or repeated frames, not only additive noise;
 - measure the inner-loop step and frequency response rather than assuming instantaneous rate tracking;
 - use anti-windup and rate/acceleration limiting outside any learned component.
@@ -182,13 +183,13 @@ Latency is not merely another scalar to randomize. It changes which action cause
 
 Mean squared centering error does not fully represent tracking utility. Once a target leaves the frame, the detector may provide no gradient indicating where it went. Near the boundary, a controller should value margin and predicted visibility, not only current centering.
 
-With half image width \(W/2\), define normalized margin
+With half image width $W/2$, define normalized margin
 
-\[
+$$
 m_k = 1-\frac{|c_{x,k}-c_x^*|+w_k/2}{W/2}.
-\]
+$$
 
-Positive \(m_k\) indicates that the horizontal extent of the box remains inside the image; negative margin indicates clipping or loss. A predictive controller can estimate future margin or time to boundary and act before the center error becomes large. Bounding-box width is also useful because a nearby or rapidly growing target consumes the field of view faster, although box size is only an imperfect depth cue.
+Positive $m_k$ indicates that the horizontal extent of the box remains inside the image; negative margin indicates clipping or loss. A predictive controller can estimate future margin or time to boundary and act before the center error becomes large. Bounding-box width is also useful because a nearby or rapidly growing target consumes the field of view faster, although box size is only an imperfect depth cue.
 
 This reframes the task from regulation alone to **constrained visibility maintenance**.
 

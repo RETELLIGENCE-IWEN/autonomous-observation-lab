@@ -20,9 +20,9 @@ The intended result is not merely a controller that works in one simulator. It i
 
 The mini-project owns the mid-level visual servo:
 
-\[
+$$
 \text{target observation history} \longrightarrow \text{continuous 1D gimbal command}.
-\]
+$$
 
 It does not initially own:
 
@@ -40,23 +40,23 @@ The controlled axis is abstract. It may represent pan/yaw or tilt/pitch, but one
 
 ## 2. Formal problem
 
-Let the selected image axis be normalized to \([-1,1]\), with zero at the image center. From a bounding box
+Let the selected image axis be normalized to $[-1,1]$, with zero at the image center. From a bounding box
 
-\[
+$$
 b_t=(c_{x,t},c_{y,t},w_t,h_t),
-\]
+$$
 
-the controller uses the relevant center coordinate as image error \(e_t\). Width and height provide imperfect scale and motion cues.
+the controller uses the relevant center coordinate as image error $e_t$. Width and height provide imperfect scale and motion cues.
 
 The hidden state includes
 
-\[
+$$
 s_t=(\theta_t^{target},\dot\theta_t^{target},
 \theta_t^{body},\dot\theta_t^{body},
 q_t,\dot q_t,\psi,\ell_t),
-\]
+$$
 
-where \(q_t\) is gimbal state, \(\psi\) contains fixed but unknown camera and actuator parameters, and \(\ell_t\) contains latency or command-queue state. Several hidden causes can produce the same instantaneous \(e_t\), so the deployment problem is a POMDP when only image observations are available.
+where $q_t$ is gimbal state, $\psi$ contains fixed but unknown camera and actuator parameters, and $\ell_t$ contains latency or command-queue state. Several hidden causes can produce the same instantaneous $e_t$, so the deployment problem is a POMDP when only image observations are available.
 
 ### Observation profiles
 
@@ -73,9 +73,9 @@ The primary condition uses every signal genuinely available to the final payload
 
 The initial action is a normalized desired angular-rate command:
 
-\[
+$$
 u_t\in[-1,1], \qquad \dot q_t^{cmd}=u_t\dot q_{max}.
-\]
+$$
 
 Rate command is preferred over raw torque for the first study because it isolates visual servo intelligence from motor-current stabilization and makes simulation-to-hardware transfer safer. Angle increment and torque command can be later action-profile ablations.
 
@@ -83,16 +83,16 @@ Rate command is preferred over raw torque for the first study because it isolate
 
 Define the per-step cost
 
-\[
+$$
 C_t=
 \lambda_e\rho(e_t)
 +\lambda_b\mathbf 1[|e_t|>e_{warn}]
 +\lambda_l\mathbf 1[\text{target lost}]
 +\lambda_u u_t^2
 +\lambda_{\Delta u}(u_t-u_{t-1})^2.
-\]
+$$
 
-The policy minimizes discounted expected cost. The robust error \(\rho\) should preserve sensitivity near the center without allowing a few catastrophic losses to dominate every learning signal. Loss of view, saturation, and mechanical-limit violations are reported separately rather than hidden inside a single return.
+The policy minimizes discounted expected cost. The robust error $\rho$ should preserve sensitivity near the center without allowing a few catastrophic losses to dominate every learning signal. Loss of view, saturation, and mechanical-limit violations are reported separately rather than hidden inside a single return.
 
 Privileged body or target state must not enter the reward in a way that makes an undeployable shortcut available to the actor.
 
@@ -136,9 +136,9 @@ Distilling a teacher that observes body motion, true LOS, actuator state, and de
 
 A compact recurrent state consumes observation and intervention history:
 
-\[
+$$
 h_t=f_\phi(h_{t-1},o_t,u_{t-1}).
-\]
+$$
 
 The explicit inclusion of the previous command is essential. It allows the model to distinguish externally induced image motion from the observed consequence of its own action.
 

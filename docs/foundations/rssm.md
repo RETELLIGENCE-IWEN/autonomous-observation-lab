@@ -44,27 +44,27 @@ An agent rarely observes the true Markov state of the world. It receives incompl
 
 ### 1.1 The environment state is hidden
 
-In a fully observed Markov decision process, the current state \(x_t\) is assumed to contain everything required to predict the next state:
+In a fully observed Markov decision process, the current state $x_t$ is assumed to contain everything required to predict the next state:
 
-\[
+$$
 p(x_{t+1}\mid x_{1:t},a_{1:t})=p(x_{t+1}\mid x_t,a_t).
-\]
+$$
 
-In visual and sensing problems, the agent does not receive \(x_t\). It receives an observation \(o_t\) generated from an unknown state:
+In visual and sensing problems, the agent does not receive $x_t$. It receives an observation $o_t$ generated from an unknown state:
 
-\[
+$$
 o_t\sim p(o_t\mid x_t).
-\]
+$$
 
 A single image or bounding box is generally not Markov. The same bounding box can arise from different ranges, target motions, zoom settings, and platform motions. A missed detection can mean occlusion, detector failure, target departure, or a false previous track.
 
 The agent therefore needs an internal state summarizing history:
 
-\[
+$$
 b_t=f(o_{1:t},a_{1:t-1}).
-\]
+$$
 
-Ideally, \(b_t\) behaves like a belief state: a sufficient summary of what the agent currently knows about the hidden world.
+Ideally, $b_t$ behaves like a belief state: a sufficient summary of what the agent currently knows about the hidden world.
 
 ### 1.2 Why not only frame stacking?
 
@@ -94,17 +94,17 @@ This complementary division is the central RSSM idea.
 
 An RSSM maintains two forms of latent state.
 
-### Deterministic recurrent state \(h_t\)
+### Deterministic recurrent state $h_t$
 
 The deterministic state is a learned memory of prior latent states and actions:
 
-\[
+$$
 h_t=f_\theta(h_{t-1},z_{t-1},a_{t-1}).
-\]
+$$
 
 It is commonly implemented by a GRU or a related recurrent transition. It is useful for stable temporal context: action history, persistent scene context, and information that should flow across many steps.
 
-### Stochastic state \(z_t\)
+### Stochastic state $z_t$
 
 The stochastic state represents uncertain information about the current hidden state. It is sampled either from:
 
@@ -113,9 +113,9 @@ The stochastic state represents uncertain information about the current hidden s
 
 The complete model state is typically the pair:
 
-\[
+$$
 s_t=(h_t,z_t).
-\]
+$$
 
 The deterministic state should not be interpreted as “known truth,” nor the stochastic state as a complete Bayesian belief. Both are learned representations. Their intended roles emerge from architecture and training losses.
 
@@ -131,20 +131,20 @@ The simplest way to remember an RSSM is:
 
 Notation differs across papers and implementations. This note uses:
 
-- \(o_t\): observation;
-- \(a_t\): action;
-- \(h_t\): deterministic recurrent state;
-- \(z_t\): stochastic latent state;
-- \(r_t\): reward or task signal;
-- \(c_t\): continuation/nonterminal indicator.
+- $o_t$: observation;
+- $a_t$: action;
+- $h_t$: deterministic recurrent state;
+- $z_t$: stochastic latent state;
+- $r_t$: reward or task signal;
+- $c_t$: continuation/nonterminal indicator.
 
 ### 3.1 Observation encoder
 
 High-dimensional observations are encoded into features:
 
-\[
+$$
 e_t=\operatorname{Enc}_\theta(o_t).
-\]
+$$
 
 For images, this may be a convolutional encoder. For object-centric sensing, it may be a set or graph encoder over detections, tracks, and payload state.
 
@@ -152,43 +152,43 @@ For images, this may be a convolutional encoder. For object-centric sensing, it 
 
 The recurrent dynamics consume the previous deterministic state, stochastic state, and action:
 
-\[
+$$
 h_t=f_\theta(h_{t-1},z_{t-1},a_{t-1}).
-\]
+$$
 
 This answers: given what the model previously believed and what the agent did, what temporal context should be carried into the next step?
 
 ### 3.3 Prior dynamics
 
-Before seeing \(o_t\), the model predicts a distribution over the next stochastic state:
+Before seeing $o_t$, the model predicts a distribution over the next stochastic state:
 
-\[
+$$
 p_\theta(z_t\mid h_t).
-\]
+$$
 
 This is the dynamics prior. It is the distribution used during imagination, because imagined future observations are unavailable.
 
 For continuous latents, the prior may be a diagonal Gaussian:
 
-\[
+$$
 p_\theta(z_t\mid h_t)=\mathcal{N}(\mu^p_t,(\sigma^p_t)^2).
-\]
+$$
 
 DreamerV2 and DreamerV3 use discrete categorical latent representations rather than the continuous Gaussian representation used in earlier versions.
 
 ### 3.4 Posterior or representation model
 
-After seeing the observation feature \(e_t\), the model infers:
+After seeing the observation feature $e_t$, the model infers:
 
-\[
+$$
 q_\theta(z_t\mid h_t,e_t).
-\]
+$$
 
 For a continuous latent:
 
-\[
+$$
 q_\theta(z_t\mid h_t,e_t)=\mathcal{N}(\mu^q_t,(\sigma^q_t)^2).
-\]
+$$
 
 This posterior is not a posterior over the true physical state in a strict analytical model. It is an amortized variational posterior over the learned latent state.
 
@@ -196,9 +196,9 @@ This posterior is not a posterior over the true physical state in a strict analy
 
 The latent state predicts or reconstructs the observation:
 
-\[
+$$
 p_\theta(o_t\mid h_t,z_t).
-\]
+$$
 
 This forces the latent state to retain information about what was observed. Depending on the research goal, the prediction target can be:
 
@@ -212,13 +212,13 @@ This forces the latent state to retain information about what was observed. Depe
 
 In model-based RL, the world model commonly predicts reward and episode continuation:
 
-\[
+$$
 p_\theta(r_t\mid h_t,z_t),
-\]
+$$
 
-\[
+$$
 p_\theta(c_t\mid h_t,z_t).
-\]
+$$
 
 These heads allow imagined trajectories to produce predicted returns without decoding full observations at every step.
 
@@ -226,22 +226,22 @@ These heads allow imagined trajectories to produce predicted returns without dec
 
 A simplified action-conditioned RSSM generative model can be written as:
 
-\[
+$$
 p(o_{1:T},r_{1:T},c_{1:T},z_{1:T}\mid a_{1:T-1})
 =\prod_{t=1}^{T}
 p(z_t\mid h_t)
 p(o_t\mid h_t,z_t)
 p(r_t\mid h_t,z_t)
 p(c_t\mid h_t,z_t),
-\]
+$$
 
 with:
 
-\[
+$$
 h_t=f(h_{t-1},z_{t-1},a_{t-1}).
-\]
+$$
 
-The inference model replaces the unknown latent state with samples from \(q(z_t\mid h_t,e_t)\) during training and filtering.
+The inference model replaces the unknown latent state with samples from $q(z_t\mid h_t,e_t)$ during training and filtering.
 
 ---
 
@@ -253,11 +253,11 @@ RSSM has two operational modes that must be distinguished clearly.
 
 When a real observation is available:
 
-1. update \(h_t\) using the previous latent state and action;
-2. encode \(o_t\) into \(e_t\);
-3. infer posterior \(q(z_t\mid h_t,e_t)\);
-4. sample or select \(z_t\);
-5. use \((h_t,z_t)\) as the current filtered state.
+1. update $h_t$ using the previous latent state and action;
+2. encode $o_t$ into $e_t$;
+3. infer posterior $q(z_t\mid h_t,e_t)$;
+4. sample or select $z_t$;
+5. use $(h_t,z_t)$ as the current filtered state.
 
 The posterior corrects the prediction using evidence.
 
@@ -265,17 +265,17 @@ The posterior corrects the prediction using evidence.
 
 For a candidate future action sequence, observations do not yet exist:
 
-1. choose action \(a_t\);
+1. choose action $a_t$;
 2. update the recurrent state;
-3. sample \(z_{t+1}\) from the prior;
+3. sample $z_{t+1}$ from the prior;
 4. predict reward, continuation, visibility, or other quantities;
 5. repeat for the imagination horizon.
 
 The model therefore rolls forward using:
 
-\[
+$$
 z_{t+1}\sim p(z_{t+1}\mid h_{t+1}).
-\]
+$$
 
 This separation gives RSSM its practical value: the same learned dynamics supports both online state estimation and counterfactual future simulation.
 
@@ -295,14 +295,14 @@ The RSSM is typically trained with a variational objective containing prediction
 
 A generic negative log-likelihood objective is:
 
-\[
+$$
 \mathcal{L}_{pred}
 =-\sum_t\left[
 \log p(o_t\mid h_t,z_t)
 +\log p(r_t\mid h_t,z_t)
 +\log p(c_t\mid h_t,z_t)
 \right].
-\]
+$$
 
 These terms make the latent state informative about observations and task-relevant outcomes.
 
@@ -310,20 +310,20 @@ These terms make the latent state informative about observations and task-releva
 
 The posterior has access to current evidence; the prior does not. To make the prior useful for imagination, it is trained toward the posterior:
 
-\[
+$$
 \mathcal{L}_{KL}
 =\sum_t D_{KL}\left(
 q(z_t\mid h_t,e_t)
 \;\|\;
 p(z_t\mid h_t)
 \right).
-\]
+$$
 
 The combined loss is conceptually:
 
-\[
+$$
 \mathcal{L}_{RSSM}=\mathcal{L}_{pred}+\beta\mathcal{L}_{KL}.
-\]
+$$
 
 ### 5.3 Interpretation of the KL trade-off
 
@@ -537,9 +537,9 @@ They preserve identity and interpretable geometry but depend on detector and ass
 
 Dream-to-Look should consider both global context and per-object belief:
 
-\[
+$$
 s_t=\left(h^{scene}_t,\{z^i_t\}_{i=1}^{N_t}\right).
-\]
+$$
 
 Possible object-state content:
 
@@ -580,14 +580,14 @@ High-priority heads include:
 
 Starting from the current posterior, the model can compare candidate observation futures:
 
-\[
+$$
 a^*_{t:t+H}=\arg\max_{a_{t:t+H}}
 \mathbb{E}_{p_{RSSM}}
 \left[
 \sum_{\tau=t}^{t+H}
 R_{obs}(s_\tau,a_\tau)
 \right].
-\]
+$$
 
 The observation reward may combine:
 
@@ -638,7 +638,7 @@ A first RSSM study should ask a narrow question:
 ## 13. Takeaways
 
 1. RSSM exists because current observations are not sufficient Markov states.
-2. Its state combines deterministic recurrent memory \(h_t\) and stochastic latent state \(z_t\).
+2. Its state combines deterministic recurrent memory $h_t$ and stochastic latent state $z_t$.
 3. The posterior uses current evidence; the prior predicts without it.
 4. The prior must learn to approximate useful posterior states so imagined futures remain grounded.
 5. Observation, reward, continuation, or task-specific predictions train the latent state to retain useful information.

@@ -41,16 +41,16 @@ Privileged values never enter the encoder or recurrent transition.
 
 ## Canonical tensor interface
 
-For batch size \(B\), sequence length \(T\), and maximum objects \(K\):
+For batch size $B$, sequence length $T$, and maximum objects $K$:
 
 | Tensor | Shape | Meaning |
 |---|---|---|
-| detections | \(B\times T\times K\times F\) | padded object-feature observations |
-| detection_mask | \(B\times T\times K\) | valid detection slots |
-| actions | \(B\times T\times A\) | previous action encoding |
-| object_targets | \(B\times T\times K\times Y\) | privileged training/evaluation targets |
-| target_mask | \(B\times T\times K\) | valid physical objects |
-| visible_target | \(B\times T\times K\) | true current visibility |
+| detections | $B\times T\times K\times F$ | padded object-feature observations |
+| detection_mask | $B\times T\times K$ | valid detection slots |
+| actions | $B\times T\times A$ | previous action encoding |
+| object_targets | $B\times T\times K\times Y$ | privileged training/evaluation targets |
+| target_mask | $B\times T\times K$ | valid physical objects |
+| visible_target | $B\times T\times K$ | true current visibility |
 
 Stable-handle training is the initial distribution. Handle corruption is a held-out binding stress test, not mixed silently into the first fit.
 
@@ -69,7 +69,7 @@ The deterministic model predicts from its recurrent state. RSSMs predict from de
 
 ## Loss
 
-\[
+$$
 \mathcal L =
 \lambda_q\mathcal L_{\text{target}}
 +\lambda_c\mathcal L_{\text{signature}}
@@ -78,7 +78,7 @@ The deterministic model predicts from its recurrent state. RSSMs predict from de
 +\lambda_v\mathcal L_{\text{visibility}}
 +\lambda_e\mathcal L_{\text{evidence}}
 +\beta\mathcal L_{\text{KL}}.
-\]
+$$
 
 The KL term is zero for the deterministic model. RSSM KL uses free-nats/free-bits protection and reports prior and posterior losses separately where implemented.
 

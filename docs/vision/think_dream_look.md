@@ -30,13 +30,13 @@ TDL separates autonomous observation into three distinct but coupled forms of co
 
 Think operates at the same physical time step. It performs additional internal computation over the evidence already available.
 
-\[
+$$
 h_t^{(k+1)} = F_\theta(h_t^{(k)}, o_t, m_t)
-\]
+$$
 
-- \(o_t\): currently available observations;
-- \(m_t\): mission context, prospective memory, and unresolved questions;
-- \(h_t^{(k)}\): latent reasoning state after the \(k\)-th internal refinement step.
+- $o_t$: currently available observations;
+- $m_t$: mission context, prospective memory, and unresolved questions;
+- $h_t^{(k)}$: latent reasoning state after the $k$-th internal refinement step.
 
 The purpose of Think is not to generate language. It is to improve the internal information state before acting.
 
@@ -64,15 +64,15 @@ This component is conceptually related to recurrent computation, recurrent depth
 
 Dream advances an internal model through hypothetical future states or future observation outcomes without yet moving the real sensor.
 
-\[
+$$
 z_t \rightarrow \hat z_{t+1} \rightarrow \hat z_{t+2} \rightarrow \cdots \rightarrow \hat z_{t+H}
-\]
+$$
 
-For a candidate sensing action \(a_t^{look}\), the world model may estimate
+For a candidate sensing action $a_t^{look}$, the world model may estimate
 
-\[
+$$
 p(\hat o_{t+1}, \hat z_{t+1} \mid z_t, a_t^{look}).
-\]
+$$
 
 Dream asks questions such as:
 
@@ -97,17 +97,17 @@ Look performs an actual sensing action.
 
 A payload action may include
 
-\[
+$$
 a_t^{look} = [\text{azimuth},\text{elevation},\text{zoom},\text{modality},\text{dwell},\ldots].
-\]
+$$
 
 Depending on the embodiment, some of these dimensions may be absent or delegated to lower-level controllers.
 
 The goal is not merely to center the most confident target. The agent should select observations according to expected mission value and evidence value:
 
-\[
+$$
 a_t^* = \arg\max_a \; \mathbb E[\text{Mission Value} + \lambda\,\text{Information Value} - C_{sense}(a)].
-\]
+$$
 
 The central question is:
 
@@ -121,17 +121,17 @@ A key distinction in TDL is between **computational refinement** and **temporal 
 
 ### Computational depth — Think
 
-\[
+$$
 h_t^{(0)} \rightarrow h_t^{(1)} \rightarrow h_t^{(2)} \rightarrow \cdots
-\]
+$$
 
-Physical time remains fixed at \(t\). The agent spends more computation interpreting the current evidence.
+Physical time remains fixed at $t$. The agent spends more computation interpreting the current evidence.
 
 ### Temporal depth — Dream
 
-\[
+$$
 z_t \rightarrow z_{t+1} \rightarrow z_{t+2} \rightarrow \cdots
-\]
+$$
 
 The model advances through hypothetical future time to predict consequences.
 
@@ -139,7 +139,7 @@ These axes should not be conflated. A system may think deeply without predicting
 
 A useful high-level architecture is therefore
 
-\[
+$$
 \boxed{
 \text{Perception}
 \rightarrow
@@ -149,7 +149,7 @@ A useful high-level architecture is therefore
 \rightarrow
 \text{Active Observation}
 }
-\]
+$$
 
 ---
 
@@ -157,7 +157,7 @@ A useful high-level architecture is therefore
 
 TDL is not a one-way pipeline. The actual process is a closed loop:
 
-\[
+$$
 \boxed{
 \text{Observe}
 \rightarrow
@@ -170,7 +170,7 @@ TDL is not a one-way pipeline. The actual process is a closed loop:
 \text{Observe}
 \rightarrow \cdots
 }
-\]
+$$
 
 A Look action produces new evidence. New evidence updates the belief. The updated belief may invalidate previous hypotheses, create new uncertainty, confirm an expected event, or reveal that an expected event failed to occur.
 
@@ -184,30 +184,30 @@ The three stages do not need to execute with fixed depth on every decision.
 
 An easy observation may require almost no extra reasoning:
 
-\[
+$$
 \text{Observe} \rightarrow \text{Look}.
-\]
+$$
 
 An ambiguous situation may justify additional internal processing:
 
-\[
+$$
 \text{Observe}
 \rightarrow \text{Think}^K
 \rightarrow \text{Dream}^H
 \rightarrow \text{Look}.
-\]
+$$
 
 This introduces a second-order decision problem: **how much computation and sensing should be spent before acting?**
 
 Conceptually, the objective can include both computational and sensing cost:
 
-\[
+$$
 J =
 R_{mission}
 + \lambda I_{gain}
 - \beta C_{compute}
 - \gamma C_{sense}.
-\]
+$$
 
 This allows the agent to learn that more computation is useful only when it changes the eventual observation decision or mission outcome.
 
@@ -221,9 +221,9 @@ One of the most important TDL research questions is that uncertainty can be redu
 
 The agent can perform another latent refinement step:
 
-\[
+$$
 h_t^{(k)} \rightarrow h_t^{(k+1)}.
-\]
+$$
 
 This consumes compute but does not obtain new physical evidence.
 
@@ -231,21 +231,21 @@ This consumes compute but does not obtain new physical evidence.
 
 The agent can perform a sensing action and receive a new observation:
 
-\[
+$$
 b_t \xrightarrow{a_t^{look}} b_{t+1}.
-\]
+$$
 
 This consumes time, sensor authority, and possibly attention that could have been spent elsewhere.
 
 A useful abstraction is therefore
 
-\[
+$$
 V_{think} \approx \frac{\Delta U_{internal}}{C_{compute}},
 \qquad
 V_{look} \approx \frac{\mathbb E[\Delta U_{observation}]}{C_{sense}},
-\]
+$$
 
-where \(\Delta U\) should be tied to decision-relevant uncertainty or expected mission utility rather than generic entropy alone.
+where $\Delta U$ should be tied to decision-relevant uncertainty or expected mission utility rather than generic entropy alone.
 
 This yields the question:
 
@@ -259,15 +259,15 @@ This is a central point of contact between adaptive test-time computation and ac
 
 The initial TDL research does not require raw image reasoning. Upstream perception may provide object features such as
 
-\[
+$$
 O_i = [bbox_i, confidence_i, appearance_i, visibility_i, age_i, motion_i, \ldots].
-\]
+$$
 
 The agent maintains persistent object-centric latent states and a global scene/context state.
 
 During Think, these states may be repeatedly refined:
 
-\[
+$$
 O_i^{(k+1)} =
 F_\theta
 \left(
@@ -276,7 +276,7 @@ O_i^{(k)},
 s_{platform},
 m_{mission}
 \right).
-\]
+$$
 
 During Dream, the refined belief seeds imagined future states and evidence outcomes. During Look, the policy selects the next real sensor action.
 
@@ -300,9 +300,9 @@ TDL and D2L are not competing names for the same idea.
 
 Their relationship is intentionally hierarchical:
 
-\[
+$$
 \boxed{\text{Think–Dream–Look} \supset \text{Dream-to-Look}}
-\]
+$$
 
 ### Think–Dream–Look
 

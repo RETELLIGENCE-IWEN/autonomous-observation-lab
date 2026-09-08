@@ -12,12 +12,12 @@
 
 예를 들어 표적이 건물 뒤로 사라진 경우:
 
-- \(H_1\): 좌측 출구로 이동
-- \(H_2\): 우측 출구로 이동
-- \(H_3\): 건물 뒤 정지
-- \(H_4\): target swap 또는 false detection
+- $H_1$: 좌측 출구로 이동
+- $H_2$: 우측 출구로 이동
+- $H_3$: 건물 뒤 정지
+- $H_4$: target swap 또는 false detection
 
-가장 확률이 높은 \(H_1\) 위치를 바로 보는 것은 exploitation이다. 그러나 두 출구와 정지 가설을 가장 효율적으로 구분할 관측은 다른 위치·FOV·시점일 수 있다.
+가장 확률이 높은 $H_1$ 위치를 바로 보는 것은 exploitation이다. 그러나 두 출구와 정지 가설을 가장 효율적으로 구분할 관측은 다른 위치·FOV·시점일 수 있다.
 
 ## A.2 연구 질문
 
@@ -35,33 +35,33 @@
 
 belief는 가설과 확률의 집합이다.
 
-\[
+$$
 B_t=\{(H_k,p_k)\}_{k=1}^{K}, \quad \sum_k p_k=1
-\]
+$$
 
-sensor action \(a_t\)에서 예상되는 관측은:
+sensor action $a_t$에서 예상되는 관측은:
 
-\[
+$$
 p(o_{t+1}|H_k,a_t,c_{payload})
-\]
+$$
 
 일반적인 information objective는:
 
-\[
+$$
 IG(a_t)=H(B_t)-\mathbb{E}_{o_{t+1}}[H(B_{t+1})]
-\]
+$$
 
-그러나 모든 가설 구분이 임무에 동일하게 중요하지 않다. mission decision \(d\)와 loss \(L(d,H)\)를 두면 observation value를 다음처럼 정의할 수 있다.
+그러나 모든 가설 구분이 임무에 동일하게 중요하지 않다. mission decision $d$와 loss $L(d,H)$를 두면 observation value를 다음처럼 정의할 수 있다.
 
-\[
+$$
 VoO(a_t)=R(B_t)-\mathbb{E}_{o_{t+1}}[R(B_{t+1})]-C(a_t)
-\]
+$$
 
 여기서 Bayes risk는:
 
-\[
+$$
 R(B)=\min_d\sum_k p(H_k|B)L(d,H_k)
-\]
+$$
 
 이 정의는 단순히 uncertainty가 큰 것을 보는 대신 실제 decision loss를 줄일 관측을 선택한다.
 
@@ -222,21 +222,21 @@ EO는 차량으로 분류하지만 IR thermal signature가 맞지 않는다. 정
 
 관측 encoder:
 
-\[
+$$
 e_t=Enc(o_t, x^{platform}_t,x^{payload}_t,c_{payload})
-\]
+$$
 
 deterministic dynamics:
 
-\[
+$$
 h_t=f_{GRU}(h_{t-1},z_{t-1},a_{t-1})
-\]
+$$
 
 prior and posterior:
 
-\[
+$$
 p(z_t|h_t), \qquad q(z_t|h_t,e_t)
-\]
+$$
 
 관측이 없으면 prior로 belief를 전개하고, 새 evidence가 들어오면 posterior로 수정한다.
 
@@ -252,9 +252,9 @@ p(z_t|h_t), \qquad q(z_t|h_t,e_t)
 
 각 object latent의 예:
 
-\[
+$$
 z^i_t=\{position,image\ geometry,motion,identity,visibility,uncertainty\}
-\]
+$$
 
 ## B.6 Task-oriented prediction heads
 
@@ -283,9 +283,9 @@ z^i_t=\{position,image\ geometry,motion,identity,visibility,uncertainty\}
 
 posterior state에서 시작해 RSSM prior로 imagined trajectory를 생성한다.
 
-\[
+$$
 \hat z_{t+1:t+H}\sim p_{RSSM}(\cdot|z_t,a_{t:t+H-1})
-\]
+$$
 
 actor와 critic은 imagined λ-return으로 학습한다.
 
@@ -312,9 +312,9 @@ actor와 critic은 imagined λ-return으로 학습한다.
 
 정책 목적의 예:
 
-\[
+$$
 J=\mathbb{E}[R_{mission}+\beta R_{epistemic}-\lambda C_{sensor}-\eta U_{model}]
-\]
+$$
 
 ## B.9 대표 시나리오
 
@@ -458,15 +458,15 @@ memory 후보:
 
 ### Action distillation
 
-\[
+$$
 L_{action}=\|a^S_t-a^T_t\|^2 \quad \text{or}\quad D_{KL}(\pi_T\|\pi_S)
-\]
+$$
 
 ### Belief distillation
 
-\[
+$$
 L_{belief}=D(b^T_t,\hat b^S_t)
-\]
+$$
 
 대상:
 
@@ -500,9 +500,9 @@ L_{belief}=D(b^T_t,\hat b^S_t)
 
 ## C.7 전체 loss
 
-\[
+$$
 L=\lambda_aL_{action}+\lambda_bL_{belief}+\lambda_uL_{uncertainty}+\lambda_fL_{future}+\lambda_qL_{query}+\lambda_rL_{RL}
-\]
+$$
 
 모든 loss를 처음부터 동일하게 넣기보다 staged curriculum과 ablation이 필요하다.
 

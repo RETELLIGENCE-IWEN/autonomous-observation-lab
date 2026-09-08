@@ -17,22 +17,22 @@ These mechanisms can be combined, but they solve different problems. Privileged 
 
 Let
 
-- \(x_k\) be full simulator state;
-- \(z_k\) be a selected privileged variable such as line-of-sight rate, body disturbance, actuator time constant, or effective delay;
-- \(o_k\) be the observation available at deployment;
-- \(h_k=(o_{0:k},u_{0:k-1})\) denote observable history.
+- $x_k$ be full simulator state;
+- $z_k$ be a selected privileged variable such as line-of-sight rate, body disturbance, actuator time constant, or effective delay;
+- $o_k$ be the observation available at deployment;
+- $h_k=(o_{0:k},u_{0:k-1})$ denote observable history.
 
 A privileged teacher may use
 
-\[
+$$
 u_k^T\sim\pi_T(u\mid x_k,z_k),
-\]
+$$
 
 while the student must use
 
-\[
+$$
 u_k^S\sim\pi_S(u\mid h_k).
-\]
+$$
 
 The purpose is not to reconstruct every privileged variable. It is to learn an action or internal representation that captures the parts of privileged state that are inferable from history and relevant to control.
 
@@ -42,14 +42,14 @@ This distinction is easy to violate accidentally. If normalized actor inputs are
 
 Policy distillation trains a student to match a teacher. For a deterministic continuous-action teacher, a simple loss is
 
-\[
+$$
 \mathcal L_{\text{act}}
 =
 \mathbb E_{(h,x,z)\sim\mathcal D}
 \left[
 \left\|\mu_S(h)-\mu_T(x,z)\right\|_2^2
 \right].
-\]
+$$
 
 For stochastic policies, one can minimize a KL divergence between teacher and student action distributions. Matching only the mean is often appropriate for deterministic deployment, but it discards information about teacher uncertainty or multimodality.
 
@@ -61,11 +61,11 @@ Dataset Aggregation (DAgger) addresses that problem by rolling out the current s
 
 In asymmetric actor-critic learning, the actor remains deployment-compatible while the critic sees privileged state:
 
-\[
+$$
 u_k\sim\pi_\theta(u\mid h_k),
 \qquad
 Q_\phi=Q_\phi(x_k,z_k,u_k).
-\]
+$$
 
 The critic's task is to estimate training-time value, not to act at deployment. Full state can reduce ambiguity and variance in that estimate. Policy gradients then improve the observable actor through the privileged critic.
 
@@ -80,16 +80,16 @@ The architecture should keep actor and critic input paths explicit. Any shared r
 
 ## 4. Distilling a predictive state
 
-Actions are not the only useful supervision. A recurrent student may learn an internal state \(r_k=g_\theta(h_k)\) and predict privileged quantities:
+Actions are not the only useful supervision. A recurrent student may learn an internal state $r_k=g_\theta(h_k)$ and predict privileged quantities:
 
-\[
+$$
 \widehat z_k=p_\psi(r_k),
 \qquad
 \mathcal L_z=
 \mathbb E\left[
 \ell(\widehat z_k,z_k)
 \right].
-\]
+$$
 
 Possible targets for visual control include:
 
@@ -104,13 +104,13 @@ Supervising the latent state can make memory purposeful and easier to diagnose. 
 
 A combined training objective might be
 
-\[
+$$
 \mathcal L =
 \lambda_{\text{act}}\mathcal L_{\text{act}}
 +\lambda_z\mathcal L_z
 +\lambda_{\text{pred}}\mathcal L_{\text{pred}}
 +\lambda_{\text{RL}}\mathcal L_{\text{RL}}.
-\]
+$$
 
 The action term imitates a teacher, the latent term estimates selected hidden quantities, the predictive term forecasts future observations or risk, and the reinforcement-learning term optimizes long-horizon performance. Their weights define a curriculum and a scientific hypothesis. They should not be treated as free performance knobs without ablation.
 
@@ -129,7 +129,7 @@ Teacher quality should be reported on the same held-out scenarios as the student
 
 ## 6. The observability boundary
 
-Privileged training cannot violate information theory. If two hidden states \((x,z)\) generate identical observable histories \(h\) but require different optimal actions, no deterministic student \(\mu_S(h)\) can select both. It must choose a compromise, represent a distribution, gather more information, or rely on an additional sensor.
+Privileged training cannot violate information theory. If two hidden states $(x,z)$ generate identical observable histories $h$ but require different optimal actions, no deterministic student $\mu_S(h)$ can select both. It must choose a compromise, represent a distribution, gather more information, or rely on an additional sensor.
 
 This boundary has practical consequences:
 
@@ -146,15 +146,15 @@ Tests should therefore break correlations, swap parameters independently, and co
 
 Rapid Motor Adaptation separates a base policy conditioned on environment parameters from an adaptation module that estimates a useful latent from recent experience. In generic form,
 
-\[
+$$
 u_k=\pi(o_k,\widehat z_k),
 \qquad
 \widehat z_k=g(h_k),
-\]
+$$
 
-where the base policy is first trained with privileged \(z_k\), and the adaptation module is later trained to infer the corresponding latent from history.
+where the base policy is first trained with privileged $z_k$, and the adaptation module is later trained to infer the corresponding latent from history.
 
-For a gimbal, \(z\) could summarize actuator gain, time constant, backlash, delay, vibration spectrum, or payload configuration. This structure makes adaptation explicit and probeable. A monolithic recurrent actor may learn the same computation implicitly, with less architectural commitment but less interpretability.
+For a gimbal, $z$ could summarize actuator gain, time constant, backlash, delay, vibration spectrum, or payload configuration. This structure makes adaptation explicit and probeable. A monolithic recurrent actor may learn the same computation implicitly, with less architectural commitment but less interpretability.
 
 The estimated latent need not equal a physical parameter. A task-relevant embedding can be sufficient, but then claims should say “adaptation latent” rather than “identified actuator parameters.” Physical identification requires validation against ground truth and identifiability analysis.
 

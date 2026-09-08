@@ -71,27 +71,27 @@ The intended output is a reusable observation principle. Gimbal configuration, d
 
 The benchmark is a POMDP
 
-\[
+$$
 \mathcal P=\langle\mathcal S,\mathcal A,\mathcal O,T,Z,R,\gamma,b_0\rangle.
-\]
+$$
 
 The hidden state contains object identities, kinematics, occlusion processes, target designation, and sensor/world variables. The observation contains only noisy object features for currently detected entities and payload state.
 
 The policy uses a learned information state:
 
-\[
+$$
 \pi_\phi(a_t\mid \tilde b_t),
 \qquad
 \tilde b_t=
 \left(h_t^g,\{h_t^{(k)},z_t^{(k)}\}_{k=1}^{K}\right).
-\]
+$$
 
 Its objective is terminal decision utility minus sensing cost:
 
-\[
+$$
 J(\pi)=\mathbb E_\pi
 \left[U(d_\tau,s_\tau)-\sum_{t=0}^{\tau-1}C(a_t)\right],
-\]
+$$
 
 where (d_\tau) is the final target decision and (	au) is the stopping time.
 

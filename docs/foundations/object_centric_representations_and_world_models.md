@@ -33,9 +33,9 @@ Dream-to-Look must reason about objects that enter and leave the field of view, 
 
 Natural scenes are compositional: entities persist, move, interact, occlude one another, and can recur in new combinations. An object-centric representation aims to encode a scene as
 
-\[
+$$
 Z_t=\{z_t^{(1)},\ldots,z_t^{(K)}\},
-\]
+$$
 
 possibly with global context (g_t), where each slot describes an entity or coherent component.
 
@@ -76,24 +76,24 @@ This may include a suspected but unconfirmed object, a group, an occluder, or a 
 
 A common architecture encodes an observation into features
 
-\[
+$$
 X=\{x_1,\ldots,x_N\},
-\]
+$$
 
 then maps them into (K) exchangeable slots:
 
-\[
+$$
 Z=\operatorname{Bind}_\theta(X)
 =\{z^{(1)},\ldots,z^{(K)}\}.
-\]
+$$
 
 A compositional decoder predicts per-slot appearance (hat o^{(k)}) and mask (m^{(k)}), then combines them:
 
-\[
+$$
 \hat o=\sum_{k=1}^{K}m^{(k)}\odot\hat o^{(k)},
 \qquad
 \sum_k m^{(k)}=1.
-\]
+$$
 
 Reconstruction encourages the slots collectively to explain the scene; competition encourages specialization.
 
@@ -101,25 +101,25 @@ Reconstruction encourages the slots collectively to explain the scene; competiti
 
 Slot Attention uses iterative attention from slots to visual features. In simplified form,
 
-\[
+$$
 q_k=W_q z_k,
 \qquad
 k_i=W_k x_i,
 \qquad
 v_i=W_v x_i,
-\]
+$$
 
 with assignment logits
 
-\[
+$$
 \ell_{ik}=\frac{k_i^\top q_k}{\sqrt d}.
-\]
+$$
 
 The crucial normalization is competitive across slots for each input feature:
 
-\[
+$$
 \alpha_{ik}=\operatorname{softmax}_k(\ell_{ik}).
-\]
+$$
 
 Each slot aggregates its assigned evidence and is iteratively updated, commonly with a GRU and MLP. The slots are permutation-equivariant: exchanging their initialization order exchanges their output order rather than changing the represented set.
 
@@ -137,24 +137,24 @@ The enduring idea is not a specific module: **multiple latent components compete
 
 A naive dynamics model predicts every slot independently:
 
-\[
+$$
 z_{t+1}^{(k)}=f_\theta(z_t^{(k)},a_t).
-\]
+$$
 
 This misses collisions, occlusion, coordinated motion, and shared camera transformations. Relational dynamics instead aggregate interactions:
 
-\[
+$$
 m_t^{(j\rightarrow k)}
 =\phi_\theta(z_t^{(j)},z_t^{(k)}),
-\]
+$$
 
-\[
+$$
 z_{t+1}^{(k)}
 =f_\theta\left(
 z_t^{(k)},a_t,
 \sum_{j\neq k}m_t^{(j\rightarrow k)},g_t
 \right).
-\]
+$$
 
 Graph neural networks and transformers are natural implementations because they operate on sets and model pairwise or higher-order relations.
 
@@ -175,15 +175,15 @@ An object-centric world model should condition on payload and platform actions, 
 
 A general controlled model is
 
-\[
+$$
 p_\theta(Z_{t+1},g_{t+1}\mid Z_t,g_t,a_t),
-\]
+$$
 
 with an observation model
 
-\[
+$$
 p_\theta(o_t\mid Z_t,g_t).
-\]
+$$
 
 Task heads may predict object existence, identity, pose, visibility, future observation quality, or mission relevance rather than reconstructing every pixel.
 
@@ -216,10 +216,10 @@ An observation agent needs to distinguish:
 
 A practical slot may contain
 
-\[
+$$
 z_t^{(k)}=
 (e_t^{(k)},c_t^{(k)},x_t^{(k)},v_t^{(k)},q_t^{(k)},u_t^{(k)}),
-\]
+$$
 
 where (e) is existence, (c) class/identity, (x,v) geometry and motion, (q) visibility/quality, and (u) uncertainty. This factorization is conceptual; the learned state may be continuous and distributed.
 
@@ -227,9 +227,9 @@ where (e) is existence, (c) class/identity, (x,v) geometry and motion, (q) visib
 
 When an object becomes unobserved, its state should be predicted rather than deleted:
 
-\[
+$$
 p(z_{t+1}^{(k)}\mid h_t,a_t)
-\]
+$$
 
 until new evidence corrects the hypothesis. This is the direct bridge to an object-centric RSSM: recurrent/global memory carries context, per-object stochastic states preserve alternative futures, and observation-conditioned posteriors correct visible slots.
 
@@ -274,13 +274,13 @@ Object-centric models should not be judged only by reconstruction quality or seg
 
 An object-centric Dream-to-Look state can be written
 
-\[
+$$
 s_t^{\text{OC}}
 =\left(
 h_t^{\text{global}},
 \{(h_t^{(k)},z_t^{(k)})\}_{k=1}^{K}
 \right),
-\]
+$$
 
 where global memory encodes scene, sensor, and platform context while object states encode persistent hypotheses.
 

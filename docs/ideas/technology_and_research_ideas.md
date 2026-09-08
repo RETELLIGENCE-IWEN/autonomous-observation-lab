@@ -38,9 +38,9 @@ RL의 action은 반드시 motor command일 필요가 없다. `inspect target A`,
 
 RSSM은 deterministic history와 stochastic latent state를 결합한다.
 
-\[
+$$
 h_t=f(h_{t-1},z_{t-1},a_{t-1}), \quad z_t\sim q(z_t|h_t,e_t)
-\]
+$$
 
 관측이 없을 때 prior로 상태를 유지하고, 관측이 들어오면 posterior로 수정할 수 있어 차폐·dropout·부분관측과 잘 맞는다.
 
@@ -169,9 +169,9 @@ Active sensing은 다음 sensor state를 선택해 정보량 또는 task utility
 
 본 연구에서는 일반 information gain보다 **mission- or decision-relevant value of observation**가 중요하다.
 
-\[
+$$
 VoO(a_t)=\mathbb{E}[V_{mission}(b_{t+1})-V_{mission}(b_t)|b_t,a_t]-C(a_t)
-\]
+$$
 
 Active inference는 pragmatic value와 epistemic value를 하나의 expected free energy 관점으로 통합할 수 있어 철학적으로 잘 맞는다. 다만 구현과 비교가 어려우므로 RL/VoI baseline과 병행하는 탐색 연구가 적절하다.
 
@@ -243,9 +243,9 @@ Prospective memory는 특히 자율 관측에 중요하다. `지금은 A를 보�
 
 ### Mission-Grounded Curiosity
 
-\[
+$$
 r_{curiosity}=novelty\times mission\ relevance\times resolvability
-\]
+$$
 
 임무와 무관한 시각적 노이즈에 집착하지 않고 decision-relevant unknown을 탐색한다.
 

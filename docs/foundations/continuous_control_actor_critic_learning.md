@@ -12,62 +12,62 @@ Actor-critic methods are optimization machinery, not a control guarantee. They a
 
 Suppose a policy selects a gimbal-rate command
 
-\[
+$$
 u_k \in [u_{\min},u_{\max}].
-\]
+$$
 
-Dividing this interval into a few discrete actions creates quantization and can produce chatter. Making the grid fine increases the number of action values without exploiting the fact that nearby commands usually have nearby physical effects. A continuous policy instead represents a distribution \(\pi_\theta(u\mid s)\) or a deterministic map \(\mu_\theta(s)\).
+Dividing this interval into a few discrete actions creates quantization and can produce chatter. Making the grid fine increases the number of action values without exploiting the fact that nearby commands usually have nearby physical effects. A continuous policy instead represents a distribution $\pi_\theta(u\mid s)$ or a deterministic map $\mu_\theta(s)$.
 
 The standard discounted objective is
 
-\[
+$$
 J(\theta)=
 \mathbb{E}_{\pi_\theta}
 \left[
 \sum_{k=0}^{\infty}\gamma^k r_k
 \right],
-\]
+$$
 
-where \(r_k\) scores tracking, visibility, motion, and constraint use, and \(0\leq\gamma<1\) controls how strongly the future matters. The objective turns a control problem into an optimization problem: find policy parameters that produce high cumulative return over the training distribution.
+where $r_k$ scores tracking, visibility, motion, and constraint use, and $0\leq\gamma<1$ controls how strongly the future matters. The objective turns a control problem into an optimization problem: find policy parameters that produce high cumulative return over the training distribution.
 
 For a partially observed system, the true Markov state is not the latest bounding box. The actor instead consumes an internal state
 
-\[
+$$
 h_k=f_\theta(h_{k-1},o_k,u_{k-1},\Delta t_k),
-\]
+$$
 
-which summarizes observation and action history. The action is then drawn from \(\pi_\theta(\cdot\mid h_k)\) or set to \(\mu_\theta(h_k)\). This recurrent state is an approximate belief or predictive control state, not automatically a physically identifiable state estimate.
+which summarizes observation and action history. The action is then drawn from $\pi_\theta(\cdot\mid h_k)$ or set to $\mu_\theta(h_k)$. This recurrent state is an approximate belief or predictive control state, not automatically a physically identifiable state estimate.
 
 ## 2. Actor and critic
 
 The action-value function of a policy is
 
-\[
+$$
 Q^\pi(s,u)=
 \mathbb{E}\left[
 r_k+\gamma r_{k+1}+\gamma^2r_{k+2}+\cdots
 \mid s_k=s,u_k=u
 \right].
-\]
+$$
 
 It obeys the Bellman relation
 
-\[
+$$
 Q^\pi(s,u)=
 \mathbb{E}\left[
 r_k+\gamma Q^\pi(s_{k+1},u_{k+1})
 \right].
-\]
+$$
 
-The **critic** \(Q_\phi\) approximates this long-horizon value from experience. The **actor** changes its action toward values that the critic predicts will be better. This division enables learning from delayed consequences: a command that temporarily increases motion may still be valuable if it prevents target loss several frames later.
+The **critic** $Q_\phi$ approximates this long-horizon value from experience. The **actor** changes its action toward values that the critic predicts will be better. This division enables learning from delayed consequences: a command that temporarily increases motion may still be valuable if it prevents target loss several frames later.
 
 Critic error is consequential because the actor deliberately seeks actions with high predicted value. Function approximation can assign falsely high values to actions poorly represented in the data, and the actor can exploit those errors. Much of modern continuous-control algorithm design addresses this feedback loop.
 
 ## 3. Deterministic policy gradients, DDPG, and TD3
 
-For a deterministic actor \(u=\mu_\theta(s)\), the deterministic policy-gradient result motivates
+For a deterministic actor $u=\mu_\theta(s)$, the deterministic policy-gradient result motivates
 
-\[
+$$
 \nabla_\theta J
 \approx
 \mathbb{E}_{s\sim\rho}
@@ -75,7 +75,7 @@ For a deterministic actor \(u=\mu_\theta(s)\), the deterministic policy-gradient
 \nabla_\theta\mu_\theta(s)
 \nabla_u Q_\phi(s,u)\big|_{u=\mu_\theta(s)}
 \right].
-\]
+$$
 
 The actor is updated through the critic's gradient with respect to action. DDPG combines this idea with replay data, neural function approximation, slowly updated target networks, and exploratory noise. It is sample-efficient in principle because old transitions can be reused off-policy, but it can be brittle when the critic extrapolates badly.
 
@@ -87,16 +87,16 @@ Twin Delayed Deep Deterministic Policy Gradient (TD3) adds three stabilizing ide
 
 A simplified target is
 
-\[
+$$
 y_k=r_k+\gamma(1-d_k)
 \min_{i\in\{1,2\}}
 Q_{\bar\phi_i}
 \left(s_{k+1},
 \mu_{\bar\theta}(s_{k+1})+\epsilon
 \right),
-\]
+$$
 
-where \(d_k\) denotes a true terminal transition, bars denote target networks, and \(\epsilon\) is bounded smoothing noise. Time-limit truncation should not be mislabeled as physical termination; otherwise the critic learns an artificial value drop at the end of every training segment.
+where $d_k$ denotes a true terminal transition, bars denote target networks, and $\epsilon$ is bounded smoothing noise. Time-limit truncation should not be mislabeled as physical termination; otherwise the critic learns an artificial value drop at the end of every training segment.
 
 Deterministic methods give a natural deployment policy but require an explicit exploration process during training. Exploration noise that is harmless in normalized simulation can become unrealistic or unsafe on hardware, so hardware learning must remain inside a separate supervisory envelope.
 
@@ -104,15 +104,15 @@ Deterministic methods give a natural deployment policy but require an explicit e
 
 Soft Actor-Critic (SAC) learns a stochastic policy and augments return with entropy. One common actor objective is
 
-\[
+$$
 J_\pi(\theta)=
 \mathbb{E}_{s\sim\mathcal D,\,u\sim\pi_\theta}
 \left[
 \alpha\log\pi_\theta(u\mid s)-Q_\phi(s,u)
 \right].
-\]
+$$
 
-Minimizing this expression favors actions that have high value while retaining entropy. The temperature \(\alpha\) controls that tradeoff and can itself be tuned toward a target entropy. Twin critics are normally used to limit optimistic value estimates.
+Minimizing this expression favors actions that have high value while retaining entropy. The temperature $\alpha$ controls that tradeoff and can itself be tuned toward a target entropy. Twin critics are normally used to limit optimistic value estimates.
 
 SAC is attractive for simulation training because it is off-policy, reuses experience, and maintains broad action exploration. A stochastic training policy does not require stochastic flight behavior. At deployment, a continuous controller can use the policy mean or another deterministic representative, followed by explicit rate and acceleration limits.
 
@@ -120,15 +120,15 @@ The train/deploy difference must be evaluated directly. The mean of a nonlinear 
 
 ## 5. Bounded actions and physical units
 
-A common actor samples an unconstrained variable \(z\) and squashes it:
+A common actor samples an unconstrained variable $z$ and squashes it:
 
-\[
+$$
 u=u_{\max}\tanh z.
-\]
+$$
 
 This respects a symmetric rate bound, but it does not enforce acceleration, jerk, travel, current, or thermal limits. Those should be represented by a command filter, constrained action transformation, safety supervisor, or lower-level controller. The policy should also observe the **applied** action, not only the action it requested, when clipping or filtering is active.
 
-Normalized actions aid optimization, but logs and interface contracts should retain physical units. An action of \(0.5\) is scientifically ambiguous unless it can be mapped to degrees per second, radians per second, or another actuator quantity.
+Normalized actions aid optimization, but logs and interface contracts should retain physical units. An action of $0.5$ is scientifically ambiguous unless it can be mapped to degrees per second, radians per second, or another actuator quantity.
 
 Frequent saturation is a warning. It can mean the task exceeds actuator authority, the reward underprices saturation, the action range is incorrectly scaled, or the policy has learned bang-bang behavior. Clipping makes these cases look superficially safe while hiding a poor policy.
 
@@ -136,7 +136,7 @@ Frequent saturation is a warning. It can mean the task exceeds actuator authorit
 
 A candidate dense reward for image tracking is
 
-\[
+$$
 r_k=
 -q_e\,\rho(e_k)
 -q_m\,\rho(\min(0,m_k))
@@ -144,9 +144,9 @@ r_k=
 -q_{\Delta u}(u_k-u_{k-1})^2
 -q_s I_{\text{saturated}}
 -q_l I_{\text{lost}},
-\]
+$$
 
-where \(e_k\) is image error, \(m_k\) is field-of-view margin, \(\rho\) is a chosen robust penalty, and the indicators mark saturation and target loss. The terms express tracking accuracy, boundary risk, effort, smoothness, authority use, and catastrophic loss.
+where $e_k$ is image error, $m_k$ is field-of-view margin, $\rho$ is a chosen robust penalty, and the indicators mark saturation and target loss. The terms express tracking accuracy, boundary risk, effort, smoothness, authority use, and catastrophic loss.
 
 Every term changes behavior:
 
@@ -172,7 +172,7 @@ Other recurrent hazards include:
 - resetting hidden state at artificial chunk boundaries;
 - mixing episodes or targets in one sequence;
 - padding without masking losses;
-- training with fixed \(\Delta t\) and deploying with jitter;
+- training with fixed $\Delta t$ and deploying with jitter;
 - allowing the critic privileged information while accidentally feeding it to the deployed actor;
 - evaluating after a hidden-state reset that never occurs in normal operation.
 

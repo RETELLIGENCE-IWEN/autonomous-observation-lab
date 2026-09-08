@@ -35,10 +35,10 @@ A Dream-to-Look agent should seek evidence because it recognizes consequential i
 
 Given dataset (D), input (x), and output (y), Bayesian predictive uncertainty is expressed by
 
-\[
+$$
 p(y\mid x,D)
 =\int p(y\mid x,\theta)p(\theta\mid D)\,d\theta.
-\]
+$$
 
 The conditional model (p(y\mid x,\theta)) represents outcome variability under one model; the posterior (p(\theta\mid D)) represents uncertainty over plausible models.
 
@@ -53,18 +53,18 @@ It may be:
 
 A Gaussian predictor may output
 
-\[
+$$
 p_\theta(y\mid x)=
 \mathcal N(\mu_\theta(x),\sigma_\theta^2(x)),
-\]
+$$
 
 and train by negative log likelihood:
 
-\[
+$$
 \mathcal L_{\mathrm{NLL}}
 =\frac{(y-\mu_\theta(x))^2}{2\sigma_\theta^2(x)}
 +\frac12\log\sigma_\theta^2(x)+C.
-\]
+$$
 
 The first term rewards fit relative to predicted noise; the log-variance term prevents unlimited variance inflation.
 
@@ -78,9 +78,9 @@ This distinction is useful but not absolute. What looks aleatoric under one mode
 
 In a POMDP, the agent may be uncertain about current hidden state even with known dynamics and sensor models:
 
-\[
+$$
 b_t(s)=p(s_t=s\mid h_t).
-\]
+$$
 
 This **state uncertainty** differs from uncertainty about (T), (Z), or learned parameters. Dream-to-Look may simultaneously face:
 
@@ -97,27 +97,27 @@ Combining them into one “confidence” can produce the wrong sensing action.
 
 For regression under a posterior over parameters, the law of total variance gives
 
-\[
+$$
 \operatorname{Var}(Y\mid x,D)
 =\mathbb E_{\theta\mid D}
 \left[\operatorname{Var}(Y\mid x,\theta)\right]
 +\operatorname{Var}_{\theta\mid D}
 \left(\mathbb E[Y\mid x,\theta]\right).
-\]
+$$
 
 The first term is commonly interpreted as aleatoric uncertainty; the second as epistemic uncertainty.
 
 For an ensemble of (M) Gaussian predictors with means (mu_m) and variances (sigma_m^2),
 
-\[
+$$
 \bar\mu=\frac1M\sum_{m=1}^M\mu_m,
-\]
+$$
 
-\[
+$$
 \widehat{\operatorname{Var}}(Y)
 =\underbrace{\frac1M\sum_m\sigma_m^2}_{\text{within-model}}
 +\underbrace{\frac1M\sum_m(\mu_m-\bar\mu)^2}_{\text{between-model}}.
-\]
+$$
 
 This decomposition is operationally useful, but an ensemble is not an exact posterior. Shared architecture, data, optimization bias, and correlated errors can make all members confidently wrong.
 
@@ -133,9 +133,9 @@ The model predicts a distribution rather than a point. Options include Gaussian,
 
 Train independently initialized models, often with shuffled or bootstrapped data:
 
-\[
+$$
 \{p_{\theta_m}(y\mid x)\}_{m=1}^M.
-\]
+$$
 
 Ensembles are simple, strong, and parallelizable. They provide disagreement signals useful for model-based control, but multiply compute and memory and may underestimate uncertainty under shared blind spots.
 
@@ -143,11 +143,11 @@ Ensembles are simple, strong, and parallelizable. They provide disagreement sign
 
 Variational inference approximates (p(\theta\mid D)) with (q_\phi(\theta)), commonly optimizing
 
-\[
+$$
 \mathcal L
 =-\mathbb E_{q_\phi(\theta)}[\log p(D\mid\theta)]
 +D_{\mathrm{KL}}(q_\phi(\theta)\Vert p(\theta)).
-\]
+$$
 
 MC dropout interprets stochastic dropout passes as approximate Bayesian inference. These methods can be cheaper than full ensembles, but approximation quality depends strongly on assumptions and tuning.
 
@@ -159,11 +159,11 @@ Evidential networks predict parameters of a higher-order distribution over outpu
 
 RSSMs and related models predict stochastic latent states:
 
-\[
+$$
 p_\theta(z_{t+1}\mid h_{t+1}),
 \qquad
 q_\theta(z_{t+1}\mid h_{t+1},o_{t+1}).
-\]
+$$
 
 Sampling these latents represents multiple possible trajectories within the learned model. It does not by itself separate aleatoric and epistemic uncertainty or detect model misspecification. Combining stochastic latents with model ensembles is one practical route to represent both trajectory variability and model disagreement.
 
@@ -181,9 +181,9 @@ A probabilistic classifier is calibrated when events assigned probability (p) oc
 
 For regression, evaluate prediction-interval coverage:
 
-\[
+$$
 P(Y\in I_{1-\alpha}(X))\approx 1-\alpha,
-\]
+$$
 
 alongside interval width.
 
@@ -205,9 +205,9 @@ Post-hoc temperature scaling can improve in-distribution classification calibrat
 
 A learned transition
 
-\[
+$$
 \hat s_{t+1}=f_\theta(\hat s_t,a_t)
-\]
+$$
 
 is recursively fed its own predictions. Small one-step errors can move rollouts off the data manifold, where later predictions become less reliable. Long-horizon mean accuracy can hide multimodal divergence.
 
@@ -229,9 +229,9 @@ A planner searches for high predicted return and can discover model errors more 
 
 Mitigations include uncertainty penalties,
 
-\[
+$$
 \tilde r(s,a)=\hat r(s,a)-\lambda u(s,a),
-\]
+$$
 
 conservative value estimates, ensemble disagreement constraints, short rollouts, support constraints, pessimistic planning, and frequent replanning from real observations.
 
@@ -286,14 +286,14 @@ Dream-to-Look should distinguish at least three questions:
 
 Define reducible, task-relevant uncertainty conceptually as
 
-\[
+$$
 u_{\text{actionable}}(b,a)
 =\mathbb E
 \left[
 L_{\text{decision}}(b)
 -L_{\text{decision}}(b^{a,Y})
 \right].
-\]
+$$
 
 This is closely related to VoI. It prevents the system from treating all predictive variance as a reason to look.
 

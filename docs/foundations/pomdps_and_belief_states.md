@@ -52,17 +52,17 @@ POMDPs provide the cleanest formal language for this coupling:
 
 Let (s_t) denote the complete environment state. The Markov property states that, conditioned on the present state and action, older history provides no additional information about the next state:
 
-\[
+$$
 p(s_{t+1}\mid s_{0:t},a_{0:t})
 =p(s_{t+1}\mid s_t,a_t).
-\]
+$$
 
 The agent, however, receives an observation (o_t), not (s_t). In general,
 
-\[
+$$
 p(o_{t+1}\mid o_{0:t},a_{0:t})
 \neq p(o_{t+1}\mid o_t,a_t).
-\]
+$$
 
 A bounding box does not uniquely determine range, target motion, occlusion state, detector reliability, camera geometry, or future visibility. The physical world can therefore be Markov while the stream exposed to the policy is non-Markov.
 
@@ -81,21 +81,21 @@ In active sensing, control also changes future inference. A gimbal command chang
 
 A finite POMDP is commonly written as
 
-\[
+$$
 \mathcal{P}=
 \langle \mathcal{S},\mathcal{A},\mathcal{O},T,Z,R,\gamma,b_0\rangle,
-\]
+$$
 
 where:
 
-- \(\mathcal{S}\): hidden environment states;
-- \(\mathcal{A}\): agent actions;
-- \(\mathcal{O}\): observations;
-- \(T(s'\mid s,a)\): transition model;
-- \(Z(o'\mid s',a)\): observation model;
-- \(R(s,a)\), or more generally \(R(s,a,s')\): reward model;
-- \(\gamma\in[0,1)\): discount factor;
-- \(b_0(s)\): initial belief over states.
+- $\mathcal{S}$: hidden environment states;
+- $\mathcal{A}$: agent actions;
+- $\mathcal{O}$: observations;
+- $T(s'\mid s,a)$: transition model;
+- $Z(o'\mid s',a)$: observation model;
+- $R(s,a)$, or more generally $R(s,a,s')$: reward model;
+- $\gamma\in[0,1)$: discount factor;
+- $b_0(s)$: initial belief over states.
 
 This note uses the following timing convention:
 
@@ -107,11 +107,11 @@ This note uses the following timing convention:
 
 The corresponding generative process is
 
-\[
+$$
 s_{t+1}\sim T(\cdot\mid s_t,a_t),
 \qquad
 o_{t+1}\sim Z(\cdot\mid s_{t+1},a_t).
-\]
+$$
 
 Other texts attach (o_t) to (s_t) before action (a_t). The formulations are equivalent after consistent re-indexing; mixing timing conventions is a common source of incorrect filters.
 
@@ -119,23 +119,23 @@ Other texts attach (o_t) to (s_t) before action (a_t). The formulations are equi
 
 The information available before choosing (a_t) is the history
 
-\[
+$$
 h_t=(o_0,a_0,o_1,a_1,\ldots,a_{t-1},o_t).
-\]
+$$
 
 A general history-dependent policy is
 
-\[
+$$
 \pi(a_t\mid h_t).
-\]
+$$
 
 The objective is the expected discounted return
 
-\[
+$$
 J(\pi)
 =\mathbb{E}_{\pi,T,Z,b_0}
 \left[\sum_{t=0}^{\infty}\gamma^t R(s_t,a_t)\right].
-\]
+$$
 
 The expectation matters: the agent is optimizing over uncertainty in the initial state, transitions, observations, and possibly its own stochastic policy.
 
@@ -147,25 +147,25 @@ The expectation matters: the agent is optimizing over uncertainty in the initial
 
 The exact belief state is the posterior distribution over the current hidden state given all available history:
 
-\[
+$$
 b_t(s)
 \triangleq
 P(s_t=s\mid h_t).
-\]
+$$
 
 For a finite state space, (b_t) lies on the probability simplex:
 
-\[
+$$
 b_t(s)\geq 0,
 \qquad
 \sum_{s\in\mathcal{S}}b_t(s)=1.
-\]
+$$
 
 The belief is not merely an estimate of the most likely state. It preserves competing hypotheses and their probabilities. A point estimate such as
 
-\[
+$$
 \hat{s}_t=\arg\max_s b_t(s)
-\]
+$$
 
 throws away uncertainty that may change the optimal action.
 
@@ -175,35 +175,35 @@ After action (a_t) and observation (o_{t+1}), the belief update has two conceptu
 
 **Prediction:**
 
-\[
+$$
 \bar b_{t+1}(s')
 =\sum_{s\in\mathcal{S}}
 T(s'\mid s,a_t)b_t(s).
-\]
+$$
 
 This propagates the old belief through the dynamics before seeing new evidence.
 
 **Correction:**
 
-\[
+$$
 b_{t+1}(s')
 =\eta\,
 Z(o_{t+1}\mid s',a_t)\bar b_{t+1}(s'),
-\]
+$$
 
 where the normalizer is
 
-\[
+$$
 \eta^{-1}
 =P(o_{t+1}\mid b_t,a_t)
 =\sum_{\tilde s}
 Z(o_{t+1}\mid \tilde s,a_t)
 \bar b_{t+1}(\tilde s).
-\]
+$$
 
 Combining both stages gives
 
-\[
+$$
 b_{t+1}(s')
 =
 \frac{
@@ -213,21 +213,21 @@ Z(o_{t+1}\mid s',a_t)
 \sum_{\tilde s}Z(o_{t+1}\mid \tilde s,a_t)
 \sum_s T(\tilde s\mid s,a_t)b_t(s)
 }.
-\]
+$$
 
 We can abbreviate the deterministic update as
 
-\[
+$$
 b_{t+1}=\tau(b_t,a_t,o_{t+1}).
-\]
+$$
 
 ### 3.3 Why the belief is sufficient
 
 When (T), (Z), and (b_0) are known and the belief is exact, (b_t) is a sufficient statistic of the history for predicting future states, observations, rewards, and returns. Thus an optimal policy can be written as
 
-\[
+$$
 \pi(a_t\mid b_t)
-\]
+$$
 
 without retaining the full raw history.
 
@@ -248,21 +248,21 @@ A POMDP can be transformed into a fully observable MDP whose state is the belief
 
 The expected immediate reward at belief (b) is
 
-\[
+$$
 r_B(b,a)
 =\mathbb{E}_{s\sim b}[R(s,a)]
 =\sum_s b(s)R(s,a).
-\]
+$$
 
 ### 4.2 Observation probability
 
 The probability of receiving observation (o') after taking action (a) from belief (b) is
 
-\[
+$$
 P(o'\mid b,a)
 =\sum_{s'}Z(o'\mid s',a)
 \sum_s T(s'\mid s,a)b(s).
-\]
+$$
 
 The next belief is then (	au(b,a,o')). The belief transition is stochastic because the future observation is stochastic, even though the update is deterministic once (o') is known.
 
@@ -270,7 +270,7 @@ The next belief is then (	au(b,a,o')). The belief transition is stochastic becau
 
 The optimal value over beliefs satisfies
 
-\[
+$$
 V^*(b)
 =\max_{a\in\mathcal A}
 \left[
@@ -280,17 +280,17 @@ r_B(b,a)
 P(o'\mid b,a)
 V^*\!\left(\tau(b,a,o')\right)
 \right].
-\]
+$$
 
 The associated action value is
 
-\[
+$$
 Q^*(b,a)
 =r_B(b,a)
 +\gamma
 \sum_{o'}P(o'\mid b,a)
 V^*\!\left(\tau(b,a,o')\right).
-\]
+$$
 
 This equation exposes the essential POMDP idea: an action is valuable not only because of its immediate expected reward, but because of the distribution of observations it may produce and the improved decisions enabled by the resulting beliefs.
 
@@ -300,9 +300,9 @@ The belief-MDP is fully observable because the agent knows its own belief. It do
 
 For finite-horizon finite POMDPs, the optimal value function is piecewise-linear and convex in belief and can be represented by α-vectors:
 
-\[
+$$
 V_t(b)=\max_{\alpha\in\Gamma_t}\alpha^\top b.
-\]
+$$
 
 This elegant structure motivates classical exact methods, but the number of relevant conditional plans can grow rapidly. Modern large-scale applications therefore rely on approximation, sampling, learned representations, or restricted policy classes.
 
@@ -322,12 +322,12 @@ This is sometimes called **implicit information value** or **dual control** beha
 
 A common proxy is expected entropy reduction:
 
-\[
+$$
 \operatorname{IG}(b,a)
 =H(b)-
 \mathbb E_{o'\sim P(\cdot\mid b,a)}
 \left[H(\tau(b,a,o'))\right].
-\]
+$$
 
 This measures how much the action is expected to reduce belief uncertainty. It is not generally equal to the value of information for the task.
 
@@ -359,23 +359,23 @@ Terminology varies across communities. **Stochastic Game** and **Markov Game** a
 
 An MDP is commonly written
 
-\[
+$$
 \mathcal M=\langle\mathcal S,\mathcal A,T,R,\gamma\rangle.
-\]
+$$
 
 The agent observes (s_t), and the policy may be Markov:
 
-\[
+$$
 \pi(a_t\mid s_t).
-\]
+$$
 
 A POMDP adds an observation space and observation model because (s_t) is hidden. The relevant policy state becomes history or belief:
 
-\[
+$$
 \pi(a_t\mid h_t)
 \quad\text{or}\quad
 \pi(a_t\mid b_t).
-\]
+$$
 
 Giving an RL policy a vector called `state` does not make the environment an MDP. The test is whether that vector is sufficient for predicting future outcomes under actions.
 
@@ -383,7 +383,7 @@ Giving an RL policy a vector called `state` does not make the environment an MDP
 
 An (N)-agent Markov Game may be written
 
-\[
+$$
 \mathcal G=
 \langle
 \mathcal S,
@@ -392,25 +392,25 @@ T,
 \{R_i\}_{i=1}^N,
 \gamma
 \rangle,
-\]
+$$
 
 with joint action
 
-\[
+$$
 \mathbf a_t=(a_t^1,\ldots,a_t^N),
-\]
+$$
 
 transition
 
-\[
+$$
 T(s'\mid s,\mathbf a),
-\]
+$$
 
 and agent-specific rewards
 
-\[
+$$
 R_i(s,\mathbf a).
-\]
+$$
 
 The defining change is not merely multiple vehicles. It is that multiple decision-making agents jointly affect transitions and returns. Other agents' changing policies can make the learning problem non-stationary from any one agent's perspective.
 
@@ -422,7 +422,7 @@ A POSG augments a Markov Game with private observation functions. Each agent act
 
 A Dec-POMDP is the cooperative special case in which agents share a team reward but make decisions from decentralized information. A standard finite-horizon form is
 
-\[
+$$
 \langle
 I,\mathcal S,
 \{\mathcal A_i\},
@@ -433,15 +433,15 @@ Z,
 b_0,
 H
 \rangle.
-\]
+$$
 
 The joint policy is composed of local policies:
 
-\[
+$$
 \boldsymbol\pi=(\pi_1,\ldots,\pi_N),
 \qquad
 \pi_i(a_t^i\mid h_t^i).
-\]
+$$
 
 No agent necessarily has access to the joint history. This makes decentralized coordination fundamentally harder than solving a centralized POMDP over the joint observations.
 
@@ -455,9 +455,9 @@ For the current Payload Intelligence scope, role allocation and spatial coverage
 
 Classical belief filtering assumes access to (T), (Z), and a tractable state representation. Learned agents often replace the exact posterior with a recurrent or latent state:
 
-\[
+$$
 z_t=f_\theta(z_{t-1},a_{t-1},o_t).
-\]
+$$
 
 Examples include RNN hidden states, Bayesian filters with learned components, particle representations, transformers over histories, and RSSMs.
 
@@ -542,10 +542,10 @@ Most gimbal and sensor commands are information-directed, while flight requests 
 
 A practical object-centric approximation might factor belief into persistent object slots plus global context:
 
-\[
+$$
 \tilde b_t
 =\left(g_t,\{z_t^{(k)}\}_{k=1}^{K}\right),
-\]
+$$
 
 where (z_t^{(k)}) represents a hypothesized object's identity, kinematics, visibility, relevance, and uncertainty, and (g_t) represents global scene and sensor context.
 

@@ -99,27 +99,27 @@ hardware assumptions.
 For a selected normalized image coordinate $e_t\in[-1,1]$, the deployable
 observation is drawn from
 
-\[
+$$
 o_t=(e_t,w_t,h_t,c_t,m_t,\Delta t_t,q_t,\dot q_t,
 \omega_t^{body},u_{t-1}),
-\]
+$$
 
 with an explicit validity mask for every optional signal. The estimator emits
 
-\[
+$$
 \hat s_t=(\hat\theta_t^{target/body},
 \hat{\dot\theta}_t^{target/body},
 \sigma_{\theta,t},\sigma_{\dot\theta,t},m_t),
-\]
+$$
 
 including measurement time and prediction horizon. A configured adapter then
 produces one bounded logical action:
 
-\[
+$$
 u_t^{rate}=\operatorname{clip}\left(
 \frac{\hat{\dot\theta}_t+k_p(\hat\theta_t-q_t)}{\dot q_{max}},-1,1
 \right),
-\]
+$$
 
 or an absolute body-relative position command obtained by mapping the bounded
 target bearing into the configured asymmetric travel interval. The simulated

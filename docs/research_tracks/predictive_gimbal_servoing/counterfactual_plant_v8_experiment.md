@@ -71,14 +71,14 @@ revision tested a specific failure observed in the preceding result.
 
 The final plant regret is
 
-\[
+$$
 L_{\mathrm{regret}} =
 \mathbb{E}\left[
 \max\left(0,
 e_{\mathrm{student}}^2-e_{\mathrm{privileged}}^2
 \right)
 \right],
-\]
+$$
 
 where both image errors result from the same initial gimbal state, target truth,
 hardware, horizon, and servo simulation. The loss is zero wherever the student

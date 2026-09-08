@@ -10,7 +10,7 @@ It must be simple enough for causal analysis and rich enough that reactive cente
 
 ## 2. Episode narrative
 
-Each episode contains \(N\) moving objects, one target or optionally no target, a controllable sensor, a limited horizon, and a finite sensing budget.
+Each episode contains $N$ moving objects, one target or optionally no target, a controllable sensor, a limited horizon, and a finite sensing budget.
 
 ### Stage 1 — Candidate discovery and triage
 
@@ -36,20 +36,20 @@ Stages are latent regimes, not labels exposed to the policy.
 
 The simulator state is
 
-\[
+$$
 s_t=(X_t,G_t,M_t,B_t),
-\]
+$$
 
-where \(X_t\) is the object set, \(G_t\) sensor state, \(M_t\) environment and occlusion state, and \(B_t\) remaining time and sensing budget.
+where $X_t$ is the object set, $G_t$ sensor state, $M_t$ environment and occlusion state, and $B_t$ remaining time and sensing budget.
 
 An object state contains
 
-\[
+$$
 x_t^{(i)}=
 (\iota_i,c_i,q_i,p_t^{(i)},v_t^{(i)},\xi_t^{(i)},m_t^{(i)}),
-\]
+$$
 
-where \(\iota_i\) is privileged identity, \(c_i\) latent attributes, \(q_i\) the target predicate, \(p,v\) kinematics, \(\xi\) visibility, and \(m\) motion mode. Privileged identity and target label are never actor observations.
+where $\iota_i$ is privileged identity, $c_i$ latent attributes, $q_i$ the target predicate, $p,v$ kinematics, $\xi$ visibility, and $m$ motion mode. Privileged identity and target label are never actor observations.
 
 ---
 
@@ -57,11 +57,11 @@ where \(\iota_i\) is privileged identity, \(c_i\) latent attributes, \(q_i\) the
 
 Target identity requires multiple factors:
 
-\[
+$$
 q_i=\mathbf 1
 \left[c_i^{\text{appearance}}=c^*
 \land c_i^{\text{motion}}=m^*\right].
-\]
+$$
 
 Wide views reveal motion relatively well but appearance poorly. Zoom improves appearance evidence while reducing coverage. Dwell reduces noise but consumes time.
 
@@ -75,25 +75,25 @@ The generator must prevent bbox size, array order, handle, or spawn pattern from
 
 The policy receives a variable-length detection set
 
-\[
+$$
 O_t=\{o_t^{(j)}\}_{j=1}^{D_t}
-\]
+$$
 
-and payload state \(g_t\).
+and payload state $g_t$.
 
-\[
+$$
 o_t^{(j)}=
 [u,v,w,h,\rho,e_{1:d},\kappa,\ell,\delta].
-\]
+$$
 
 | Field | Meaning |
 |---|---|
-| \(u,v,w,h\) | normalized bbox center and size |
-| \(\rho\) | detector confidence |
-| \(e_{1:d}\) | noisy appearance-evidence vector |
-| \(\kappa\) | visibility or measurement quality |
-| \(\ell\) | optional noisy track-handle embedding |
-| \(\delta\) | time since that handle was observed |
+| $u,v,w,h$ | normalized bbox center and size |
+| $\rho$ | detector confidence |
+| $e_{1:d}$ | noisy appearance-evidence vector |
+| $\kappa$ | visibility or measurement quality |
+| $\ell$ | optional noisy track-handle embedding |
+| $\delta$ | time since that handle was observed |
 
 The handle is not ground-truth identity. It may reset, collide, or switch under configurable association noise.
 
@@ -133,10 +133,10 @@ Object motion begins with simple but multimodal dynamics: constant velocity, con
 
 Evidence quality is action-dependent:
 
-\[
+$$
 \sigma_{\text{appearance}}
 =f(\text{zoom},\text{dwell},\text{visibility},\text{slew}).
-\]
+$$
 
 This causal dependency gives observation actions value. Repeated measurements should be conditionally correlated so dwell is not equivalent to unlimited independent samples.
 
@@ -148,20 +148,20 @@ Use sparse decision utility plus explicit costs. Never reward hidden-target cent
 
 | Outcome | Initial utility |
 |---|---:|
-| Correct target commit | \(+1.00\) |
-| Correct absence declaration | \(+1.00\) |
-| Wrong commit or declaration | \(-1.00\) |
-| Abstention | \(-0.15\) |
-| Timeout without decision | \(-0.40\) |
+| Correct target commit | $+1.00$ |
+| Correct absence declaration | $+1.00$ |
+| Wrong commit or declaration | $-1.00$ |
+| Abstention | $-0.15$ |
+| Timeout without decision | $-0.40$ |
 
-\[
+$$
 C(a_t)=
 \lambda_\tau\Delta t+
 \lambda_s C_{\text{slew}}+
 \lambda_z C_{\text{zoom}}+
 \lambda_d C_{\text{dwell}}+
 \lambda_w C_{\text{lost coverage}}.
-\]
+$$
 
 Costs must produce a measurable accuracy–efficiency frontier. Privileged simulator targets may supervise diagnostic world-model heads, but must not enter actor observations or decision reward shaping.
 

@@ -331,9 +331,9 @@ compute cost와 sensing cost를 동시에 모델링하고, agent가 내부 compu
 
 개념적 objective는 다음과 같다.
 
-\[
+$$
 J = R_{mission} + \lambda I_{gain} - \beta C_{compute} - \gamma C_{sense}.
-\]
+$$
 
 여기서 성공의 핵심은 모델 복잡도가 아니라 행동이다. 쉬운 상황에서는 즉시 보고, 애매한 상황에서는 더 생각하며, 생각만으로 해결할 수 없을 때는 실제 세계를 다시 관측하고, 미래 관측의 결과가 중요할 때만 Dream을 사용해야 한다.
 

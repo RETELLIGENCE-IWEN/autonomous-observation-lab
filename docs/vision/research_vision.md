@@ -44,7 +44,7 @@ Think에서의 recurrent computation은 동일한 물리적 시점에서 latent 
 
 이를 가장 간단히 표현하면 다음과 같다.
 
-\[
+$$
 \text{Observe}
 \rightarrow
 \text{Think}
@@ -55,15 +55,15 @@ Think에서의 recurrent computation은 동일한 물리적 시점에서 latent 
 \rightarrow
 \text{Observe}
 \rightarrow \cdots
-\]
+$$
 
 Dream-to-Look(D2L)은 이 상위 구조 전체와 동의어가 아니다. D2L은 TDL 안에서 **Dream → Look**, 즉 learned world model이 후보 관측의 미래 evidence consequence를 예측하고 실제 sensing action으로 연결할 수 있는지를 검증하는 구체적 연구 track이다.
 
 따라서 관계를 다음과 같이 둔다.
 
-\[
+$$
 \boxed{\text{Think–Dream–Look} \supset \text{Dream-to-Look}}
-\]
+$$
 
 TDL의 자세한 정의, Think-versus-Look 문제, adaptive computation, object-centric instantiation, 단계별 연구가설은 [Think–Dream–Look Conceptual Architecture](think_dream_look.md)에 정리한다.
 
@@ -133,24 +133,24 @@ TDL의 자세한 정의, Think-versus-Look 문제, adaptive computation, object-
 
 이를 식으로 표현하면 단순한 policy는 다음과 같다.
 
-\[
+$$
 \pi_{payload}: (b_t, g_t, c_{payload}, x_{platform,t}) \rightarrow a^{sensor}_t
-\]
+$$
 
-- \(b_t\): 현재 belief
-- \(g_t\): mission/observation goal
-- \(c_{payload}\): 센서와 짐벌 capability
-- \(x_{platform,t}\): 플랫폼 상태
-- \(a^{sensor}_t\): gaze, sensor mode, zoom, dwell, attention action
+- $b_t$: 현재 belief
+- $g_t$: mission/observation goal
+- $c_{payload}$: 센서와 짐벌 capability
+- $x_{platform,t}$: 플랫폼 상태
+- $a^{sensor}_t$: gaze, sensor mode, zoom, dwell, attention action
 
 상위 inquiry policy는 관측목적 자체를 생성한다.
 
-\[
+$$
 q_t = \pi_{inquiry}(b_t, g_t, m_t)
-\]
+$$
 
-- \(q_t\): 해결해야 할 구조화된 관측질의
-- \(m_t\): unresolved question 및 prospective memory
+- $q_t$: 해결해야 할 구조화된 관측질의
+- $m_t$: unresolved question 및 prospective memory
 
 ## 1.6 uncertainty를 넘어 ignorance로
 

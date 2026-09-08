@@ -33,11 +33,11 @@ Dream-to-Look should evaluate future consequences of sensing actions: whether a 
 
 An MDP has transition (T(s'\mid s,a)) and reward (R(s,a)). Model-free RL learns a policy or value without explicitly using a predictive model for decision improvement. MBRL uses a known or learned approximation
 
-\[
+$$
 \hat T_\theta(s'\mid s,a),
 \qquad
 \hat R_\theta(s,a)
-\]
+$$
 
 to plan, generate learning targets, synthesize experience, or train a policy.
 
@@ -63,9 +63,9 @@ These are not mutually exclusive.
 
 A direct model predicts future observations:
 
-\[
+$$
 p_\theta(o_{t+1}\mid o_{\leq t},a_{\leq t}).
-\]
+$$
 
 Pixel prediction is interpretable but spends capacity on texture and other details irrelevant to decisions. Small pixel errors can dominate the loss while task-critical object identity or visibility is poorly modeled.
 
@@ -73,21 +73,21 @@ Pixel prediction is interpretable but spends capacity on texture and other detai
 
 Encode observations into latent state and predict there:
 
-\[
+$$
 z_t=E_\theta(o_{\leq t},a_{<t}),
 \qquad
 p_\theta(z_{t+1}\mid z_t,a_t).
-\]
+$$
 
 Additional heads predict quantities needed by control:
 
-\[
+$$
 \hat r_t=r_\theta(z_t,a_t),
 \qquad
 \hat c_t=c_\theta(z_t),
 \qquad
 \hat o_t\sim p_\theta(o_t\mid z_t).
-\]
+$$
 
 Latent models are compact and can ignore irrelevant detail, but their states are harder to inspect and may omit information needed by a changed downstream task.
 
@@ -105,7 +105,7 @@ Dream-to-Look likely needs a hybrid. It need not synthesize photorealistic EO/IR
 
 Given current state estimate (z_t), model predictive control chooses
 
-\[
+$$
 a_{t:t+H-1}^*
 =\arg\max_{a_{t:t+H-1}}
 \mathbb E_{\hat T}
@@ -113,7 +113,7 @@ a_{t:t+H-1}^*
 \sum_{k=0}^{H-1}\gamma^k\hat r_{t+k}
 +\gamma^H\hat V(z_{t+H})
 \right].
-\]
+$$
 
 Only the first action is executed; the system observes reality, updates state, and replans. Candidate sequences can be optimized through random shooting, cross-entropy method, gradients, tree search, or a learned proposal policy.
 
@@ -140,17 +140,17 @@ The model increases data reuse. If synthetic transitions are biased, it also inc
 
 An RSSM uses observations to infer the current posterior state. Future imagination then uses the latent prior because future observations are unavailable:
 
-\[
+$$
 z_t\sim q_\theta(z_t\mid h_t,o_t),
-\]
+$$
 
-\[
+$$
 h_{t+k+1}=f_\theta(h_{t+k},z_{t+k},a_{t+k}),
-\]
+$$
 
-\[
+$$
 z_{t+k+1}\sim p_\theta(z_{t+k+1}\mid h_{t+k+1}).
-\]
+$$
 
 Reward and continuation heads turn imagined states into learning signals.
 
@@ -164,7 +164,7 @@ Dreamer learns:
 
 Starting from posterior states inferred from real sequences, it rolls the actor and world model forward in latent space. A truncated λ-return can be written
 
-\[
+$$
 G_t^\lambda
 =\hat r_t
 +\gamma\hat c_t
@@ -172,27 +172,27 @@ G_t^\lambda
 (1-\lambda)V_\psi(s_{t+1})
 +\lambda G_{t+1}^\lambda
 \right].
-\]
+$$
 
 The value model regresses toward imagined returns:
 
-\[
+$$
 \mathcal L_V
 =\mathbb E\left[(V_\psi(s_t)-\operatorname{sg}(G_t^\lambda))^2\right],
-\]
+$$
 
 where (operatorname{sg}) stops gradients through the target.
 
 The actor maximizes imagined return, often with an entropy term:
 
-\[
+$$
 J_\pi
 =\mathbb E
 \left[
 G_t^\lambda
 +\eta\mathcal H(\pi_\phi(\cdot\mid s_t))
 \right].
-\]
+$$
 
 Depending on the variant, gradients reach the actor through differentiable dynamics, likelihood-ratio estimators, or a mixture. The enduring principle is that behavior learning consumes predicted latent trajectories rather than only real environment transitions.
 
@@ -206,9 +206,9 @@ Useful imagination begins from a state grounded in real history, conditions on c
 
 Let true return be (J(\pi)) and model-estimated return be (hat J(\pi)). Policy optimization selects actions with high (hat J), so even small systematic errors can be amplified:
 
-\[
+$$
 \arg\max_\pi \hat J(\pi)
-\]
+$$
 
 may deliberately seek regions where (hat J-J) is most positive. This is the optimizer's curse in learned-model control.
 

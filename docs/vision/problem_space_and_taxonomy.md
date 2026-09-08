@@ -57,14 +57,14 @@ bbox만으로는 다음 원인을 구분하기 어렵다.
 
 따라서 내부 belief가 필요하다.
 
-\[
+$$
 b_t=f(b_{t-1},z_t,a^{sensor}_{t-1},x^{platform}_t,x^{payload}_t)
-\]
+$$
 
-- \(z_t\): 현재 perception observation
-- \(a^{sensor}_{t-1}\): 이전 gaze/sensor action
-- \(x^{platform}_t\): 플랫폼 motion state
-- \(x^{payload}_t\): 짐벌·센서 state
+- $z_t$: 현재 perception observation
+- $a^{sensor}_{t-1}$: 이전 gaze/sensor action
+- $x^{platform}_t$: 플랫폼 motion state
+- $x^{payload}_t$: 짐벌·센서 state
 
 외부 3D fusion map이 있으면 풍부한 belief가 제공되는 것이고, bbox-only에서는 제한적인 belief를 에이전트가 자체적으로 형성한다.
 
@@ -72,9 +72,9 @@ b_t=f(b_{t-1},z_t,a^{sensor}_{t-1},x^{platform}_t,x^{payload}_t)
 
 장비구성은 task taxonomy가 아니라 action/observation capability를 정의한다.
 
-\[
+$$
 c_{payload}=\{N_{axis},\theta_{range},\dot\theta_{max},EO,IR,zoom,FOV,latency\}
-\]
+$$
 
 대표 구성:
 

@@ -41,9 +41,9 @@ Bajcsy's active perception view treats sensing as a controlled, goal-directed pr
 
 The action-dependent likelihood
 
-\[
+$$
 p(y\mid x,a)
-\]
+$$
 
 is the mathematical core. A look changes field of view, resolution, occlusion geometry, noise, or modality, thereby changing which evidence is likely to arrive.
 
@@ -57,27 +57,27 @@ An **active sensor** in the hardware sense emits energy, such as radar or lidar.
 
 For belief (b(x)), entropy is
 
-\[
+$$
 H(X\mid b)=-\sum_x b(x)\log b(x).
-\]
+$$
 
 After action (a) and possible observation (y), the posterior is (b^{a,y}). Expected information gain is
 
-\[
+$$
 \operatorname{EIG}(a;b)
 =H(X\mid b)
 -\mathbb E_{y\sim p(\cdot\mid b,a)}
 \left[H(X\mid b^{a,y})\right].
-\]
+$$
 
 Equivalently,
 
-\[
+$$
 \operatorname{EIG}(a;b)
 =I(X;Y\mid a,b)
 =\mathbb E_y
 \left[D_{\mathrm{KL}}(b^{a,y}\Vert b)\right].
-\]
+$$
 
 These forms say the same thing: prefer measurements expected to move the posterior away from the prior and reduce uncertainty about (X).
 
@@ -105,17 +105,17 @@ Common acquisition scores include posterior variance, expected KL divergence, mu
 
 Let (d\in\mathcal D) be a downstream decision and (U(d,x)) its utility. Without new evidence, the best expected utility is
 
-\[
+$$
 V(b)=\max_d\mathbb E_{x\sim b}[U(d,x)].
-\]
+$$
 
 The expected value of perfect information is
 
-\[
+$$
 \operatorname{EVPI}(b)
 =\mathbb E_{x\sim b}\left[\max_d U(d,x)\right]
 -\max_d\mathbb E_{x\sim b}[U(d,x)].
-\]
+$$
 
 EVPI is an upper bound: it asks how valuable it would be to know (x) exactly.
 
@@ -123,12 +123,12 @@ EVPI is an upper bound: it asks how valuable it would be to know (x) exactly.
 
 A real look produces noisy evidence rather than perfect truth. Its expected value is
 
-\[
+$$
 \operatorname{VoI}(a;b)
 =\mathbb E_{y\sim p(\cdot\mid b,a)}
 \left[V(b^{a,y})\right]
 -V(b)-C(a),
-\]
+$$
 
 where (C(a)) includes time, energy, motion, lost coverage, blur, risk, or coordination cost.
 
@@ -153,12 +153,12 @@ A tiny belief change across a release/no-release or identify/ignore boundary can
 
 A one-step acquisition policy is
 
-\[
+$$
 a_t^*=\arg\max_a
 \left[
 \operatorname{EIG}(a;b_t)-\lambda C(a)
 \right]
-\]
+$$
 
 or its decision-theoretic VoI counterpart. It is cheap and often useful, but can reject an individually weak look that enables a valuable later look.
 
@@ -166,10 +166,10 @@ or its decision-theoretic VoI counterpart. It is cheap and often useful, but can
 
 In a POMDP, sensing actions are valued through future beliefs:
 
-\[
+$$
 Q(b,a)=r(b,a)+\gamma
 \mathbb E_y[V(\tau(b,a,y))].
-\]
+$$
 
 This supports sequences such as wide search → tentative detection → narrow zoom → track confirmation. The early action may be valuable mainly because it creates a better branch for later acquisition.
 
@@ -188,9 +188,9 @@ This is active-sensing model predictive control. Latent imagination can make it 
 
 An observation agent also needs a **stop/commit/return-to-search** decision. Continue sensing only while expected marginal VoI is positive:
 
-\[
+$$
 \max_a \operatorname{VoI}(a;b_t)>0.
-\]
+$$
 
 Without explicit stopping or resource cost, an uncertainty-seeking agent may inspect forever.
 
@@ -210,10 +210,10 @@ These can overlap. Zoom is sensing; selecting one detected object for deeper pro
 
 Active sensing cannot solve structural unobservability. If every feasible action yields the same observation distribution under two critical hypotheses,
 
-\[
+$$
 p(y\mid x_1,a)=p(y\mid x_2,a)
 \quad\forall a,
-\]
+$$
 
 then no sensing policy can distinguish them without a new modality, viewpoint authority, prior, or external information source.
 
@@ -241,15 +241,15 @@ then no sensing policy can distinguish them without a new modality, viewpoint au
 
 The minimal payload action should express controllable acquisition variables rather than project-specific modes:
 
-\[
+$$
 a_t^P=(\text{view direction},\text{FOV/zoom},\text{modality},\text{dwell}).
-\]
+$$
 
 Optional flight cooperation is a priced request:
 
-\[
+$$
 a_t^F=(\text{desired viewpoint or visibility constraint},\text{priority},\text{validity horizon}).
-\]
+$$
 
 This keeps Payload Intelligence independent of the specific flight backend while allowing cooperation when the gimbal cannot create the necessary geometry.
 
@@ -257,7 +257,7 @@ This keeps Payload Intelligence independent of the specific flight backend while
 
 A useful conceptual objective is
 
-\[
+$$
 a_t^*=\arg\max_a
 \mathbb E
 \left[
@@ -267,7 +267,7 @@ a_t^*=\arg\max_a
 -\lambda_R C_{\text{request}}
 -\lambda_C C_{\text{lost coverage}}
 \right].
-\]
+$$
 
 The central research problem is learning or approximating (Delta U_{\text{evidence}}): the expected improvement in mission-relevant decisions caused by a look.
 

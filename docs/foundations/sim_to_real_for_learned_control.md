@@ -12,13 +12,13 @@ For vision-based gimbal control, timing and actuator response deserve the same s
 
 A simulator defines transition and observation processes
 
-\[
+$$
 x_{k+1}\sim p_{\text{sim}}(x_{k+1}\mid x_k,u_k;\xi),
 \qquad
 o_k\sim p_{\text{sim}}(o_k\mid x_k;\xi),
-\]
+$$
 
-parameterized by \(\xi\). The real system follows unknown processes \(p_{\text{real}}\). Transfer fails when the deployed policy relies on a simulated relationship that does not hold physically.
+parameterized by $\xi$. The real system follows unknown processes $p_{\text{real}}$. Transfer fails when the deployed policy relies on a simulated relationship that does not hold physically.
 
 Useful gap categories are:
 
@@ -42,7 +42,7 @@ System identification estimates a model or parameters from physical input-output
 - repeated tests across voltage, temperature, payload, and orientation;
 - timestamped end-to-end tests from image capture to measured gimbal response.
 
-A point estimate \(\widehat\xi\) supports a calibrated nominal simulator. It is rarely sufficient because parameters vary and the model class omits effects. The residuals of identification experiments are therefore as important as the fitted values. They help define plausible randomization, noise structure, and held-out conditions.
+A point estimate $\widehat\xi$ supports a calibrated nominal simulator. It is rarely sufficient because parameters vary and the model class omits effects. The residuals of identification experiments are therefore as important as the fitted values. They help define plausible randomization, noise structure, and held-out conditions.
 
 Calibration should prioritize **closed-loop relevant fidelity**. A model that matches motor current in detail but misses forty milliseconds of transport delay may be less useful to the outer visual controller than a simple first-order actuator model with correct delay and saturation.
 
@@ -50,13 +50,13 @@ Calibration should prioritize **closed-loop relevant fidelity**. A model that ma
 
 Domain randomization trains across a distribution of simulator parameters:
 
-\[
+$$
 \max_\theta
 \mathbb E_{\xi\sim p_{\text{train}}(\xi)}
 \left[
 J\left(\pi_\theta;p_{\text{sim},\xi}\right)
 \right].
-\]
+$$
 
 The hope is that the real system lies inside a region where the learned policy already succeeds. Visual domain randomization varies appearance and sensing; dynamics randomization varies the transition and actuator process. A gimbal task may randomize:
 
@@ -67,7 +67,7 @@ The hope is that the real system lies inside a region where the learned policy a
 - box-center bias, correlated jitter, scale error, confidence, clipping, and temporary loss;
 - calibration, field of view, mounting offset, and encoder/IMU bias where relevant.
 
-The distribution \(p_{\text{train}}\) is a model of uncertainty. Wide independent uniform ranges are convenient but often physically implausible. Some variables are correlated: heavier payload can change inertia and actuator bandwidth; lower light increases exposure time and blur; compute load can affect both inference delay and frame drops. Preserving plausible dependence can make training both harder and more realistic.
+The distribution $p_{\text{train}}$ is a model of uncertainty. Wide independent uniform ranges are convenient but often physically implausible. Some variables are correlated: heavier payload can change inertia and actuator bandwidth; lower light increases exposure time and blur; compute load can affect both inference delay and frame drops. Preserving plausible dependence can make training both harder and more realistic.
 
 Randomization has two opposing failure modes:
 
@@ -82,10 +82,10 @@ In a delayed loop, an observation corresponds to an earlier physical state and t
 
 A useful observation history contains
 
-\[
+$$
 (o_k,t_k^{\text{capture}},t_k^{\text{available}},
 u_k^{\text{requested}},u_k^{\text{applied}})
-\]
+$$
 
 or a feasible subset from which measurement age, interval, and queue state can be derived. When clocks cannot be synchronized, relative monotonic timestamps and measured transport durations are still valuable.
 
@@ -104,11 +104,11 @@ Adding random noise to a current observation does not reproduce this process. Ti
 
 Some systems are difficult to model analytically at the fidelity useful for policy training. A learned actuator model can map command and recent actuator state to achieved torque, rate, or position change:
 
-\[
+$$
 \widehat y_{k+1}=f_\psi(y_{k-L:k},u_{k-L:k},c_k),
-\]
+$$
 
-where \(c_k\) may include voltage, temperature, or configuration. Hwangbo and colleagues demonstrated the importance of learned actuator dynamics for transferring agile legged behavior, while other sim-to-real work emphasizes accurate latency and motor models.
+where $c_k$ may include voltage, temperature, or configuration. Hwangbo and colleagues demonstrated the importance of learned actuator dynamics for transferring agile legged behavior, while other sim-to-real work emphasizes accurate latency and motor models.
 
 The model should be validated on held-out command sequences, particularly around reversals, saturation, and frequencies that the policy uses. A low average one-step error can hide phase error that destabilizes a feedback loop. Frequency-conditioned and rollout validation are therefore important.
 
@@ -118,11 +118,11 @@ A learned actuator model is still a model. It can extrapolate badly, erase stoch
 
 When real dynamics vary between deployments or during operation, a policy can condition on an estimated latent:
 
-\[
+$$
 \widehat z_k=g_\psi(h_k),
 \qquad
 u_k=\pi_\theta(o_k,\widehat z_k).
-\]
+$$
 
 The latent may capture payload, actuator response, delay, or disturbance regime. Training can use true simulated parameters as privileged supervision and teach the adaptation module to infer their task-relevant embedding from history.
 
@@ -134,11 +134,11 @@ Adaptation also operates on a timescale. Payload inertia may remain constant for
 
 Full policy transfer is not the only option. A hybrid controller can keep a nominal feedback law and let learning estimate disturbance, tune gains, select modes, or add a bounded residual:
 
-\[
+$$
 u_k=
 u_{\text{nominal}}(o_k)
 +\alpha(o_k)\,u_{\text{residual}}(h_k),
-\]
+$$
 
 with explicit clipping or gating. This preserves useful structure and can reduce the learned action space. It also narrows the novelty claim: the learned component improves a known controller rather than replacing the entire outer loop.
 
@@ -173,7 +173,7 @@ For gimbal tracking, useful transfer metrics include:
 
 System identification improves nominal fidelity. Randomization exposes the controller to variation. Learned actuator models capture difficult dynamics. Adaptation can infer persistent hidden context. Staged testing catches mismatches before the highest-risk trial.
 
-None proves that the physical system lies inside the training support or that a neural policy is safe outside it. Average robustness over \(p_{\text{train}}\) does not imply worst-case robustness. Hardware wear, a new detector, an unseen vibration resonance, or correlated timing failure can invalidate prior evidence.
+None proves that the physical system lies inside the training support or that a neural policy is safe outside it. Average robustness over $p_{\text{train}}$ does not imply worst-case robustness. Hardware wear, a new detector, an unseen vibration resonance, or correlated timing failure can invalidate prior evidence.
 
 Operational safety should include hard actuator limits, stale-data detection, a control-rate watchdog, policy-output validity checks, an out-of-distribution signal where it has demonstrated value, a tested fallback controller, and logs sufficient to reconstruct timing and causality. A fallback is useful only if the switch condition and transition have themselves been tested.
 

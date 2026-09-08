@@ -70,12 +70,12 @@ not enabled in the selected model.
 The selected V4 loss penalizes disagreement between adjacent bearing heads and
 the trapezoidal integral of their predicted angular rates:
 
-\[
+$$
 r_k = \operatorname{wrap}\left(
   \hat\theta_{k+1}-\hat\theta_k
   -\frac{\Delta t_k}{2}(\hat\omega_k+\hat\omega_{k+1})
 \right).
-\]
+$$
 
 This adds no deployable inputs or model parameters. The selected coefficient is
 25, chosen before multi-seed replication.
@@ -86,11 +86,11 @@ The dataset already contains privileged normalized rate and position actions.
 V4.2 converts the current predicted state into both commands through each
 episode's configured actuator:
 
-\[
+$$
 u_\omega=\operatorname{clip}\left(
 \frac{\hat\omega+k_p\operatorname{wrap}(\hat\theta-q)}{\omega_{\max}},
 -1,1\right),
-\]
+$$
 
 with an analogous asymmetric travel-normalized position command. Rate-only,
 position-only, balanced dual-mode, and position-prioritized losses all improved
