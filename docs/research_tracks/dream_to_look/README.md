@@ -16,6 +16,7 @@ The first study uses object-feature observations and a staged scenario combining
 
 - [Research Brief: Decision-Aware Dream-to-Look](research_brief.md)
 - [Benchmark Specification: Staged Evidence Acquisition](benchmark_specification.md)
+- [Technology Demo System Concept: Multi-UAV EO/IR Payload Embodiment](technology_demo_system_concept.md)
 - [Gate 1 Quickstart](gate1_quickstart.md)
 - [Gate 1 Validation Results](gate1_validation_results.md)
 - [Gate 2 Protocol](gate2_protocol.md)
