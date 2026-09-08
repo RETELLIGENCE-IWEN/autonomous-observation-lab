@@ -289,3 +289,56 @@ Nightfall의 asymmetric information, DAgger 경험, sim-to-real 구조와 매우
 > Flight Intelligence 계열에서는 **무엇을 확인해야 하는지 스스로 판단하는 눈**을 증명한다.  
 > Epistemic Distillation은 이 지능을 실제 제한 센서로 옮기는 공통 전이 기술이다.
 
+## 5.11 Think–Dream–Look 관점의 통합 로드맵
+
+기존 연구 단계는 [Think–Dream–Look (TDL)](think_dream_look.md)의 세 계산축으로 다시 해석할 수 있다. 중요한 점은 처음부터 완전한 TDL agent를 만들지 않고 각 메커니즘을 독립적으로 falsify한 뒤 통합하는 것이다.
+
+### TDL Stage 0 — Reactive Look
+
+기존 rule, tracker, confidence/entropy greedy, reactive RL을 사용하여 **Look만으로 가능한 성능의 바닥과 천장**을 측정한다.
+
+### TDL Stage 1 — Think-to-Look
+
+persistent belief와 recurrent latent refinement를 도입하되 learned future model은 사용하지 않는다.
+
+핵심 질문:
+
+> 동일한 센서 evidence를 가지고 내부 계산을 더 수행하는 것이 실제 observation decision을 개선하는가?
+
+이 단계는 Hypothesis-Driven Active Observation과 자연스럽게 연결된다.
+
+### TDL Stage 2 — Dream-to-Look
+
+object-centric RSSM과 latent imagination을 도입하여 후보 관측의 미래 evidence consequence를 예측한다.
+
+핵심 질문:
+
+> 미래 evidence를 상상하는 것이 reactive/recurrent policy보다 선제적이고 decision-relevant한 observation을 만드는가?
+
+현재 committed Dream-to-Look 연구는 이 단계에 해당한다.
+
+### TDL Stage 3 — Adaptive Think-versus-Look
+
+compute cost와 sensing cost를 동시에 모델링하고, agent가 내부 computation과 실제 observation 사이의 자원 배분을 학습하도록 한다.
+
+핵심 질문:
+
+> 현재 evidence가 단지 더 많은 계산을 필요로 하는 상황과, 새로운 physical evidence 없이는 해결할 수 없는 상황을 구분할 수 있는가?
+
+### TDL Stage 4 — Integrated Think–Dream–Look
+
+최종적으로 recurrent belief refinement depth, latent imagination horizon, sensing action을 하나의 mission-level utility 아래에서 조절한다.
+
+개념적 objective는 다음과 같다.
+
+\[
+J = R_{mission} + \lambda I_{gain} - \beta C_{compute} - \gamma C_{sense}.
+\]
+
+여기서 성공의 핵심은 모델 복잡도가 아니라 행동이다. 쉬운 상황에서는 즉시 보고, 애매한 상황에서는 더 생각하며, 생각만으로 해결할 수 없을 때는 실제 세계를 다시 관측하고, 미래 관측의 결과가 중요할 때만 Dream을 사용해야 한다.
+
+따라서 장기 연구 메시지는 다음과 같이 확장된다.
+
+> **Think** — 무엇을 알고 무엇이 부족한지 정제한다.  
+> **Dream** — 어떻게 보면 무엇을 알게 될지 상상한다.  
+> **Look** — 가장 가치 있는 실제 관측을 수행한다.
