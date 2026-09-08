@@ -1,0 +1,153 @@
+name: Normalize Markdown math delimiters
+
+on:
+  push:
+    paths:
+      - .github/workflows/fix-markdown-math.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Normalize GitHub Markdown math delimiters
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('docs')
+          excluded = Path('docs/research_tracks/dream_to_look/technology_demo_system_concept.md')
+          changed = []
+          total_replacements = 0
+
+          def replace_outside_inline_code(line: str):
+              # Preserve inline code spans. This intentionally handles the common
+              # Markdown form used in this repository rather than parsing all GFM.
+              parts = re.split(r'(`+[^`\n]*?`+)', line)
+              count = 0
+              for i in range(0, len(parts), 2):
+                  old = parts[i]
+                  new = (old
+                         .replace(r'\\[', '$$')
+                         .replace(r'\\]', '$$')
+                         .replace(r'\\(', '$')
+                         .replace(r'\\)', '$'))
+                  count += (old.count(r'\\[') + old.count(r'\\]') +
+                            old.count(r'\\(') + old.count(r'\\)'))
+                  parts[i] = new
+              return ''.join(parts), count
+
+          for path in sorted(root.rglob('*.md')):
+              if path == excluded:
+                  continue
+
+              original = path.read_text(encoding='utf-8')
+              out = []
+              in_fence = False
+              fence_char = None
+              fence_len = 0
+              replacements = 0
+
+              for line in original.splitlines(keepends=True):
+                  stripped = line.lstrip()
+                  m = re.match(r'(`{3,}|~{3,})', stripped)
+                  if m:
+                      marker = m.group(1)
+                      char = marker[0]
+                      n = len(marker)
+                      if not in_fence:
+                          in_fence = True
+                          fence_char = char
+                          fence_len = n
+                      elif char == fence_char and n >= fence_len:
+                          in_fence = False
+                          fence_char = None
+                          fence_len = 0
+                      out.append(line)
+                      continue
+
+                  if in_fence:
+                      out.append(line)
+                      continue
+
+                  new_line, nrep = replace_outside_inline_code(line)
+                  replacements += nrep
+                  out.append(new_line)
+
+              updated = ''.join(out)
+              if updated != original:
+                  path.write_text(updated, encoding='utf-8')
+                  changed.append((str(path), replacements))
+                  total_replacements += replacements
+
+          # Validate that no legacy delimiters remain outside fenced/inline code.
+          residual = []
+          for path in sorted(root.rglob('*.md')):
+              if path == excluded:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              in_fence = False
+              fence_char = None
+              fence_len = 0
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  stripped = line.lstrip()
+                  m = re.match(r'(`{3,}|~{3,})', stripped)
+                  if m:
+                      marker = m.group(1)
+                      char = marker[0]
+                      n = len(marker)
+                      if not in_fence:
+                          in_fence = True
+                          fence_char = char
+                          fence_len = n
+                      elif char == fence_char and n >= fence_len:
+                          in_fence = False
+                          fence_char = None
+                          fence_len = 0
+                      continue
+                  if in_fence:
+                      continue
+                  parts = re.split(r'(`+[^`\n]*?`+)', line)
+                  prose = ''.join(parts[::2])
+                  if any(tok in prose for tok in (r'\\[', r'\\]', r'\\(', r'\\)')):
+                      residual.append(f'{path}:{lineno}: {line}')
+
+          print(f'Changed {len(changed)} Markdown files; {total_replacements} delimiter replacements.')
+          for path, n in changed:
+              print(f'  {n:4d}  {path}')
+
+          if residual:
+              print('Residual legacy delimiters found:')
+              print('\n'.join(residual))
+              raise SystemExit(1)
+          PY
+
+      - name: Verify protected file is unchanged
+        shell: bash
+        run: |
+          if ! git diff --quiet -- docs/research_tracks/dream_to_look/technology_demo_system_concept.md; then
+            echo 'Protected technology_demo_system_concept.md was modified.' >&2
+            exit 1
+          fi
+
+      - name: Commit normalized documentation
+        shell: bash
+        run: |
+          git diff --check
+          if git diff --quiet -- docs; then
+            echo 'No documentation changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs
+          git commit -m 'docs: normalize GitHub math delimiters'
+          git push
